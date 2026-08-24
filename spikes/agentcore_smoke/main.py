@@ -10,7 +10,6 @@ from typing import Any
 import boto3
 from bedrock_agentcore import BedrockAgentCoreApp
 
-
 app = BedrockAgentCoreApp()
 
 
