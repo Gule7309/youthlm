@@ -191,7 +191,7 @@ def _post_json(
     )
 
     try:
-        with urlopen(request, timeout=30) as response:  # noqa: S310
+        with urlopen(request, timeout=30) as response:
             parsed = json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
         error_body = error.read().decode("utf-8", errors="replace")[:1000]
