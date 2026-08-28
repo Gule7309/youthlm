@@ -37,7 +37,7 @@ try {
 
     . "$PSScriptRoot/select-provider.ps1" @selectionArgs
 
-    uv run python spikes/provider_smoke.py
+    uv run python -m spikes.provider_smoke
     if ($LASTEXITCODE -ne 0) {
         throw "The real Bedrock provider smoke test failed."
     }

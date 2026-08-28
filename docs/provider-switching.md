@@ -16,7 +16,7 @@ or an untracked `.env`; never paste it into GitHub or chat.
 ```powershell
 $env:GEMINI_API_KEY = "<your-key>"
 . .\scripts\select-provider.ps1 gemini -ModelId "gemini-3.7-flash"
-uv run python spikes/provider_smoke.py
+uv run python -m spikes.provider_smoke
 ```
 
 Expected output starts with:
@@ -116,7 +116,7 @@ the current PowerShell session back explicitly:
 
 ```powershell
 . .\scripts\select-provider.ps1 gemini -ModelId "gemini-3.7-flash"
-uv run python spikes/provider_smoke.py
+uv run python -m spikes.provider_smoke
 ```
 
 This rollback is a conscious operator action; the application never performs it
