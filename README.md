@@ -11,6 +11,18 @@ all call the same application service.
 The current level contains only the provider boundary and a deterministic fake.
 It intentionally does not contain module contracts, an agent loop, RAG, or data tools.
 
+## Model providers
+
+YouthLM selects one provider explicitly through `MODEL_PROVIDER`:
+
+- `gemini` for development while workshop AWS credentials are unavailable.
+- `bedrock` for the workshop account after fresh credentials are issued.
+- `FakeModelProvider` directly in deterministic unit tests.
+
+There is no automatic provider fallback. See
+[`docs/provider-switching.md`](docs/provider-switching.md) for the current workflow
+and the event-day preflight command.
+
 ## Local setup
 
 ```bash
