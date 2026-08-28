@@ -26,10 +26,19 @@ def create_model_provider(
     provider_name = _required(settings, "MODEL_PROVIDER").lower()
 
     if provider_name == "gemini":
+        thinking_level = (
+            settings.get("GEMINI_THINKING_LEVEL", "low").strip().lower()
+        )
         return GeminiGenerateContentProvider(
             api_key=_required(settings, "GEMINI_API_KEY"),
             model_id=_required(settings, "GEMINI_MODEL_ID"),
             transport=gemini_transport,
+            request_timeout_seconds=_positive_int(
+                settings,
+                "GEMINI_REQUEST_TIMEOUT_SECONDS",
+                default=90,
+            ),
+            thinking_level=thinking_level,
         )
 
     if provider_name == "bedrock":
@@ -59,3 +68,24 @@ def _required(settings: Mapping[str, str], name: str) -> str:
             f"Missing required environment variable: {name}"
         )
     return value.strip()
+
+
+def _positive_int(
+    settings: Mapping[str, str],
+    name: str,
+    *,
+    default: int,
+) -> int:
+    raw_value = settings.get(name, str(default)).strip()
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise ProviderConfigurationError(
+            f"Environment variable {name} must be an integer"
+        ) from error
+
+    if value <= 0:
+        raise ProviderConfigurationError(
+            f"Environment variable {name} must be positive"
+        )
+    return value

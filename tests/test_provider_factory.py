@@ -83,6 +83,20 @@ class ProviderFactoryTests(unittest.TestCase):
         ):
             create_model_provider({"MODEL_PROVIDER": "automatic"})
 
+    def test_rejects_invalid_gemini_timeout(self) -> None:
+        with self.assertRaisesRegex(
+            ProviderConfigurationError,
+            "GEMINI_REQUEST_TIMEOUT_SECONDS",
+        ):
+            create_model_provider(
+                {
+                    "MODEL_PROVIDER": "gemini",
+                    "GEMINI_API_KEY": "test-key",
+                    "GEMINI_MODEL_ID": "gemini-test",
+                    "GEMINI_REQUEST_TIMEOUT_SECONDS": "not-an-integer",
+                }
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

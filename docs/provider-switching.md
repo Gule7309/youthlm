@@ -19,6 +19,17 @@ $env:GEMINI_API_KEY = "<your-key>"
 uv run python -m spikes.provider_smoke
 ```
 
+Gemini development defaults to a 90-second request timeout and low thinking to
+keep smoke tests responsive. Override them only when needed:
+
+```powershell
+$env:GEMINI_REQUEST_TIMEOUT_SECONDS = "120"
+$env:GEMINI_THINKING_LEVEL = "medium"
+```
+
+A timeout fails explicitly. YouthLM does not automatically retry or switch to a
+different provider.
+
 Expected output starts with:
 
 ```text

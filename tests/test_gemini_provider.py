@@ -1,9 +1,11 @@
 import unittest
 from typing import Any
+from unittest.mock import patch
 
 from app.gemini_provider import (
     GeminiGenerateContentProvider,
     GeminiResponseError,
+    _post_json,
 )
 from app.provider import ModelRequest, ModelToolCall
 
@@ -160,6 +162,11 @@ class GeminiGenerateContentProviderTests(unittest.TestCase):
                             {"role": "user", "parts": [{"text": "Hello"}]},
                             {"role": "model", "parts": [{"text": "Hi"}]},
                         ],
+                        "generationConfig": {
+                            "thinkingConfig": {
+                                "thinkingLevel": "low",
+                            }
+                        },
                         "tools": [
                             {
                                 "functionDeclarations": [
@@ -230,6 +237,18 @@ class GeminiGenerateContentProviderTests(unittest.TestCase):
         with self.assertRaisesRegex(GeminiResponseError, "Gemini 3"):
             provider.converse(
                 ModelRequest(messages=[{"role": "user", "content": "Hello"}])
+            )
+
+    def test_converts_timeout_to_provider_error(self) -> None:
+        with (
+            patch("app.gemini_provider.urlopen", side_effect=TimeoutError),
+            self.assertRaisesRegex(GeminiResponseError, "90 seconds"),
+        ):
+            _post_json(
+                "https://generativelanguage.googleapis.com/test",
+                {"Content-Type": "application/json"},
+                {"contents": []},
+                timeout_seconds=90,
             )
 
 

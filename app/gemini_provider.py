@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -27,19 +28,36 @@ class GeminiGenerateContentProvider:
         api_key: str,
         model_id: str,
         transport: GeminiTransport | None = None,
+        request_timeout_seconds: int = 90,
+        thinking_level: str = "low",
     ) -> None:
         if not api_key.strip():
             raise ValueError("Gemini API key must not be empty")
         if not model_id.strip():
             raise ValueError("Gemini model ID must not be empty")
+        if request_timeout_seconds <= 0:
+            raise ValueError("Gemini request timeout must be positive")
+        if thinking_level not in {"low", "medium", "high"}:
+            raise ValueError(
+                "Gemini thinking level must be 'low', 'medium', or 'high'"
+            )
 
         self._api_key = api_key
         self._model_id = model_id.removeprefix("models/")
-        self._transport = transport or _post_json
+        self._thinking_level = thinking_level
+        self._transport = transport or partial(
+            _post_json,
+            timeout_seconds=request_timeout_seconds,
+        )
 
     def converse(self, request: ModelRequest) -> ModelTurn:
         payload: dict[str, Any] = {
             "contents": self._convert_messages(request.messages),
+            "generationConfig": {
+                "thinkingConfig": {
+                    "thinkingLevel": self._thinking_level,
+                }
+            },
         }
 
         if request.tools:
@@ -182,6 +200,8 @@ def _post_json(
     url: str,
     headers: dict[str, str],
     payload: dict[str, Any],
+    *,
+    timeout_seconds: int,
 ) -> dict[str, Any]:
     request = Request(
         url,
@@ -191,7 +211,7 @@ def _post_json(
     )
 
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=timeout_seconds) as response:
             parsed = json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
         error_body = error.read().decode("utf-8", errors="replace")[:1000]
@@ -200,6 +220,10 @@ def _post_json(
         ) from error
     except URLError as error:
         raise GeminiResponseError(f"Gemini API request failed: {error.reason}") from error
+    except TimeoutError as error:
+        raise GeminiResponseError(
+            f"Gemini API request timed out after {timeout_seconds} seconds"
+        ) from error
     except json.JSONDecodeError as error:
         raise GeminiResponseError("Gemini API returned invalid JSON") from error
 
