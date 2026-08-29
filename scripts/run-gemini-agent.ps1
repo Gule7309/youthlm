@@ -27,9 +27,6 @@ $env:GEMINI_REQUEST_TIMEOUT_SECONDS = $RequestTimeoutSeconds.ToString()
 $env:GEMINI_THINKING_LEVEL = "low"
 
 & "$PSScriptRoot\select-provider.ps1" gemini -ModelId $ModelId
-if ($LASTEXITCODE -ne 0) {
-    throw "Gemini provider selection failed."
-}
 
 uv run python -m spikes.agent_smoke
 if ($LASTEXITCODE -ne 0) {
