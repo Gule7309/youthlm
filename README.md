@@ -56,5 +56,12 @@ Copy the Gemini API key to the Windows clipboard. Then run this from PowerShell:
 ```
 
 The script reads the key into the current process only, clears the clipboard,
-selects `gemini-3.7-flash`, and runs the real two-turn tool-call smoke. It never
-writes the key to a file.
+selects the low-latency `gemini-3.1-flash-lite`, and runs the real two-turn
+tool-call smoke. It never writes the key to a file. Override the model or timeout
+explicitly when needed:
+
+```powershell
+.\scripts\run-gemini-agent.ps1 `
+    -ModelId "gemini-3.1-flash-lite" `
+    -RequestTimeoutSeconds 45
+```

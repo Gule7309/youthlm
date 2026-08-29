@@ -22,5 +22,12 @@ def main() -> None:
     print(result.model_dump_json(indent=2))
 
 
+def cli() -> None:
+    try:
+        main()
+    except RuntimeError as error:
+        raise SystemExit(f"YouthLM agent failed: {error}") from None
+
+
 if __name__ == "__main__":
-    main()
+    cli()

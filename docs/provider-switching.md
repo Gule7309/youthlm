@@ -14,17 +14,18 @@ Open PowerShell in the repository root. Put the API key only in the current shel
 or an untracked `.env`; never paste it into GitHub or chat.
 
 ```powershell
-$env:GEMINI_API_KEY = "<your-key>"
-. .\scripts\select-provider.ps1 gemini -ModelId "gemini-3.7-flash"
-uv run python -m spikes.provider_smoke
+# Copy the key, then let the runner read and clear the clipboard.
+.\scripts\run-gemini-agent.ps1
 ```
 
-Gemini development defaults to a 90-second request timeout and low thinking to
-keep smoke tests responsive. Override them only when needed:
+The runner explicitly selects the stable, low-latency
+`gemini-3.1-flash-lite`, a 45-second request timeout, and low thinking. Override
+them only when needed:
 
 ```powershell
-$env:GEMINI_REQUEST_TIMEOUT_SECONDS = "120"
-$env:GEMINI_THINKING_LEVEL = "medium"
+.\scripts\run-gemini-agent.ps1 `
+    -ModelId "gemini-3.1-flash-lite" `
+    -RequestTimeoutSeconds 60
 ```
 
 A timeout fails explicitly. YouthLM does not automatically retry or switch to a
@@ -126,8 +127,8 @@ If Bedrock is unavailable and the competition rules permit the substitute, switc
 the current PowerShell session back explicitly:
 
 ```powershell
-. .\scripts\select-provider.ps1 gemini -ModelId "gemini-3.7-flash"
-uv run python -m spikes.provider_smoke
+.\scripts\run-gemini-agent.ps1 `
+    -ModelId "gemini-3.1-flash-lite"
 ```
 
 This rollback is a conscious operator action; the application never performs it
