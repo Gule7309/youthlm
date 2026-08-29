@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from app.provider import ModelToolCall
+from app.youth_data import DATASET_ID, query_youth_dataset
 
 ToolHandler = Callable[[dict[str, Any]], Any]
 
@@ -113,7 +114,43 @@ def build_default_tool_registry() -> ToolRegistry:
                     "required": ["old_value", "new_value"],
                 },
                 handler=_calculate_change,
-            )
+            ),
+            Tool(
+                name="query_youth_dataset",
+                description=(
+                    "Query the versioned New Taipei City annual unemployment-rate "
+                    "dataset for ages 25-29 and 30-34, separated by male and "
+                    "female. The tool returns official rows, provenance, unit, and "
+                    "data limitations. It cannot produce an all-sex rate."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "dataset_id": {
+                            "type": "string",
+                            "enum": [DATASET_ID],
+                        },
+                        "age_groups": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": ["25-29", "30-34"]},
+                        },
+                        "sexes": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": ["male", "female"]},
+                        },
+                        "start_year": {"type": "integer", "minimum": 2006},
+                        "end_year": {"type": "integer", "maximum": 2024},
+                    },
+                    "required": [
+                        "dataset_id",
+                        "age_groups",
+                        "sexes",
+                        "start_year",
+                        "end_year",
+                    ],
+                },
+                handler=query_youth_dataset,
+            ),
         ]
     )
 

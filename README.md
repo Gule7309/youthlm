@@ -16,9 +16,14 @@ The current level contains a provider-neutral agent loop that can:
 - return the model's final answer with an auditable tool trace;
 - stop explicitly when the configured maximum number of model turns is reached.
 
-The first deterministic tool, `calculate_change`, compares two youth-policy
-indicator values. RAG, live dataset connectors, and the HTTP API remain separate
-later checkpoints.
+The deterministic tools now include:
+
+- `calculate_change` for comparing two indicator values;
+- `query_youth_dataset` for filtering a versioned New Taipei City government
+  unemployment-rate snapshot by year, age group, and sex.
+
+Every dataset result includes provenance, unit, version, and limitations. RAG,
+runtime dataset downloads, and the HTTP API remain separate later checkpoints.
 
 ## Model providers
 
@@ -56,8 +61,8 @@ Copy the Gemini API key to the Windows clipboard. Then run this from PowerShell:
 ```
 
 The script reads the key into the current process only, clears the clipboard,
-selects the low-latency `gemini-3.1-flash-lite`, and runs the real two-turn
-tool-call smoke. It never writes the key to a file. Override the model or timeout
+selects the low-latency `gemini-3.1-flash-lite`, and runs a real dataset-query
+tool round trip. It never writes the key to a file. Override the model or timeout
 explicitly when needed:
 
 ```powershell
@@ -65,3 +70,6 @@ explicitly when needed:
     -ModelId "gemini-3.1-flash-lite" `
     -RequestTimeoutSeconds 45
 ```
+
+The bundled dataset and its limitations are documented in
+[`docs/youth-data.md`](docs/youth-data.md).

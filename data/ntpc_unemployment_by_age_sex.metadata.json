@@ -1,0 +1,38 @@
+{
+  "dataset_id": "ntpc_unemployment_by_age_sex",
+  "title": "失業率－年齡別",
+  "indicator": "unemployment_rate",
+  "agency": "新北市政府主計處",
+  "geography": "新北市",
+  "unit": "%",
+  "update_frequency": "annual",
+  "available_years": {
+    "start": 2006,
+    "end": 2024
+  },
+  "available_age_groups": [
+    "25-29",
+    "30-34"
+  ],
+  "available_sexes": [
+    "male",
+    "female"
+  ],
+  "source_dataset_page": "https://data.gov.tw/dataset/125003",
+  "source_download_url": "https://data.ntpc.gov.tw/api/datasets/c29c80d4-bef1-452c-8d9a-659e72f07831/csv/file",
+  "source_catalog_metadata_updated_at": "2025-11-27T14:22:00+08:00",
+  "snapshot_retrieved_at": "2026-08-29",
+  "source_sha256": "4084cd786eee726d98c9b5baa83e3abbc8bf393990c74c7aff9715fe03b3f59f",
+  "snapshot_row_count": 76,
+  "license": "政府資料開放授權條款－第1版",
+  "youth_definition_compatibility": {
+    "target": "18-35",
+    "status": "partial",
+    "explanation": "此快照只包含25-29歲與30-34歲，不能代表完整18-35歲青年。"
+  },
+  "warnings": [
+    "來源只提供男女分列失業率；不可用未加權平均假裝男女合計失業率。",
+    "此快照只涵蓋25-34歲，對YouthLM的18-35歲青年定義屬部分涵蓋。",
+    "資料為年度統計，最新可用年度為2024年。"
+  ]
+}

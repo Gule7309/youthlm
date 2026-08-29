@@ -19,7 +19,7 @@ Gemini 3 requires the exact function-call ID and thought signature to be returne
 with the function result. `ModelTurn.provider_state` carries this opaque data across
 the agent loop. The core never interprets it, and Bedrock does not need it.
 
-## Current tool
+## Current tools
 
 `calculate_change` accepts `old_value` and `new_value` and returns:
 
@@ -28,7 +28,9 @@ the agent loop. The core never interprets it, and Bedrock does not need it.
 - increase, decrease, or unchanged direction.
 
 The tool is deterministic and contains no external data. A real youth dataset
-query tool is the next domain checkpoint.
+query is provided by `query_youth_dataset`. It filters a bundled, versioned New
+Taipei City government snapshot and returns rows plus provenance, unit, coverage,
+and warnings. The model never invents or aggregates missing values.
 
 ## Safety boundaries
 

@@ -14,8 +14,9 @@ def main() -> None:
         tools=build_default_tool_registry(),
     )
     result = agent.run(
-        "青年失業率從 8.6 降到 8.2。請務必使用 calculate_change 工具，"
-        "再用繁體中文說明絕對變化與百分比變化。"
+        "請務必使用 query_youth_dataset，查詢2022到2024年新北市25-29歲"
+        "與30-34歲的男性及女性失業率，簡潔說明趨勢、單位、來源與資料限制。"
+        "不得自行編造或合併官方未提供的數字。"
     )
 
     print(f"provider={provider_name}")
