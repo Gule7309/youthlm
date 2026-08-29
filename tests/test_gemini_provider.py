@@ -63,24 +63,25 @@ class GeminiGenerateContentProviderTests(unittest.TestCase):
         self.assertEqual(turn.tool_calls, [])
 
     def test_converts_function_call_to_model_tool_call(self) -> None:
+        gemini_content = {
+            "role": "model",
+            "parts": [
+                {
+                    "functionCall": {
+                        "id": "call-1",
+                        "name": "query_dataset",
+                        "args": {"indicator": "unemployment_rate"},
+                    },
+                    "thoughtSignature": "opaque-signature",
+                }
+            ],
+        }
         transport = FakeGeminiTransport(
             {
                 "candidates": [
                     {
                         "finishReason": "STOP",
-                        "content": {
-                            "parts": [
-                                {
-                                    "functionCall": {
-                                        "id": "call-1",
-                                        "name": "query_dataset",
-                                        "args": {
-                                            "indicator": "unemployment_rate"
-                                        },
-                                    }
-                                }
-                            ]
-                        },
+                        "content": gemini_content,
                     }
                 ]
             }
@@ -107,6 +108,97 @@ class GeminiGenerateContentProviderTests(unittest.TestCase):
                     arguments={"indicator": "unemployment_rate"},
                 )
             ],
+        )
+        self.assertEqual(
+            turn.provider_state,
+            {"gemini_content": gemini_content},
+        )
+
+    def test_returns_function_result_with_call_id_and_thought_signature(self) -> None:
+        gemini_content = {
+            "role": "model",
+            "parts": [
+                {
+                    "functionCall": {
+                        "id": "call-1",
+                        "name": "calculate_change",
+                        "args": {"old_value": 8.6, "new_value": 8.2},
+                    },
+                    "thoughtSignature": "opaque-signature",
+                }
+            ],
+        }
+        transport = FakeGeminiTransport(
+            {
+                "candidates": [
+                    {
+                        "finishReason": "STOP",
+                        "content": {"parts": [{"text": "下降 4.65%。"}]},
+                    }
+                ]
+            }
+        )
+        provider = GeminiGenerateContentProvider(
+            api_key="test-key",
+            model_id="gemini-3.7-flash",
+            transport=transport,
+        )
+
+        provider.converse(
+            ModelRequest(
+                messages=[
+                    {"role": "user", "content": "比較兩期數值"},
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "tool_call": {
+                                    "call_id": "call-1",
+                                    "name": "calculate_change",
+                                    "arguments": {
+                                        "old_value": 8.6,
+                                        "new_value": 8.2,
+                                    },
+                                }
+                            }
+                        ],
+                        "provider_state": {"gemini_content": gemini_content},
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "tool_result": {
+                                    "call_id": "call-1",
+                                    "name": "calculate_change",
+                                    "result": {"percentage_change": -4.651163},
+                                    "is_error": False,
+                                }
+                            }
+                        ],
+                    },
+                ]
+            )
+        )
+
+        contents = transport.calls[0]["payload"]["contents"]
+        self.assertEqual(contents[1], gemini_content)
+        self.assertEqual(
+            contents[2],
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "functionResponse": {
+                            "id": "call-1",
+                            "name": "calculate_change",
+                            "response": {
+                                "result": {"percentage_change": -4.651163}
+                            },
+                        }
+                    }
+                ],
+            },
         )
 
     def test_sends_expected_request_to_gemini(self) -> None:

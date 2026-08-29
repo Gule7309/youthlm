@@ -38,6 +38,7 @@ class ModelTurn(BaseModel):
     stop_reason: Literal["end_turn", "tool_use"]
     text: str | None = None
     tool_calls: list[ModelToolCall] = Field(default_factory=list)
+    provider_state: dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelProvider(Protocol):

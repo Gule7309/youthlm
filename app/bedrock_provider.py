@@ -85,11 +85,47 @@ class BedrockConverseProvider:
             bedrock_messages.append(
                 {
                     "role": message["role"],
-                    "content": content,
+                    "content": [
+                        BedrockConverseProvider._convert_message_block(block)
+                        for block in content
+                    ],
                 }
             )
 
         return bedrock_messages
+
+    @staticmethod
+    def _convert_message_block(block: Any) -> dict[str, Any]:
+        if not isinstance(block, dict):
+            raise TypeError("Model message block must be an object")
+
+        text = block.get("text")
+        if isinstance(text, str):
+            return {"text": text}
+
+        tool_call = block.get("tool_call")
+        if isinstance(tool_call, dict):
+            return {
+                "toolUse": {
+                    "toolUseId": tool_call["call_id"],
+                    "name": tool_call["name"],
+                    "input": tool_call["arguments"],
+                }
+            }
+
+        tool_result = block.get("tool_result")
+        if isinstance(tool_result, dict):
+            return {
+                "toolResult": {
+                    "toolUseId": tool_result["call_id"],
+                    "content": [{"json": {"result": tool_result.get("result")}}],
+                    "status": (
+                        "error" if tool_result.get("is_error") else "success"
+                    ),
+                }
+            }
+
+        raise TypeError("Unsupported model message block")
 
     @staticmethod
     def _convert_tools(

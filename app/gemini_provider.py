@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from copy import deepcopy
 from functools import partial
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -122,6 +123,7 @@ class GeminiGenerateContentProvider:
             stop_reason="tool_use" if tool_calls else "end_turn",
             text="".join(text_parts) or None,
             tool_calls=tool_calls,
+            provider_state={"gemini_content": content} if tool_calls else {},
         )
 
     @staticmethod
@@ -137,25 +139,60 @@ class GeminiGenerateContentProvider:
             if role not in {"user", "model"}:
                 raise ValueError(f"Unsupported Gemini message role: {role}")
 
+            provider_state = message.get("provider_state", {})
+            if provider_state:
+                gemini_content = provider_state.get("gemini_content")
+                if role != "model" or not isinstance(gemini_content, dict):
+                    raise ValueError("Invalid Gemini provider state")
+                gemini_messages.append(deepcopy(gemini_content))
+                continue
+
             content = message["content"]
             if isinstance(content, str):
                 parts = [{"text": content}]
             elif isinstance(content, list):
-                parts = content
+                parts = [
+                    GeminiGenerateContentProvider._convert_message_block(block)
+                    for block in content
+                ]
             else:
                 raise TypeError("Model message content must be a string or list")
-
-            if not all(
-                isinstance(part, dict) and isinstance(part.get("text"), str)
-                for part in parts
-            ):
-                raise TypeError(
-                    "Gemini MVP message parts must contain text strings"
-                )
 
             gemini_messages.append({"role": role, "parts": parts})
 
         return gemini_messages
+
+    @staticmethod
+    def _convert_message_block(block: Any) -> dict[str, Any]:
+        if not isinstance(block, dict):
+            raise TypeError("Model message block must be an object")
+
+        text = block.get("text")
+        if isinstance(text, str):
+            return {"text": text}
+
+        tool_call = block.get("tool_call")
+        if isinstance(tool_call, dict):
+            return {
+                "functionCall": {
+                    "id": tool_call["call_id"],
+                    "name": tool_call["name"],
+                    "args": tool_call["arguments"],
+                }
+            }
+
+        tool_result = block.get("tool_result")
+        if isinstance(tool_result, dict):
+            response_key = "error" if tool_result.get("is_error") else "result"
+            return {
+                "functionResponse": {
+                    "id": tool_result["call_id"],
+                    "name": tool_result["name"],
+                    "response": {response_key: tool_result.get("result")},
+                }
+            }
+
+        raise TypeError("Unsupported model message block")
 
     @staticmethod
     def _convert_tools(

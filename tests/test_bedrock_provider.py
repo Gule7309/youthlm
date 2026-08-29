@@ -161,6 +161,91 @@ class BedrockConverseProviderTests(unittest.TestCase):
             ],
         )
 
+    def test_converts_tool_call_and_result_messages(self) -> None:
+        client = FakeBedrockClient(
+            {
+                "stopReason": "end_turn",
+                "output": {
+                    "message": {"content": [{"text": "下降 4.65%。"}]}
+                },
+            }
+        )
+        provider = BedrockConverseProvider(client, "test-model")
+
+        provider.converse(
+            ModelRequest(
+                messages=[
+                    {"role": "user", "content": "比較兩期數值"},
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "tool_call": {
+                                    "call_id": "call-1",
+                                    "name": "calculate_change",
+                                    "arguments": {
+                                        "old_value": 8.6,
+                                        "new_value": 8.2,
+                                    },
+                                }
+                            }
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "tool_result": {
+                                    "call_id": "call-1",
+                                    "name": "calculate_change",
+                                    "result": {"percentage_change": -4.651163},
+                                    "is_error": False,
+                                }
+                            }
+                        ],
+                    },
+                ]
+            )
+        )
+
+        self.assertEqual(
+            client.calls[0]["messages"][1:],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": "call-1",
+                                "name": "calculate_change",
+                                "input": {"old_value": 8.6, "new_value": 8.2},
+                            }
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "toolResult": {
+                                "toolUseId": "call-1",
+                                "content": [
+                                    {
+                                        "json": {
+                                            "result": {
+                                                "percentage_change": -4.651163
+                                            }
+                                        }
+                                    }
+                                ],
+                                "status": "success",
+                            }
+                        }
+                    ],
+                },
+            ],
+        )
+
     def test_rejects_unsupported_stop_reason(self) -> None:
         client = FakeBedrockClient(
             {

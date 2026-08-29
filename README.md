@@ -6,10 +6,19 @@ The project keeps the core independent from FastAPI, Amazon Bedrock, and Amazon
 Bedrock AgentCore. Local tests, the HTTP adapter, and the AgentCore entrypoint will
 all call the same application service.
 
-## Level 0
+## Agent MVP
 
-The current level contains only the provider boundary and a deterministic fake.
-It intentionally does not contain module contracts, an agent loop, RAG, or data tools.
+The current level contains a provider-neutral agent loop that can:
+
+- ask the selected model whether a tool is needed;
+- execute allow-listed application tools;
+- send tool results back to Gemini or Bedrock;
+- return the model's final answer with an auditable tool trace;
+- stop explicitly when the configured maximum number of model turns is reached.
+
+The first deterministic tool, `calculate_change`, compares two youth-policy
+indicator values. RAG, live dataset connectors, and the HTTP API remain separate
+later checkpoints.
 
 ## Model providers
 
@@ -37,3 +46,15 @@ provider tests also run with Python's standard library:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## Run the real agent with Gemini
+
+Copy the Gemini API key to the Windows clipboard. Then run this from PowerShell:
+
+```powershell
+.\scripts\run-gemini-agent.ps1
+```
+
+The script reads the key into the current process only, clears the clipboard,
+selects `gemini-3.7-flash`, and runs the real two-turn tool-call smoke. It never
+writes the key to a file.
