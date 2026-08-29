@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.analysis_result import AnalysisResult, build_analysis_result
 from app.provider import ModelProvider, ModelRequest, ModelTurn
 from app.tooling import ToolExecution, ToolRegistry
 
@@ -24,6 +25,7 @@ class AgentResult(BaseModel):
     answer: str
     model_steps: int
     tool_executions: list[ToolExecution] = Field(default_factory=list)
+    analysis: AnalysisResult | None = None
 
 
 class YouthLMAgent:
@@ -72,6 +74,11 @@ class YouthLMAgent:
                     answer=turn.text,
                     model_steps=model_step,
                     tool_executions=executions,
+                    analysis=build_analysis_result(
+                        question=prompt.strip(),
+                        summary=turn.text,
+                        executions=executions,
+                    ),
                 )
 
             if not turn.tool_calls:

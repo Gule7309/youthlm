@@ -2,7 +2,8 @@ import unittest
 
 from app.agent import AgentMaxStepsError, AgentProtocolError, YouthLMAgent
 from app.provider import FakeModelProvider, ModelToolCall, ModelTurn
-from app.tooling import Tool, ToolRegistry
+from app.tooling import Tool, ToolRegistry, build_default_tool_registry
+from app.youth_data import DATASET_ID
 
 
 def build_registry() -> ToolRegistry:
@@ -34,6 +35,7 @@ class YouthLMAgentTests(unittest.TestCase):
         self.assertEqual(result.answer, "Direct answer")
         self.assertEqual(result.model_steps, 1)
         self.assertEqual(result.tool_executions, [])
+        self.assertIsNone(result.analysis)
         self.assertEqual(provider.requests[0].messages[0]["content"], "Hello")
         self.assertEqual(provider.requests[0].tools[0]["name"], "double")
 
@@ -134,6 +136,41 @@ class YouthLMAgentTests(unittest.TestCase):
 
         with self.assertRaisesRegex(AgentProtocolError, "non-empty answer"):
             agent.run("Hello")
+
+    def test_returns_structured_analysis_after_dataset_query(self) -> None:
+        provider = FakeModelProvider(
+            [
+                ModelTurn(
+                    stop_reason="tool_use",
+                    tool_calls=[
+                        ModelToolCall(
+                            call_id="call-1",
+                            name="query_youth_dataset",
+                            arguments={
+                                "dataset_id": DATASET_ID,
+                                "age_groups": ["25-29"],
+                                "sexes": ["female"],
+                                "start_year": 2023,
+                                "end_year": 2024,
+                            },
+                        )
+                    ],
+                ),
+                ModelTurn(stop_reason="end_turn", text="女性失業率下降。"),
+            ]
+        )
+        agent = YouthLMAgent(provider, build_default_tool_registry())
+
+        result = agent.run("比較2023到2024年25-29歲女性失業率")
+
+        self.assertIsNotNone(result.analysis)
+        assert result.analysis is not None
+        self.assertEqual(result.analysis.summary, result.answer)
+        self.assertEqual(result.analysis.question, "比較2023到2024年25-29歲女性失業率")
+        self.assertEqual(
+            [point.y for point in result.analysis.visualization_spec.series[0].points],
+            [5.8, 4.7],
+        )
 
     def test_stops_after_maximum_model_steps(self) -> None:
         provider = FakeModelProvider(

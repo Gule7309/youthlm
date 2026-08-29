@@ -14,6 +14,7 @@ The current level contains a provider-neutral agent loop that can:
 - execute allow-listed application tools;
 - send tool results back to Gemini or Bedrock;
 - return the model's final answer with an auditable tool trace;
+- return deterministic dataset rows and a UI-ready line-chart contract;
 - stop explicitly when the configured maximum number of model turns is reached.
 
 The deterministic tools now include:
@@ -24,6 +25,8 @@ The deterministic tools now include:
 
 Every dataset result includes provenance, unit, version, and limitations. RAG,
 runtime dataset downloads, and the HTTP API remain separate later checkpoints.
+The structured frontend contract is documented in
+[`docs/analysis-result.md`](docs/analysis-result.md).
 
 ## Model providers
 
