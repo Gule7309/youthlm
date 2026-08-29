@@ -28,6 +28,14 @@ runtime dataset downloads, and the HTTP API remain separate later checkpoints.
 The structured frontend contract is documented in
 [`docs/analysis-result.md`](docs/analysis-result.md).
 
+The first HTTP boundary is now available:
+
+- `GET /health`
+- `GET /v1/data-sources`
+- `POST /v1/analysis`
+
+See [`docs/http-api.md`](docs/http-api.md) for the request and response workflow.
+
 ## Model providers
 
 YouthLM selects one provider explicitly through `MODEL_PROVIDER`:
@@ -76,3 +84,14 @@ explicitly when needed:
 
 The bundled dataset and its limitations are documented in
 [`docs/youth-data.md`](docs/youth-data.md).
+
+## Run the local API with Gemini
+
+Copy the Gemini API key to the Windows clipboard, then run:
+
+```powershell
+.\scripts\run-gemini-api.ps1
+```
+
+Open `http://127.0.0.1:8000/docs` to exercise the API without writing frontend
+code first.

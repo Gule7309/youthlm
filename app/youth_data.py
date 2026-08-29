@@ -2,6 +2,7 @@
 
 import csv
 import json
+from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,12 @@ METADATA_PATH = DATA_ROOT / f"{DATASET_ID}.metadata.json"
 
 class YouthDatasetQueryError(ValueError):
     """Raised when a deterministic youth-data query cannot be executed."""
+
+
+def get_youth_dataset_metadata() -> dict[str, Any]:
+    """Return an isolated copy of the installed shared-dataset metadata."""
+    metadata, _ = _load_dataset()
+    return deepcopy(metadata)
 
 
 def query_youth_dataset(arguments: dict[str, Any]) -> dict[str, Any]:
