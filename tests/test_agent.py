@@ -192,6 +192,67 @@ class YouthLMAgentTests(unittest.TestCase):
         with self.assertRaisesRegex(AgentMaxStepsError, "within 1 model steps"):
             agent.run("Keep going")
 
+    def test_refuses_unsupported_full_youth_scope_after_compatibility_check(
+        self,
+    ) -> None:
+        provider = FakeModelProvider(
+            [
+                ModelTurn(
+                    stop_reason="tool_use",
+                    tool_calls=[
+                        ModelToolCall(
+                            call_id="search-1",
+                            name="search_sources",
+                            arguments={"query": "失業率"},
+                        )
+                    ],
+                ),
+                ModelTurn(
+                    stop_reason="tool_use",
+                    tool_calls=[
+                        ModelToolCall(
+                            call_id="inspect-1",
+                            name="inspect_source",
+                            arguments={"source_id": DATASET_ID},
+                        )
+                    ],
+                ),
+                ModelTurn(
+                    stop_reason="tool_use",
+                    tool_calls=[
+                        ModelToolCall(
+                            call_id="compatibility-1",
+                            name="check_compatibility",
+                            arguments={
+                                "source_id": DATASET_ID,
+                                "min_age": 18,
+                                "max_age": 35,
+                            },
+                        )
+                    ],
+                ),
+                ModelTurn(
+                    stop_reason="end_turn",
+                    text=(
+                        "現有資料只能涵蓋25–34歲，不能宣稱為完整18–35歲失業率。"
+                    ),
+                ),
+            ]
+        )
+        agent = YouthLMAgent(provider, build_default_tool_registry())
+
+        result = agent.run("請提供完整18–35歲青年失業率")
+
+        self.assertEqual(result.model_steps, 4)
+        self.assertEqual(
+            [execution.name for execution in result.tool_executions],
+            ["search_sources", "inspect_source", "check_compatibility"],
+        )
+        compatibility = result.tool_executions[-1].result
+        self.assertTrue(compatibility["refusal_required"])
+        self.assertIn("不能宣稱", result.answer)
+        self.assertIsNone(result.analysis)
+
 
 if __name__ == "__main__":
     unittest.main()
