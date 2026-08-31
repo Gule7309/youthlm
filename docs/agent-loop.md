@@ -21,6 +21,22 @@ the agent loop. The core never interprets it, and Bedrock does not need it.
 
 ## Current tools
 
+For a data question whose source is not already known, the intended flow is:
+
+1. `search_sources` discovers a relevant installed source without returning all
+   dataset rows.
+2. `inspect_source` returns dimensions, geography, version, provenance, and
+   limitations.
+3. `check_compatibility` deterministically checks the user's intended claim.
+4. The source-specific query tool runs only for a compatible or explicitly
+   narrowed scope.
+
+`check_compatibility` returns `refusal_required=true` whenever the exact requested
+scope is not supported. For example, the installed unemployment-rate source can
+represent the published 25–29 and 30–34 bands, but it cannot represent the full
+18–35 definition. Published rates are never split proportionally without the
+underlying numerators and denominators.
+
 `calculate_change` accepts `old_value` and `new_value` and returns:
 
 - absolute change;
@@ -38,4 +54,5 @@ and warnings. The model never invents or aggregates missing values.
 - Tool exceptions become structured results so the model can recover.
 - Tool output must be JSON serializable.
 - Empty prompts and inconsistent provider turns fail explicitly.
-- `max_steps` prevents an unbounded model/tool loop.
+- `max_steps=8` leaves room for discovery, inspection, compatibility, query, and
+  synthesis while still preventing an unbounded model/tool loop.

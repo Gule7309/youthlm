@@ -19,6 +19,11 @@ The current level contains a provider-neutral agent loop that can:
 
 The deterministic tools now include:
 
+- `search_sources` for finding installed sources by topic, agency, or capability;
+- `inspect_source` for reading statistical dimensions, version, provenance, and
+  limitations before a query;
+- `check_compatibility` for deciding whether a requested age, year, geography,
+  sex, and unit scope is exact, partial, estimated, or incompatible;
 - `calculate_change` for comparing two indicator values;
 - `query_youth_dataset` for filtering a versioned New Taipei City government
   unemployment-rate snapshot by year, age group, and sex.
@@ -84,6 +89,8 @@ explicitly when needed:
 
 The bundled dataset and its limitations are documented in
 [`docs/youth-data.md`](docs/youth-data.md).
+The source discovery and compatibility rules are documented in
+[`docs/source-registry.md`](docs/source-registry.md).
 
 ## Run the local API with Gemini
 
