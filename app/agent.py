@@ -36,7 +36,7 @@ class YouthLMAgent:
         provider: ModelProvider,
         tools: ToolRegistry,
         *,
-        max_steps: int = 4,
+        max_steps: int = 8,
     ) -> None:
         if max_steps <= 0:
             raise ValueError("max_steps must be positive")

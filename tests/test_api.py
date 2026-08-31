@@ -49,6 +49,10 @@ class YouthLMApiTests(unittest.TestCase):
         self.assertEqual(len(sources), 1)
         self.assertEqual(sources[0]["source_id"], DATASET_ID)
         self.assertTrue(sources[0]["default_for_notebooks"])
+        self.assertEqual(sources[0]["policy_domain"], "employment")
+        self.assertEqual(sources[0]["query_tool"], "query_youth_dataset")
+        self.assertFalse(sources[0]["age_definition"]["can_split_bands"])
+        self.assertIn("version_id", sources[0]["dataset_version"])
 
     def test_returns_direct_agent_answer(self) -> None:
         agent = YouthLMAgent(

@@ -2,9 +2,58 @@ import unittest
 
 from app.provider import ModelToolCall
 from app.tooling import Tool, ToolRegistry, build_default_tool_registry
+from app.youth_data import DATASET_ID
 
 
 class ToolRegistryTests(unittest.TestCase):
+    def test_discovers_and_inspects_installed_source(self) -> None:
+        registry = build_default_tool_registry()
+
+        search = registry.execute(
+            ModelToolCall(
+                call_id="call-1",
+                name="search_sources",
+                arguments={"query": "employment"},
+            )
+        )
+        inspect = registry.execute(
+            ModelToolCall(
+                call_id="call-2",
+                name="inspect_source",
+                arguments={"source_id": DATASET_ID},
+            )
+        )
+
+        self.assertTrue(search.succeeded)
+        self.assertEqual(search.result["match_count"], 1)
+        self.assertEqual(search.result["sources"][0]["source_id"], DATASET_ID)
+        self.assertTrue(inspect.succeeded)
+        self.assertEqual(inspect.result["query_tool"], "query_youth_dataset")
+        self.assertEqual(inspect.result["status"], "available")
+
+    def test_compatibility_tool_requires_narrower_claim_for_18_to_35(self) -> None:
+        execution = build_default_tool_registry().execute(
+            ModelToolCall(
+                call_id="call-1",
+                name="check_compatibility",
+                arguments={
+                    "source_id": DATASET_ID,
+                    "min_age": 18,
+                    "max_age": 35,
+                    "start_year": 2020,
+                    "end_year": 2024,
+                    "geography": "新北市",
+                    "sexes": ["male", "female"],
+                    "unit": "%",
+                },
+            )
+        )
+
+        self.assertTrue(execution.succeeded)
+        self.assertEqual(execution.result["overall_status"], "partial")
+        self.assertTrue(execution.result["refusal_required"])
+        self.assertFalse(execution.result["safe_to_claim_requested_scope"])
+
     def test_calculates_indicator_change(self) -> None:
         registry = build_default_tool_registry()
 
