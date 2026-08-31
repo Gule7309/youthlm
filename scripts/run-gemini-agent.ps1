@@ -3,7 +3,10 @@ param(
     [string]$ModelId = "gemini-3.1-flash-lite",
 
     [ValidateRange(10, 300)]
-    [int]$RequestTimeoutSeconds = 45
+    [int]$RequestTimeoutSeconds = 45,
+
+    [ValidateSet("unemployment", "population")]
+    [string]$Scenario = "unemployment"
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +28,7 @@ if ([string]::IsNullOrWhiteSpace($env:GEMINI_API_KEY)) {
 
 $env:GEMINI_REQUEST_TIMEOUT_SECONDS = $RequestTimeoutSeconds.ToString()
 $env:GEMINI_THINKING_LEVEL = "low"
+$env:YOUTHLM_SMOKE_SCENARIO = $Scenario
 
 & "$PSScriptRoot\select-provider.ps1" gemini -ModelId $ModelId
 

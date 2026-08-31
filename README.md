@@ -26,10 +26,12 @@ The deterministic tools now include:
   sex, and unit scope is exact, partial, estimated, or incompatible;
 - `calculate_change` for comparing two indicator values;
 - `query_youth_dataset` for filtering a versioned New Taipei City government
-  unemployment-rate snapshot by year, age group, and sex.
+  unemployment-rate snapshot by year, age group, and sex;
+- `query_population_dataset` for filtering official resident-population counts by
+  year, New Taipei City or district, published 5-year age group, and sex.
 
 Every dataset result includes provenance, unit, version, and limitations. RAG,
-runtime dataset downloads, and the HTTP API remain separate later checkpoints.
+runtime dataset downloads, and cross-source joins remain separate later checkpoints.
 The structured frontend contract is documented in
 [`docs/analysis-result.md`](docs/analysis-result.md).
 
@@ -87,8 +89,9 @@ explicitly when needed:
     -RequestTimeoutSeconds 45
 ```
 
-The bundled dataset and its limitations are documented in
-[`docs/youth-data.md`](docs/youth-data.md).
+The bundled datasets and their limitations are documented in
+[`docs/youth-data.md`](docs/youth-data.md) and
+[`docs/population-data.md`](docs/population-data.md).
 The source discovery and compatibility rules are documented in
 [`docs/source-registry.md`](docs/source-registry.md).
 
@@ -102,3 +105,9 @@ Copy the Gemini API key to the Windows clipboard, then run:
 
 Open `http://127.0.0.1:8000/docs` to exercise the API without writing frontend
 code first.
+
+To run the real population Agent path instead of the unemployment Golden Path:
+
+```powershell
+.\scripts\run-gemini-agent.ps1 -Scenario population
+```

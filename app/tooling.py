@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from app.population_data import DATASET_ID as POPULATION_DATASET_ID
+from app.population_data import get_population_dataset_metadata, query_population_dataset
 from app.provider import ModelToolCall
 from app.source_registry import (
     CompatibilityRequest,
@@ -98,6 +100,7 @@ def build_default_tool_registry(
 ) -> ToolRegistry:
     """Return source discovery, safety, and deterministic analysis tools."""
     sources = source_registry or build_default_source_registry()
+    population_metadata = get_population_dataset_metadata()
     return ToolRegistry(
         [
             Tool(
@@ -234,6 +237,63 @@ def build_default_tool_registry(
                     ],
                 },
                 handler=query_youth_dataset,
+            ),
+            Tool(
+                name="query_population_dataset",
+                description=(
+                    "Query the versioned official New Taipei resident-population "
+                    "dataset by year, municipality or district, published 5-year "
+                    "age group, and official all/male/female counts. Use only age "
+                    "groups returned by inspect_source; it cannot split 15-19 or "
+                    "35-39 into an exact 18-35 population."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "dataset_id": {
+                            "type": "string",
+                            "enum": [POPULATION_DATASET_ID],
+                        },
+                        "geographies": {
+                            "type": "array",
+                            "maxItems": 10,
+                            "items": {
+                                "type": "string",
+                                "enum": population_metadata[
+                                    "available_geographies"
+                                ],
+                            },
+                        },
+                        "age_groups": {
+                            "type": "array",
+                            "maxItems": 10,
+                            "items": {
+                                "type": "string",
+                                "enum": population_metadata[
+                                    "available_age_groups"
+                                ],
+                            },
+                        },
+                        "sexes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": ["all", "male", "female"],
+                            },
+                        },
+                        "start_year": {"type": "integer", "minimum": 2000},
+                        "end_year": {"type": "integer", "maximum": 2024},
+                    },
+                    "required": [
+                        "dataset_id",
+                        "geographies",
+                        "age_groups",
+                        "sexes",
+                        "start_year",
+                        "end_year",
+                    ],
+                },
+                handler=query_population_dataset,
             ),
         ]
     )

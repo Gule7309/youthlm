@@ -5,6 +5,7 @@ import httpx
 
 from app.agent import YouthLMAgent
 from app.api import create_app
+from app.population_data import DATASET_ID as POPULATION_DATASET_ID
 from app.provider import FakeModelProvider, ModelToolCall, ModelTurn
 from app.tooling import build_default_tool_registry
 from app.youth_data import DATASET_ID
@@ -46,13 +47,19 @@ class YouthLMApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         sources = response.json()["sources"]
-        self.assertEqual(len(sources), 1)
-        self.assertEqual(sources[0]["source_id"], DATASET_ID)
-        self.assertTrue(sources[0]["default_for_notebooks"])
-        self.assertEqual(sources[0]["policy_domain"], "employment")
-        self.assertEqual(sources[0]["query_tool"], "query_youth_dataset")
-        self.assertFalse(sources[0]["age_definition"]["can_split_bands"])
-        self.assertIn("version_id", sources[0]["dataset_version"])
+        self.assertEqual(len(sources), 2)
+        by_id = {source["source_id"]: source for source in sources}
+        unemployment = by_id[DATASET_ID]
+        population = by_id[POPULATION_DATASET_ID]
+        self.assertTrue(unemployment["default_for_notebooks"])
+        self.assertEqual(unemployment["policy_domain"], "employment")
+        self.assertEqual(unemployment["query_tool"], "query_youth_dataset")
+        self.assertFalse(unemployment["age_definition"]["can_split_bands"])
+        self.assertIn("version_id", unemployment["dataset_version"])
+        self.assertTrue(population["default_for_notebooks"])
+        self.assertEqual(population["policy_domain"], "demographics")
+        self.assertEqual(population["query_tool"], "query_population_dataset")
+        self.assertEqual(len(population["available_geographies"]), 30)
 
     def test_returns_direct_agent_answer(self) -> None:
         agent = YouthLMAgent(

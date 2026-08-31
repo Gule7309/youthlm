@@ -1,5 +1,6 @@
 import unittest
 
+from app.population_data import DATASET_ID as POPULATION_DATASET_ID
 from app.provider import ModelToolCall
 from app.tooling import Tool, ToolRegistry, build_default_tool_registry
 from app.youth_data import DATASET_ID
@@ -53,6 +54,39 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertEqual(execution.result["overall_status"], "partial")
         self.assertTrue(execution.result["refusal_required"])
         self.assertFalse(execution.result["safe_to_claim_requested_scope"])
+
+    def test_population_source_is_discoverable_and_district_compatible(self) -> None:
+        registry = build_default_tool_registry()
+        search = registry.execute(
+            ModelToolCall(
+                call_id="search-population",
+                name="search_sources",
+                arguments={"query": "人口"},
+            )
+        )
+        compatibility = registry.execute(
+            ModelToolCall(
+                call_id="check-population",
+                name="check_compatibility",
+                arguments={
+                    "source_id": POPULATION_DATASET_ID,
+                    "min_age": 20,
+                    "max_age": 34,
+                    "geography": "板橋區",
+                    "sexes": ["all"],
+                    "unit": "人",
+                },
+            )
+        )
+
+        self.assertTrue(search.succeeded)
+        self.assertEqual(search.result["match_count"], 1)
+        self.assertEqual(
+            search.result["sources"][0]["source_id"],
+            POPULATION_DATASET_ID,
+        )
+        self.assertTrue(compatibility.succeeded)
+        self.assertEqual(compatibility.result["overall_status"], "exact")
 
     def test_calculates_indicator_change(self) -> None:
         registry = build_default_tool_registry()

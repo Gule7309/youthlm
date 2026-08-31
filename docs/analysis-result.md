@@ -2,7 +2,8 @@
 
 YouthLM keeps the model's narrative separate from numeric data used by the UI.
 
-After a successful `query_youth_dataset` execution, `AgentResult.analysis` contains:
+After a successful `query_youth_dataset` or `query_population_dataset` execution,
+`AgentResult.analysis` contains:
 
 - the original question and the model's final summary;
 - a stable dataset reference and exact query filters;
@@ -17,4 +18,4 @@ model answer, a calculation-only answer, or a failed dataset query returns
 
 This is the frontend boundary for the current MVP. It intentionally does not choose
 a JavaScript chart library, generate image files, predict future values, or combine
-multiple datasets.
+multiple datasets in one result.

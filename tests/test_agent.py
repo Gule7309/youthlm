@@ -1,6 +1,7 @@
 import unittest
 
 from app.agent import AgentMaxStepsError, AgentProtocolError, YouthLMAgent
+from app.population_data import DATASET_ID as POPULATION_DATASET_ID
 from app.provider import FakeModelProvider, ModelToolCall, ModelTurn
 from app.tooling import Tool, ToolRegistry, build_default_tool_registry
 from app.youth_data import DATASET_ID
@@ -191,6 +192,47 @@ class YouthLMAgentTests(unittest.TestCase):
 
         with self.assertRaisesRegex(AgentMaxStepsError, "within 1 model steps"):
             agent.run("Keep going")
+
+    def test_returns_structured_analysis_after_population_query(self) -> None:
+        provider = FakeModelProvider(
+            [
+                ModelTurn(
+                    stop_reason="tool_use",
+                    tool_calls=[
+                        ModelToolCall(
+                            call_id="population-1",
+                            name="query_population_dataset",
+                            arguments={
+                                "dataset_id": POPULATION_DATASET_ID,
+                                "geographies": ["板橋區"],
+                                "age_groups": ["25-29"],
+                                "sexes": ["all"],
+                                "start_year": 2023,
+                                "end_year": 2024,
+                            },
+                        )
+                    ],
+                ),
+                ModelTurn(
+                    stop_reason="end_turn",
+                    text="板橋區25至29歲人口下降。",
+                ),
+            ]
+        )
+        agent = YouthLMAgent(provider, build_default_tool_registry())
+
+        result = agent.run("比較板橋區2023到2024年25至29歲人口")
+
+        self.assertIsNotNone(result.analysis)
+        assert result.analysis is not None
+        self.assertEqual(
+            result.analysis.dataset_ref.dataset_id,
+            POPULATION_DATASET_ID,
+        )
+        self.assertEqual(
+            [point.y for point in result.analysis.visualization_spec.series[0].points],
+            [32242.0, 31374.0],
+        )
 
     def test_refuses_unsupported_full_youth_scope_after_compatibility_check(
         self,
