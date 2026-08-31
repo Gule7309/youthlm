@@ -1,8 +1,11 @@
+import hashlib
 import unittest
+from pathlib import Path
 
 from app.population_data import (
     DATASET_ID,
     PopulationDatasetQueryError,
+    _matches_snapshot_hash,
     get_population_dataset_metadata,
     query_population_dataset,
 )
@@ -11,6 +14,28 @@ from app.tooling import build_default_tool_registry
 
 
 class PopulationDatasetQueryTests(unittest.TestCase):
+    def test_hash_accepts_windows_crlf_checkout(self) -> None:
+        source_bytes = b"header,value\nrow,1\n"
+        expected_hash = hashlib.sha256(source_bytes).hexdigest()
+        windows_checkout = source_bytes.replace(b"\n", b"\r\n")
+
+        self.assertTrue(
+            _matches_snapshot_hash(windows_checkout, expected_hash)
+        )
+
+    def test_hash_rejects_actual_content_change(self) -> None:
+        source_bytes = b"header,value\nrow,1\n"
+        expected_hash = hashlib.sha256(source_bytes).hexdigest()
+
+        self.assertFalse(
+            _matches_snapshot_hash(b"header,value\r\nrow,2\r\n", expected_hash)
+        )
+
+    def test_git_preserves_versioned_csv_snapshot_bytes(self) -> None:
+        attributes = Path(".gitattributes").read_text(encoding="utf-8")
+
+        self.assertIn("data/*.csv -text", attributes)
+
     def test_snapshot_has_expected_official_shape(self) -> None:
         metadata = get_population_dataset_metadata()
 

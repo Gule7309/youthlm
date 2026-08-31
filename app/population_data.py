@@ -161,9 +161,10 @@ def query_population_dataset(arguments: dict[str, Any]) -> dict[str, Any]:
 @lru_cache(maxsize=1)
 def _load_dataset() -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
     metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
-    actual_hash = hashlib.sha256(DATA_PATH.read_bytes()).hexdigest()
+    snapshot_bytes = DATA_PATH.read_bytes()
+    actual_hash = hashlib.sha256(snapshot_bytes).hexdigest()
     expected_hash = metadata["source_sha256"]
-    if actual_hash != expected_hash:
+    if not _matches_snapshot_hash(snapshot_bytes, expected_hash):
         raise RuntimeError(
             "Population snapshot hash mismatch: "
             f"expected {expected_hash}, got {actual_hash}"
@@ -195,6 +196,17 @@ def _load_dataset() -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
             f"Dataset row count mismatch: expected {expected_count}, got {len(rows)}"
         )
     return metadata, tuple(rows)
+
+
+def _matches_snapshot_hash(snapshot_bytes: bytes, expected_hash: str) -> bool:
+    """Accept the source bytes or Git's Windows CRLF checkout equivalent."""
+    actual_hash = hashlib.sha256(snapshot_bytes).hexdigest()
+    if actual_hash == expected_hash:
+        return True
+
+    lf_normalized_bytes = snapshot_bytes.replace(b"\r\n", b"\n")
+    normalized_hash = hashlib.sha256(lf_normalized_bytes).hexdigest()
+    return normalized_hash == expected_hash
 
 
 def _required_choices(

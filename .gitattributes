@@ -1,0 +1,2 @@
+# Preserve versioned government CSV snapshots byte-for-byte on every platform.
+data/*.csv -text
