@@ -1,0 +1,336 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:youthlm:contracts:common:0.1.0",
+  "title": "YouthLM Contract v0 Common Types",
+  "$defs": {
+    "ContractVersion": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "number",
+            "string"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          }
+        }
+      ]
+    },
+    "DataColumn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "label",
+        "data_type",
+        "role"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "data_type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "date",
+            "datetime"
+          ]
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "dimension",
+            "measure"
+          ]
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ResultData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "columns",
+        "records"
+      ],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DataColumn"
+          }
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "#/$defs/Identifier"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValue"
+            }
+          }
+        }
+      }
+    },
+    "Warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "severity",
+        "message",
+        "affected_source_ids"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "age_mismatch",
+            "geography_mismatch",
+            "year_mismatch",
+            "unit_mismatch",
+            "missing_dimension",
+            "insufficient_data",
+            "unsupported_claim"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "info",
+            "warning",
+            "blocking"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "affected_source_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          }
+        }
+      }
+    },
+    "SourceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "title",
+        "dataset_version_id"
+      ],
+      "properties": {
+        "source_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agency": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "dataset_version_id": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    },
+    "DatasetVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_version_id",
+        "source_id",
+        "retrieved_at",
+        "source_sha256"
+      ],
+      "properties": {
+        "dataset_version_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "source_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "retrieved_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ProvenanceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "dataset_version_id",
+        "query_tool",
+        "query_parameters"
+      ],
+      "properties": {
+        "source_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "dataset_version_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "query_tool": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "query_parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          }
+        }
+      }
+    },
+    "AnalysisPlanStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step_id",
+        "description",
+        "status"
+      ],
+      "properties": {
+        "step_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "skipped"
+          ]
+        }
+      }
+    },
+    "VisualizationSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "title"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "line",
+            "bar",
+            "table"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x_field": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "y_field": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "series_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "line",
+                  "bar"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "x_field",
+              "y_field"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_1",
+  "module_id": "analysis_1",
+  "upstream_module_ids": [],
+  "title": "新北市青年失業率趨勢",
+  "question": "比較2022到2024年25至29歲青年男女失業率",
+  "status": "partial",
+  "sources": [
+    {
+      "source_id": "ntpc_unemployment_by_age_sex",
+      "title": "失業率－年齡別",
+      "agency": "新北市政府主計處",
+      "source_url": "https://data.gov.tw/dataset/125003",
+      "dataset_version_id": "snapshot_2026-08-29"
+    }
+  ],
+  "filters": {
+    "start_year": 2022,
+    "end_year": 2024,
+    "age_groups": [
+      "25-29"
+    ],
+    "sexes": [
+      "male",
+      "female"
+    ]
+  },
+  "dimensions": [
+    "year",
+    "age_group",
+    "sex"
+  ],
+  "result_data": {
+    "columns": [
+      {
+        "name": "year",
+        "label": "年份",
+        "data_type": "integer",
+        "role": "dimension"
+      },
+      {
+        "name": "age_group",
+        "label": "年齡組",
+        "data_type": "string",
+        "role": "dimension"
+      },
+      {
+        "name": "sex",
+        "label": "性別",
+        "data_type": "string",
+        "role": "dimension"
+      },
+      {
+        "name": "unemployment_rate_percent",
+        "label": "失業率",
+        "data_type": "number",
+        "role": "measure",
+        "unit": "%"
+      }
+    ],
+    "records": [
+      {
+        "year": 2024,
+        "age_group": "25-29",
+        "sex": "male",
+        "unemployment_rate_percent": 6.3
+      },
+      {
+        "year": 2024,
+        "age_group": "25-29",
+        "sex": "female",
+        "unemployment_rate_percent": 4.7
+      }
+    ]
+  },
+  "summary": "2022至2024年，25至29歲男性失業率上升，女性失業率下降。",
+  "warnings": [
+    {
+      "type": "age_mismatch",
+      "severity": "warning",
+      "message": "此資料只涵蓋25至29歲，不能代表完整18至35歲青年。",
+      "affected_source_ids": [
+        "ntpc_unemployment_by_age_sex"
+      ]
+    }
+  ],
+  "provenance": [
+    {
+      "source_id": "ntpc_unemployment_by_age_sex",
+      "dataset_version_id": "snapshot_2026-08-29",
+      "query_tool": "query_youth_dataset",
+      "query_parameters": {
+        "start_year": 2022,
+        "end_year": 2024,
+        "age_groups": [
+          "25-29"
+        ],
+        "sexes": [
+          "male",
+          "female"
+        ]
+      }
+    }
+  ],
+  "dataset_versions": [
+    {
+      "dataset_version_id": "snapshot_2026-08-29",
+      "source_id": "ntpc_unemployment_by_age_sex",
+      "retrieved_at": "2026-08-29T00:00:00+08:00",
+      "source_sha256": "4084cd786eee726d98c9b5baa83e3abbc8bf393990c74c7aff9715fe03b3f59f",
+      "license": "政府資料開放授權條款－第1版"
+    }
+  ]
+}
