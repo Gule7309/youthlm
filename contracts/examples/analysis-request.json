@@ -1,0 +1,9 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_1",
+  "module_id": "analysis_2",
+  "query": "加入教育程度資料一起分析",
+  "upstream_module_ids": [
+    "analysis_1"
+  ]
+}

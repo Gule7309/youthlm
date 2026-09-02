@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:youthlm:contracts:error-response:0.1.0",
+  "title": "YouthLM ErrorResponse v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "error"
+  ],
+  "properties": {
+    "contract_version": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/ContractVersion"
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "retriable"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "validation_error",
+            "module_not_found",
+            "provider_unavailable",
+            "provider_timeout",
+            "agent_protocol_error",
+            "max_steps_exceeded",
+            "dataset_error",
+            "internal_error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retriable": {
+          "type": "boolean"
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/JsonValue"
+          }
+        }
+      }
+    }
+  }
+}

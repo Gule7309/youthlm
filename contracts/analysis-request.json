@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:youthlm:contracts:analysis-request:0.1.0",
+  "title": "YouthLM AnalysisRequest v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "project_id",
+    "module_id",
+    "query",
+    "upstream_module_ids"
+  ],
+  "properties": {
+    "contract_version": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/ContractVersion"
+    },
+    "project_id": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+    },
+    "module_id": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+    },
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "upstream_module_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+      }
+    }
+  }
+}

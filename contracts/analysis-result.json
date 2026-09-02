@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:youthlm:contracts:analysis-result:0.1.0",
+  "title": "YouthLM AnalysisResult v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "project_id",
+    "module_id",
+    "upstream_module_ids",
+    "title",
+    "question",
+    "status",
+    "analysis_plan",
+    "filters",
+    "dimensions",
+    "result_data",
+    "summary",
+    "warnings",
+    "sources",
+    "dataset_versions",
+    "provenance"
+  ],
+  "properties": {
+    "contract_version": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/ContractVersion"
+    },
+    "project_id": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+    },
+    "module_id": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+    },
+    "upstream_module_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+      }
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "question": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "partial",
+        "blocked"
+      ]
+    },
+    "analysis_plan": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/AnalysisPlanStep"
+      }
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/JsonValue"
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+      }
+    },
+    "result_data": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/ResultData"
+    },
+    "visualization": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/VisualizationSpec"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Warning"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/SourceReference"
+      }
+    },
+    "dataset_versions": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/DatasetVersion"
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/ProvenanceRecord"
+      }
+    }
+  }
+}
