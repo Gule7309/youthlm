@@ -100,6 +100,9 @@ def build_default_tool_registry(
 ) -> ToolRegistry:
     """Return source discovery, safety, and deterministic analysis tools."""
     sources = source_registry or build_default_source_registry()
+    policy_domains = sorted(
+        {source.policy_domain for source in sources.list_sources()}
+    )
     population_metadata = get_population_dataset_metadata()
     return ToolRegistry(
         [
@@ -123,7 +126,14 @@ def build_default_tool_registry(
                             "type": "string",
                             "enum": ["available", "catalog_only", "document"],
                         },
-                        "policy_domain": {"type": "string"},
+                        "policy_domain": {
+                            "type": "string",
+                            "description": (
+                                "Optional canonical policy domain. Omit this filter "
+                                "when the correct domain is not yet known."
+                            ),
+                            "enum": policy_domains,
+                        },
                     },
                     "required": ["query"],
                 },

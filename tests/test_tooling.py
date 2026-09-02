@@ -7,6 +7,23 @@ from app.youth_data import DATASET_ID
 
 
 class ToolRegistryTests(unittest.TestCase):
+    def test_search_declaration_exposes_only_registered_policy_domains(
+        self,
+    ) -> None:
+        declarations = build_default_tool_registry().declarations()
+        search = next(
+            declaration
+            for declaration in declarations
+            if declaration["name"] == "search_sources"
+        )
+
+        policy_domain = search["input_schema"]["properties"]["policy_domain"]
+        self.assertEqual(
+            policy_domain["enum"],
+            ["demographics", "employment"],
+        )
+        self.assertIn("Omit this filter", policy_domain["description"])
+
     def test_discovers_and_inspects_installed_source(self) -> None:
         registry = build_default_tool_registry()
 
