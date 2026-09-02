@@ -10,6 +10,9 @@ from app.youth_data import get_youth_dataset_metadata
 
 CompatibilityStatus = Literal["exact", "partial", "estimated", "incompatible"]
 SourceStatus = Literal["available", "catalog_only", "document"]
+SEARCH_STOP_WORDS = frozenset(
+    {"and", "by", "data", "dataset", "for", "from", "of", "the", "with"}
+)
 
 
 class SourceRegistryError(ValueError):
@@ -226,7 +229,7 @@ class SourceRegistry:
                     *source.capabilities,
                 ]
             ).casefold()
-            if normalized_query not in searchable:
+            if not _matches_search_query(normalized_query, searchable):
                 continue
             matches.append(
                 SourceSummary(
@@ -303,6 +306,18 @@ class SourceRegistry:
             limitations=source.known_limitations,
             recommended_claim=recommended_claim,
         )
+
+
+def _matches_search_query(normalized_query: str, searchable: str) -> bool:
+    if normalized_query in searchable:
+        return True
+
+    query_terms = {
+        term
+        for term in normalized_query.replace("_", " ").replace("-", " ").split()
+        if len(term) >= 3 and term not in SEARCH_STOP_WORDS
+    }
+    return any(term in searchable for term in query_terms)
 
 
 def build_default_source_registry() -> SourceRegistry:

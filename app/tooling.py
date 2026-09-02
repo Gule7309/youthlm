@@ -316,6 +316,14 @@ def _search_sources(
     query = _required_string(arguments, "query")
     status = arguments.get("status")
     policy_domain = arguments.get("policy_domain")
+    allowed_policy_domains = {
+        source.policy_domain.casefold() for source in registry.list_sources()
+    }
+    if (
+        policy_domain is not None
+        and policy_domain.casefold() not in allowed_policy_domains
+    ):
+        raise ValueError(f"Unsupported policy_domain: {policy_domain}")
     matches = registry.search_sources(
         query,
         status=status,
