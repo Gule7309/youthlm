@@ -68,6 +68,27 @@ class ToolRegistryTests(unittest.TestCase):
             POPULATION_DATASET_ID,
         )
 
+    def test_discovers_population_from_chinese_natural_language_query(
+        self,
+    ) -> None:
+        execution = build_default_tool_registry().execute(
+            ModelToolCall(
+                call_id="search-population",
+                name="search_sources",
+                arguments={
+                    "query": "新北市人口統計",
+                    "policy_domain": "demographics",
+                },
+            )
+        )
+
+        self.assertTrue(execution.succeeded)
+        self.assertEqual(execution.result["match_count"], 1)
+        self.assertEqual(
+            execution.result["sources"][0]["source_id"],
+            POPULATION_DATASET_ID,
+        )
+
     def test_rejects_unknown_search_policy_domain(self) -> None:
         execution = build_default_tool_registry().execute(
             ModelToolCall(

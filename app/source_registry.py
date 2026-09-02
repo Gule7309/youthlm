@@ -1,5 +1,6 @@
 """Shared source metadata, discovery, and deterministic compatibility checks."""
 
+import re
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -12,6 +13,15 @@ CompatibilityStatus = Literal["exact", "partial", "estimated", "incompatible"]
 SourceStatus = Literal["available", "catalog_only", "document"]
 SEARCH_STOP_WORDS = frozenset(
     {"and", "by", "data", "dataset", "for", "from", "of", "the", "with"}
+)
+SEARCH_CJK_STOP_PHRASES = (
+    "官方",
+    "政府",
+    "新北市",
+    "統計",
+    "資料集",
+    "資料",
+    "數據",
 )
 
 
@@ -226,6 +236,7 @@ class SourceRegistry:
                     source.agency,
                     source.policy_domain,
                     source.indicator,
+                    source.geography,
                     *source.capabilities,
                 ]
             ).casefold()
@@ -317,7 +328,25 @@ def _matches_search_query(normalized_query: str, searchable: str) -> bool:
         for term in normalized_query.replace("_", " ").replace("-", " ").split()
         if len(term) >= 3 and term not in SEARCH_STOP_WORDS
     }
+    query_terms.update(_cjk_search_terms(normalized_query))
     return any(term in searchable for term in query_terms)
+
+
+def _cjk_search_terms(query: str) -> set[str]:
+    simplified = query
+    for phrase in SEARCH_CJK_STOP_PHRASES:
+        simplified = simplified.replace(phrase, " ")
+
+    terms: set[str] = set()
+    for segment in re.findall(r"[\u4e00-\u9fff]+", simplified):
+        if len(segment) <= 2:
+            terms.add(segment)
+            continue
+        terms.update(
+            segment[index : index + 2]
+            for index in range(len(segment) - 1)
+        )
+    return terms
 
 
 def build_default_source_registry() -> SourceRegistry:
