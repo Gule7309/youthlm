@@ -2,13 +2,15 @@
 
 ## Status
 
-Contract version `0.1.0` is the next frontend/backend integration boundary. The
-current root-level Python endpoint still accepts the legacy `{ "question": "..." }`
-request and returns `AgentResult`; it is not yet compliant with these schemas.
+Contract version `0.1.0` is the frontend/backend integration boundary. The
+monorepo entrypoint at `apps/api/main.py` accepts `AnalysisRequest` and returns
+`AnalysisResult` directly. The root-level `app.api` endpoint temporarily keeps
+the legacy `{ "question": "..." }` / `AgentResult` shape for backward
+compatibility during migration.
 
-Frontend development should use
-`contracts/examples/analysis-result.json` as its mock. Backend development will
-implement these schemas in a separate PR after the monorepo foundation is merged.
+Frontend development can continue using
+`contracts/examples/analysis-result.json` as its canonical mock, then switch to
+the `apps/api` HTTP endpoint without special parsing.
 
 ## Target analysis flow
 
@@ -20,9 +22,11 @@ AnalysisRequest
 → AnalysisResult
 ```
 
-The request sends only `upstream_module_ids`. It does not send prior results.
-Backend module storage resolves every identifier to a validated `ModuleContext`.
-Canvas coordinates and other presentation state never cross this boundary.
+The request sends only `upstream_module_ids`; it never sends prior results.
+Until the Module Context storage checkpoint is implemented, non-empty upstream
+IDs receive a structured `module_not_found` response rather than being silently
+ignored. Canvas coordinates and other presentation state never cross this
+boundary.
 
 ## Required and optional fields
 
@@ -37,12 +41,11 @@ Arrays that may have no values remain required and are returned as `[]`. Objects
 that may have no values remain required and are returned as `{}`. This prevents
 frontend code from needing different shapes for the same completed request.
 
-## Runtime migration impact
+## Runtime migration status
 
-Adopting Contract v0 in the runtime is an intentional breaking change from the
-current CLI-oriented HTTP shape:
+The new monorepo entrypoint and the legacy root entrypoint coexist temporarily:
 
-| Area | Current | Contract v0 impact |
+| Area | Legacy `app.api` | Contract v0 `apps/api` |
 | --- | --- | --- |
 | Request | `{ "question": "..." }` | Frontend sends project ID, module ID, query, and upstream IDs. |
 | Response | `AgentResult` with optional nested analysis | Frontend receives `AnalysisResult` directly. |
@@ -50,10 +53,9 @@ current CLI-oriented HTTP shape:
 | Warning | strings | Frontend renders severity and type from structured warning objects. |
 | Source | one dataset reference | Frontend supports arrays of sources and versions. |
 
-This PR only publishes schemas and examples, so it is backward compatible with
-the current runtime. The later API implementation PR must update backend models,
-tests, docs, and mocks together and must explicitly coordinate the frontend
-switch from mock to HTTP.
+No existing root route is removed in this checkpoint. Frontend integration should
+target `apps/api`; once consumers have migrated, removal of the legacy root
+entrypoint will be proposed as a separate breaking cleanup.
 
 ## Error boundary
 
