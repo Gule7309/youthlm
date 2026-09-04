@@ -11,13 +11,18 @@ from app.agent import (
 )
 from app.data_catalog import DataSourceCatalog, build_default_data_source_catalog
 from app.provider_factory import ProviderConfigurationError, create_model_provider
+from app.source_registry import SourceNotFoundError, build_default_source_registry
 from app.tooling import build_default_tool_registry
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from contract_adapter import ContractMappingError, to_contract_result
+from contract_adapter import (
+    ContractMappingError,
+    build_agent_prompt,
+    to_contract_result,
+)
 from contract_models import (
     CONTRACT_VERSION,
     AnalysisRequest,
@@ -88,6 +93,7 @@ def create_app(
         allow_headers=["Content-Type"],
     )
     active_agent = agent
+    source_registry = build_default_source_registry()
 
     def resolve_agent() -> AgentRunner:
         nonlocal active_agent
@@ -142,7 +148,29 @@ def create_app(
             )
 
         try:
-            result = resolve_agent().run(request.query)
+            for selection in request.source_selections:
+                source_registry.inspect_source(selection.source_id)
+        except SourceNotFoundError:
+            available_source_ids = {
+                source.source_id
+                for source in source_registry.list_sources()
+            }
+            return _error_response(
+                422,
+                code="dataset_error",
+                message="One or more selected sources are not available",
+                retriable=False,
+                details={
+                    "unknown_source_ids": [
+                        selection.source_id
+                        for selection in request.source_selections
+                        if selection.source_id not in available_source_ids
+                    ],
+                },
+            )
+
+        try:
+            result = resolve_agent().run(build_agent_prompt(request))
             return to_contract_result(request, result)
         except ProviderConfigurationError:
             return _error_response(

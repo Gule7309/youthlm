@@ -1,5 +1,6 @@
 """Translate the current AgentResult into YouthLM Contract v0."""
 
+import json
 from datetime import datetime
 from typing import Any, Literal
 
@@ -32,13 +33,58 @@ def to_contract_result(
 ) -> AnalysisResult:
     """Create the public result without asking the model to copy data values."""
     try:
+        analysis_source_id = (
+            agent_result.analysis.dataset_ref.dataset_id
+            if agent_result.analysis is not None
+            else None
+        )
+        blocking_execution = _blocking_compatibility(
+            agent_result.tool_executions,
+            source_id=analysis_source_id,
+            selected_source_ids={
+                selection.source_id
+                for selection in request.source_selections
+            },
+        )
+        if blocking_execution is not None:
+            return _blocked_analysis(request, agent_result, blocking_execution)
         if agent_result.analysis is None:
+            if request.source_selections:
+                raise ContractMappingError(
+                    "Selected sources did not produce a deterministic analysis"
+                )
             return _direct_answer(request, agent_result)
+        _validate_selected_source(request, agent_result)
         return _dataset_analysis(request, agent_result)
     except (KeyError, TypeError, ValueError) as error:
         raise ContractMappingError(
             "Agent result could not be mapped to Contract v0"
         ) from error
+
+
+def build_agent_prompt(request: AnalysisRequest) -> str:
+    """Add raw-source constraints without exposing frontend implementation state."""
+    if not request.source_selections:
+        return request.query
+
+    selections = [
+        selection.model_dump(mode="json")
+        for selection in request.source_selections
+    ]
+    source_context = json.dumps(
+        selections,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return (
+        f"{request.query}\n\n"
+        "YouthLM selected raw data inputs (not prior module results): "
+        f"{source_context}\n"
+        "Use only these selected sources. Before querying a selected source, "
+        "call check_compatibility for the requested claim. Apply every selected "
+        "source filter exactly to the deterministic query."
+    )
 
 
 def _direct_answer(
@@ -65,6 +111,65 @@ def _direct_answer(
         result_data=ResultData(columns=[], records=[]),
         summary=agent_result.answer,
         warnings=[],
+        sources=[],
+        dataset_versions=[],
+        provenance=[],
+    )
+
+
+def _blocked_analysis(
+    request: AnalysisRequest,
+    agent_result: AgentResult,
+    execution: ToolExecution,
+) -> AnalysisResult:
+    report = execution.result
+    if not isinstance(report, dict):
+        raise ContractMappingError("Compatibility result must be an object")
+
+    source_id = report["source_id"]
+    blocking_checks = [
+        check
+        for check in report.get("checks", [])
+        if check.get("status") != "exact"
+    ]
+    warning_type = _compatibility_warning_type(blocking_checks)
+    context: dict[str, Any] = {
+        "overall_status": report["overall_status"],
+        "recommended_claim": report["recommended_claim"],
+    }
+    if blocking_checks:
+        context["checks"] = blocking_checks
+
+    selected_filters = next(
+        (
+            selection.filters
+            for selection in request.source_selections
+            if selection.source_id == source_id
+        ),
+        {},
+    )
+    return AnalysisResult(
+        contract_version=CONTRACT_VERSION,
+        project_id=request.project_id,
+        module_id=request.module_id,
+        upstream_module_ids=request.upstream_module_ids,
+        title="無法支援要求的分析範圍",
+        question=request.query,
+        status="blocked",
+        analysis_plan=_analysis_plan(agent_result.tool_executions),
+        filters=selected_filters,
+        dimensions=[],
+        result_data=ResultData(columns=[], records=[]),
+        summary=agent_result.answer,
+        warnings=[
+            Warning(
+                type=warning_type,
+                severity="blocking",
+                message=report["recommended_claim"],
+                affected_source_ids=[source_id],
+                context=context,
+            )
+        ],
         sources=[],
         dataset_versions=[],
         provenance=[],
@@ -136,6 +241,105 @@ def _dataset_analysis(
             )
         ],
     )
+
+
+def _blocking_compatibility(
+    executions: list[ToolExecution],
+    *,
+    source_id: str | None,
+    selected_source_ids: set[str],
+) -> ToolExecution | None:
+    for execution in reversed(executions):
+        if not execution.succeeded or execution.name != "check_compatibility":
+            continue
+        if not isinstance(execution.result, dict):
+            continue
+        result_source_id = execution.result.get("source_id")
+        if source_id is not None and result_source_id != source_id:
+            continue
+        if selected_source_ids and result_source_id not in selected_source_ids:
+            continue
+        if execution.result.get("refusal_required"):
+            return execution
+    return None
+
+
+def _compatibility_warning_type(
+    checks: list[dict[str, Any]],
+) -> Literal[
+    "age_mismatch",
+    "geography_mismatch",
+    "year_mismatch",
+    "unit_mismatch",
+    "missing_dimension",
+    "insufficient_data",
+    "unsupported_claim",
+]:
+    warning_types = {
+        "age": "age_mismatch",
+        "geography": "geography_mismatch",
+        "year": "year_mismatch",
+        "unit": "unit_mismatch",
+        "sex": "missing_dimension",
+    }
+    for check in checks:
+        dimension = check.get("dimension")
+        if dimension in warning_types:
+            return warning_types[dimension]
+    return "unsupported_claim"
+
+
+def _validate_selected_source(
+    request: AnalysisRequest,
+    agent_result: AgentResult,
+) -> None:
+    if not request.source_selections or agent_result.analysis is None:
+        return
+
+    source_id = agent_result.analysis.dataset_ref.dataset_id
+    selection = next(
+        (
+            item
+            for item in request.source_selections
+            if item.source_id == source_id
+        ),
+        None,
+    )
+    if selection is None:
+        raise ContractMappingError(
+            "Agent queried a source outside source_selections"
+        )
+
+    compatibility = next(
+        (
+            execution
+            for execution in agent_result.tool_executions
+            if execution.succeeded
+            and execution.name == "check_compatibility"
+            and isinstance(execution.result, dict)
+            and execution.result.get("source_id") == source_id
+        ),
+        None,
+    )
+    if compatibility is None:
+        raise ContractMappingError(
+            "Selected source was queried without a compatibility check"
+        )
+
+    query_execution = _query_execution(agent_result.tool_executions)
+    if query_execution.arguments.get("dataset_id") != source_id:
+        raise ContractMappingError(
+            "Deterministic query did not use the selected source"
+        )
+    actual_filters = {
+        name: value
+        for name, value in query_execution.arguments.items()
+        if name != "dataset_id"
+    }
+    if actual_filters != selection.filters:
+        raise ContractMappingError(
+            "Deterministic query did not preserve selected filters"
+        )
 
 
 def _title_from_query(query: str) -> str:

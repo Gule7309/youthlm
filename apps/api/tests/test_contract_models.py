@@ -23,6 +23,7 @@ class ContractModelTests(unittest.TestCase):
 
         self.assertEqual(request.contract_version, "0.1.0")
         self.assertEqual(request.module_id, "analysis_2")
+        self.assertEqual(request.source_selections, [])
 
     def test_accepts_canonical_analysis_result(self) -> None:
         payload = json.loads(

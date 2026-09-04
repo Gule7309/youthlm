@@ -37,6 +37,25 @@
         }
       ]
     },
+    "SourceSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "filters"
+      ],
+      "properties": {
+        "source_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "filters": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          }
+        }
+      }
+    },
     "DataColumn": {
       "type": "object",
       "additionalProperties": false,

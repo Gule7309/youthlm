@@ -1,0 +1,189 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_frontend_demo",
+  "module_id": "analysis_population_chart",
+  "upstream_module_ids": [],
+  "title": "現住人口之年齡分配",
+  "question": "比較板橋區2022至2024年20至24歲人口趨勢",
+  "status": "partial",
+  "analysis_plan": [
+    {
+      "step_id": "tool_1_check_compatibility",
+      "description": "檢查分析範圍與資料相容性",
+      "status": "completed"
+    },
+    {
+      "step_id": "tool_2_query_population_dataset",
+      "description": "查詢青年人口資料",
+      "status": "completed"
+    },
+    {
+      "step_id": "synthesize_result",
+      "description": "整理資料、限制與分析摘要",
+      "status": "completed"
+    }
+  ],
+  "filters": {
+    "geographies": [
+      "板橋區"
+    ],
+    "age_groups": [
+      "20-24"
+    ],
+    "sexes": [
+      "all"
+    ],
+    "start_year": 2022,
+    "end_year": 2024
+  },
+  "dimensions": [
+    "year",
+    "geography",
+    "age_group",
+    "sex"
+  ],
+  "result_data": {
+    "columns": [
+      {
+        "name": "year",
+        "label": "年份",
+        "data_type": "integer",
+        "role": "dimension"
+      },
+      {
+        "name": "geography",
+        "label": "地區",
+        "data_type": "string",
+        "role": "dimension"
+      },
+      {
+        "name": "age_group",
+        "label": "年齡組",
+        "data_type": "string",
+        "role": "dimension"
+      },
+      {
+        "name": "sex",
+        "label": "性別",
+        "data_type": "string",
+        "role": "dimension"
+      },
+      {
+        "name": "population_count",
+        "label": "人口數",
+        "data_type": "integer",
+        "role": "measure",
+        "unit": "人"
+      }
+    ],
+    "records": [
+      {
+        "year": 2022,
+        "geography": "板橋區",
+        "age_group": "20-24",
+        "sex": "all",
+        "population_count": 28472
+      },
+      {
+        "year": 2023,
+        "geography": "板橋區",
+        "age_group": "20-24",
+        "sex": "all",
+        "population_count": 28174
+      },
+      {
+        "year": 2024,
+        "geography": "板橋區",
+        "age_group": "20-24",
+        "sex": "all",
+        "population_count": 27049
+      }
+    ]
+  },
+  "visualization": {
+    "type": "line",
+    "title": "新北市 現住人口之年齡分配",
+    "x_field": "year",
+    "y_field": "population_count",
+    "series_fields": [
+      "geography",
+      "age_group",
+      "sex"
+    ],
+    "unit": "人"
+  },
+  "summary": "2022至2024年，板橋區20至24歲人口由28,472人降至27,049人。",
+  "warnings": [
+    {
+      "type": "age_mismatch",
+      "severity": "warning",
+      "message": "官方以5歲級距發布；不可按比例拆分15-19歲或35-39歲來估算完整18-35歲人口。",
+      "affected_source_ids": [
+        "ntpc_population_by_age_sex_district"
+      ]
+    },
+    {
+      "type": "geography_mismatch",
+      "severity": "warning",
+      "message": "行政區資料只到區級，不能解讀為里級分布。",
+      "affected_source_ids": [
+        "ntpc_population_by_age_sex_district"
+      ]
+    },
+    {
+      "type": "year_mismatch",
+      "severity": "info",
+      "message": "資料為年度統計，最新可用年度為2024年。",
+      "affected_source_ids": [
+        "ntpc_population_by_age_sex_district"
+      ]
+    },
+    {
+      "type": "missing_dimension",
+      "severity": "info",
+      "message": "all為官方發布的男女合計值，不是由YouthLM自行加總或平均。",
+      "affected_source_ids": [
+        "ntpc_population_by_age_sex_district"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "source_id": "ntpc_population_by_age_sex_district",
+      "title": "現住人口之年齡分配",
+      "agency": "新北市政府主計處",
+      "source_url": "https://data.ntpc.gov.tw/datasets/8308AB58-62D1-424E-8314-24B65B7AB492",
+      "dataset_version_id": "2026-08-31:226feaf05ffb"
+    }
+  ],
+  "dataset_versions": [
+    {
+      "dataset_version_id": "2026-08-31:226feaf05ffb",
+      "source_id": "ntpc_population_by_age_sex_district",
+      "retrieved_at": "2026-08-31T00:00:00+08:00",
+      "source_sha256": "226feaf05ffbc6918c67280fa42454574608b8c9b12cefa1902cf73619bf4cea",
+      "license": "政府資料開放授權條款－第1版"
+    }
+  ],
+  "provenance": [
+    {
+      "source_id": "ntpc_population_by_age_sex_district",
+      "dataset_version_id": "2026-08-31:226feaf05ffb",
+      "query_tool": "query_population_dataset",
+      "query_parameters": {
+        "dataset_id": "ntpc_population_by_age_sex_district",
+        "geographies": [
+          "板橋區"
+        ],
+        "age_groups": [
+          "20-24"
+        ],
+        "sexes": [
+          "all"
+        ],
+        "start_year": 2022,
+        "end_year": 2024
+      }
+    }
+  ]
+}

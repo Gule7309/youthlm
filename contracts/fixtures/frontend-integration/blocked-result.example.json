@@ -1,0 +1,95 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_frontend_demo",
+  "module_id": "analysis_blocked_age",
+  "upstream_module_ids": [],
+  "title": "無法支援要求的分析範圍",
+  "question": "精確分析板橋區2024年18至35歲人口",
+  "status": "blocked",
+  "analysis_plan": [
+    {
+      "step_id": "tool_1_check_compatibility",
+      "description": "檢查分析範圍與資料相容性",
+      "status": "completed"
+    },
+    {
+      "step_id": "synthesize_result",
+      "description": "整理資料、限制與分析摘要",
+      "status": "completed"
+    }
+  ],
+  "filters": {
+    "geographies": [
+      "板橋區"
+    ],
+    "age_groups": [
+      "15-19",
+      "20-24",
+      "25-29",
+      "30-34",
+      "35-39"
+    ],
+    "sexes": [
+      "all"
+    ],
+    "start_year": 2024,
+    "end_year": 2024
+  },
+  "dimensions": [],
+  "result_data": {
+    "columns": [],
+    "records": []
+  },
+  "summary": "官方五歲級距無法切出18至19歲與35歲，因此不能產生精確的18至35歲人口結果。",
+  "warnings": [
+    {
+      "type": "age_mismatch",
+      "severity": "blocking",
+      "message": "Narrow the claim to the source's published groups and state the limitation explicitly. Available age groups: 0-4, 5-9, 10-14, 15-19, 20-24, 25-29, 30-34, 35-39, 40-44, 45-49, 50-54, 55-59, 60-64, 65-69, 70-74, 75-79, 80-84, 85-89, 90-94, 95-99, 100+.",
+      "affected_source_ids": [
+        "ntpc_population_by_age_sex_district"
+      ],
+      "context": {
+        "overall_status": "partial",
+        "recommended_claim": "Narrow the claim to the source's published groups and state the limitation explicitly. Available age groups: 0-4, 5-9, 10-14, 15-19, 20-24, 25-29, 30-34, 35-39, 40-44, 45-49, 50-54, 55-59, 60-64, 65-69, 70-74, 75-79, 80-84, 85-89, 90-94, 95-99, 100+.",
+        "checks": [
+          {
+            "dimension": "age",
+            "status": "partial",
+            "requested": {
+              "min_age": 18,
+              "max_age": 35
+            },
+            "available": [
+              "0-4",
+              "5-9",
+              "10-14",
+              "15-19",
+              "20-24",
+              "25-29",
+              "30-34",
+              "35-39",
+              "40-44",
+              "45-49",
+              "50-54",
+              "55-59",
+              "60-64",
+              "65-69",
+              "70-74",
+              "75-79",
+              "80-84",
+              "85-89",
+              "90-94",
+              "95-99",
+              "100+"
+            ],
+            "explanation": "Published age bands overlap the request but cannot reconstruct its full scope exactly. Published groups must not be split or proportionally estimated."
+          }
+        ]
+      }
+    }
+  ],
+  "sources": [],
+  "dataset_versions": [],
+  "provenance": []
+}
