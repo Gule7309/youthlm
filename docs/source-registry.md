@@ -6,7 +6,9 @@ statistical claim.
 
 ## Installed sources
 
-This checkpoint intentionally registers exactly one source:
+Every notebook currently receives two installed sources:
+
+### Unemployment rate
 
 | Field | Value |
 |---|---|
@@ -19,6 +21,21 @@ This checkpoint intentionally registers exactly one source:
 | Sex | Male and female separately |
 | Unit | Percent |
 | Query tool | `query_youth_dataset` |
+| Status | `available`; shared and mounted by default |
+
+### Resident population
+
+| Field | Value |
+|---|---|
+| Source ID | `ntpc_population_by_age_sex_district` |
+| Title | 現住人口之年齡分配 |
+| Agency | 新北市政府主計處 |
+| Geography | 新北市 plus 29 districts |
+| Time | Annual, 2000–2024 |
+| Age bands | 21 published 5-year groups from 0–4 through 100+ |
+| Sex | Official all, male, and female counts |
+| Unit | People |
+| Query tool | `query_population_dataset` |
 | Status | `available`; shared and mounted by default |
 
 The registry also exposes source URL, download URL, dimensions, join keys,
@@ -50,18 +67,18 @@ contains:
 
 ## Youth age rule
 
-The current source supports exact claims for the union of whole published bands,
-such as ages 25–34. It returns `partial` and `refusal_required=true` for ages
-18–35 because ages 18–24 and 35 are absent from this snapshot.
+The unemployment source supports exact claims for the union of its whole published
+bands, such as ages 25–34. The population source supports more 5-year bands and
+districts, but a full 18–35 claim still returns `partial` and
+`refusal_required=true`: 18–19 are inside 15–19 and age 35 is inside 35–39.
 
-The engine does not proportionally split a published rate. Such a calculation
-would require the numerator and denominator for each target age, which this source
-does not provide. It also rejects an invented all-sex rate because only male and
-female rates are published separately.
+The engine does not proportionally split a published group. It also rejects an
+invented all-sex unemployment rate because that source publishes only male and
+female rates separately. The population source's `all` value is safe because it is
+an official published count.
 
 ## Deferred work
 
-This checkpoint does not add a second dataset, runtime source downloads, document
-RAG, cross-source joins, or a Research Graph. The next dataset should be added by
-registering a new `SourceMetadata` record and a source-specific deterministic
-query tool without changing the Agent's discovery contract.
+This checkpoint does not add runtime source downloads, document RAG, cross-source
+joins, or a Research Graph. The checked-in snapshots keep the demo reproducible
+even when a government endpoint is unavailable.

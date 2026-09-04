@@ -1,6 +1,7 @@
 import unittest
 
 from app.analysis_result import AnalysisResultError, build_analysis_result
+from app.population_data import DATASET_ID as POPULATION_DATASET_ID
 from app.provider import ModelToolCall
 from app.tooling import ToolExecution, build_default_tool_registry
 from app.youth_data import DATASET_ID
@@ -15,6 +16,23 @@ def run_dataset_query() -> ToolExecution:
                 "dataset_id": DATASET_ID,
                 "age_groups": ["25-29", "30-34"],
                 "sexes": ["male", "female"],
+                "start_year": 2023,
+                "end_year": 2024,
+            },
+        )
+    )
+
+
+def run_population_query() -> ToolExecution:
+    return build_default_tool_registry().execute(
+        ModelToolCall(
+            call_id="population-1",
+            name="query_population_dataset",
+            arguments={
+                "dataset_id": POPULATION_DATASET_ID,
+                "geographies": ["板橋區"],
+                "age_groups": ["25-29"],
+                "sexes": ["all"],
                 "start_year": 2023,
                 "end_year": 2024,
             },
@@ -67,6 +85,40 @@ class AnalysisResultTests(unittest.TestCase):
         self.assertEqual(
             analysis.dataset_version["source_sha256"],
             analysis.provenance["source_sha256"],
+        )
+
+    def test_builds_population_analysis_and_chart_contract(self) -> None:
+        analysis = build_analysis_result(
+            question="板橋區25至29歲人口如何變化？",
+            summary="板橋區25至29歲人口下降。",
+            executions=[run_population_query()],
+        )
+
+        self.assertIsNotNone(analysis)
+        assert analysis is not None
+        self.assertEqual(
+            analysis.dataset_ref.dataset_id,
+            POPULATION_DATASET_ID,
+        )
+        self.assertEqual(analysis.measure.field, "population_count")
+        self.assertEqual(analysis.measure.unit, "人")
+        self.assertEqual(
+            analysis.dimensions,
+            ["year", "geography", "age_group", "sex"],
+        )
+        self.assertEqual(
+            analysis.visualization_spec.series[0].key,
+            "板橋區:25-29:all",
+        )
+        self.assertEqual(
+            [
+                point.model_dump()
+                for point in analysis.visualization_spec.series[0].points
+            ],
+            [
+                {"x": 2023, "y": 32242.0},
+                {"x": 2024, "y": 31374.0},
+            ],
         )
 
     def test_returns_none_without_successful_dataset_query(self) -> None:

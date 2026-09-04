@@ -1,14 +1,28 @@
 """Shared source metadata, discovery, and deterministic compatibility checks."""
 
+import re
 from collections.abc import Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.population_data import get_population_dataset_metadata
 from app.youth_data import get_youth_dataset_metadata
 
 CompatibilityStatus = Literal["exact", "partial", "estimated", "incompatible"]
 SourceStatus = Literal["available", "catalog_only", "document"]
+SEARCH_STOP_WORDS = frozenset(
+    {"and", "by", "data", "dataset", "for", "from", "of", "the", "with"}
+)
+SEARCH_CJK_STOP_PHRASES = (
+    "官方",
+    "政府",
+    "新北市",
+    "統計",
+    "資料集",
+    "資料",
+    "數據",
+)
 
 
 class SourceRegistryError(ValueError):
@@ -78,6 +92,7 @@ class SourceMetadata(BaseModel):
     default_for_notebooks: bool
     geography: str
     geography_level: str
+    available_geographies: list[str]
     age_definition: AgeDefinition
     sex_dimension: bool
     time_range: dict[str, int]
@@ -221,10 +236,11 @@ class SourceRegistry:
                     source.agency,
                     source.policy_domain,
                     source.indicator,
+                    source.geography,
                     *source.capabilities,
                 ]
             ).casefold()
-            if normalized_query not in searchable:
+            if not _matches_search_query(normalized_query, searchable):
                 continue
             matches.append(
                 SourceSummary(
@@ -303,17 +319,94 @@ class SourceRegistry:
         )
 
 
+def _matches_search_query(normalized_query: str, searchable: str) -> bool:
+    if normalized_query in searchable:
+        return True
+
+    query_terms = {
+        term
+        for term in normalized_query.replace("_", " ").replace("-", " ").split()
+        if len(term) >= 3 and term not in SEARCH_STOP_WORDS
+    }
+    query_terms.update(_cjk_search_terms(normalized_query))
+    return any(term in searchable for term in query_terms)
+
+
+def _cjk_search_terms(query: str) -> set[str]:
+    simplified = query
+    for phrase in SEARCH_CJK_STOP_PHRASES:
+        simplified = simplified.replace(phrase, " ")
+
+    terms: set[str] = set()
+    for segment in re.findall(r"[\u4e00-\u9fff]+", simplified):
+        if len(segment) <= 2:
+            terms.add(segment)
+            continue
+        terms.update(
+            segment[index : index + 2]
+            for index in range(len(segment) - 1)
+        )
+    return terms
+
+
 def build_default_source_registry() -> SourceRegistry:
     """Build the registry from data and metadata installed in this repository."""
-    metadata = get_youth_dataset_metadata()
-    age_bands = [
-        AgeBand(
-            label=label,
-            min_age=int(label.split("-", maxsplit=1)[0]),
-            max_age=int(label.split("-", maxsplit=1)[1]),
-        )
-        for label in metadata["available_age_groups"]
-    ]
+    population_metadata = get_population_dataset_metadata()
+    return SourceRegistry(
+        [
+            _build_source(
+                get_youth_dataset_metadata(),
+                policy_domain="employment",
+                geography_level="municipality",
+                available_geographies=["新北市"],
+                available_dimensions=["year", "age_group", "sex"],
+                join_keys=["year", "age_group", "sex"],
+                capabilities=["filter", "compare", "visualize"],
+                query_tool="query_youth_dataset",
+            ),
+            _build_source(
+                population_metadata,
+                policy_domain="demographics",
+                geography_level="municipality_and_district",
+                available_geographies=population_metadata[
+                    "available_geographies"
+                ],
+                available_dimensions=[
+                    "year",
+                    "geography",
+                    "age_group",
+                    "sex",
+                ],
+                join_keys=["year", "geography", "age_group", "sex"],
+                capabilities=["filter", "compare", "visualize", "map"],
+                query_tool="query_population_dataset",
+            ),
+        ]
+    )
+
+
+def _build_source(
+    metadata: dict[str, Any],
+    *,
+    policy_domain: str,
+    geography_level: str,
+    available_geographies: list[str],
+    available_dimensions: list[str],
+    join_keys: list[str],
+    capabilities: list[str],
+    query_tool: str,
+) -> SourceMetadata:
+    raw_age_bands = metadata.get("age_bands")
+    if raw_age_bands is None:
+        raw_age_bands = [
+            {
+                "label": label,
+                "min_age": int(label.split("-", maxsplit=1)[0]),
+                "max_age": int(label.split("-", maxsplit=1)[1]),
+            }
+            for label in metadata["available_age_groups"]
+        ]
+
     compatibility = YouthCompatibility.model_validate(
         metadata["youth_definition_compatibility"]
     )
@@ -326,56 +419,53 @@ def build_default_source_registry() -> SourceRegistry:
         source_sha256=metadata["source_sha256"],
     )
 
-    return SourceRegistry(
-        [
-            SourceMetadata(
-                source_id=metadata["dataset_id"],
-                title=metadata["title"],
-                agency=metadata["agency"],
-                policy_domain="employment",
-                source_url=metadata["source_dataset_page"],
-                source_download_url=metadata["source_download_url"],
-                format="csv",
-                structured_or_document="structured",
-                status="available",
-                scope="shared",
-                default_for_notebooks=True,
-                geography=metadata["geography"],
-                geography_level="municipality",
-                age_definition=AgeDefinition(
-                    kind="grouped",
-                    bands=age_bands,
-                    can_split_bands=False,
-                    rate_has_numerator_denominator=False,
-                ),
-                sex_dimension=True,
-                time_range=metadata["available_years"],
-                time_granularity="annual",
-                unit=metadata["unit"],
-                available_dimensions=["year", "age_group", "sex"],
-                update_frequency=metadata["update_frequency"],
-                last_synced_at=metadata["snapshot_retrieved_at"],
-                join_keys=["year", "age_group", "sex"],
-                youth_compatibility=compatibility,
-                known_limitations=metadata["warnings"],
-                dataset_version=version,
-                capabilities=["filter", "compare", "visualize"],
-                query_tool="query_youth_dataset",
-                indicator=metadata["indicator"],
-                row_count=metadata["snapshot_row_count"],
-                kind="structured_government_statistics",
-                available_years=metadata["available_years"],
-                available_age_groups=metadata["available_age_groups"],
-                available_sexes=metadata["available_sexes"],
-                source_dataset_page=metadata["source_dataset_page"],
-                snapshot_retrieved_at=metadata["snapshot_retrieved_at"],
-                source_sha256=metadata["source_sha256"],
-                youth_definition_compatibility=metadata[
-                    "youth_definition_compatibility"
-                ],
-                warnings=metadata["warnings"],
-            )
-        ]
+    return SourceMetadata(
+        source_id=metadata["dataset_id"],
+        title=metadata["title"],
+        agency=metadata["agency"],
+        policy_domain=policy_domain,
+        source_url=metadata["source_dataset_page"],
+        source_download_url=metadata["source_download_url"],
+        format="csv",
+        structured_or_document="structured",
+        status="available",
+        scope="shared",
+        default_for_notebooks=True,
+        geography=metadata["geography"],
+        geography_level=geography_level,
+        available_geographies=available_geographies,
+        age_definition=AgeDefinition(
+            kind="grouped",
+            bands=[AgeBand.model_validate(band) for band in raw_age_bands],
+            can_split_bands=False,
+            rate_has_numerator_denominator=False,
+        ),
+        sex_dimension=True,
+        time_range=metadata["available_years"],
+        time_granularity="annual",
+        unit=metadata["unit"],
+        available_dimensions=available_dimensions,
+        update_frequency=metadata["update_frequency"],
+        last_synced_at=metadata["snapshot_retrieved_at"],
+        join_keys=join_keys,
+        youth_compatibility=compatibility,
+        known_limitations=metadata["warnings"],
+        dataset_version=version,
+        capabilities=capabilities,
+        query_tool=query_tool,
+        indicator=metadata["indicator"],
+        row_count=metadata["snapshot_row_count"],
+        kind="structured_government_statistics",
+        available_years=metadata["available_years"],
+        available_age_groups=metadata["available_age_groups"],
+        available_sexes=metadata["available_sexes"],
+        source_dataset_page=metadata["source_dataset_page"],
+        snapshot_retrieved_at=metadata["snapshot_retrieved_at"],
+        source_sha256=metadata["source_sha256"],
+        youth_definition_compatibility=metadata[
+            "youth_definition_compatibility"
+        ],
+        warnings=metadata["warnings"],
     )
 
 
@@ -400,8 +490,8 @@ def _check_age(
         status = "partial"
         explanation = (
             "Published age bands overlap the request but cannot reconstruct its "
-            "full scope exactly. Rates must not be split proportionally without "
-            "numerators and denominators."
+            "full scope exactly. Published groups must not be split or "
+            "proportionally estimated."
         )
     else:
         status = "incompatible"
@@ -445,12 +535,16 @@ def _check_geography(
     source: SourceMetadata,
     geography: str,
 ) -> DimensionCompatibility:
-    exact = geography.strip().casefold() == source.geography.casefold()
+    normalized = geography.strip().casefold()
+    exact = any(
+        normalized == available.casefold()
+        for available in source.available_geographies
+    )
     return DimensionCompatibility(
         dimension="geography",
         status="exact" if exact else "incompatible",
         requested=geography,
-        available=source.geography,
+        available=source.available_geographies,
         explanation=(
             "Requested geography matches the source."
             if exact

@@ -3,6 +3,15 @@ from pathlib import Path
 
 
 class GeminiRunnerContractTests(unittest.TestCase):
+    def test_supports_population_smoke_scenario(self) -> None:
+        script = Path("scripts/run-gemini-agent.ps1").read_text(encoding="utf-8")
+        smoke = Path("spikes/agent_smoke.py").read_text(encoding="utf-8")
+
+        self.assertIn('ValidateSet("unemployment", "population")', script)
+        self.assertIn("YOUTHLM_SMOKE_SCENARIO", script)
+        self.assertIn('"population":', smoke)
+        self.assertIn("query_population_dataset", smoke)
+
     def test_does_not_read_stale_native_exit_code_after_provider_script(self) -> None:
         script = Path("scripts/run-gemini-agent.ps1").read_text(encoding="utf-8")
         selection = script.index("select-provider.ps1")

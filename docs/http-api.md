@@ -15,9 +15,10 @@ Local browser clients on ports `3000` and `5173` are allowed by the default CORS
 policy. Deployed frontend origins must be passed explicitly when composing the app;
 the API does not use a wildcard origin.
 
-Only the New Taipei City age-by-sex unemployment-rate snapshot is currently
-available as shared notebook data. Planned population, education, employment,
-entrepreneurship, uploaded CSV, and PDF sources are not reported as available.
+Two New Taipei City sources are currently available to every notebook: annual
+age-by-sex unemployment rates and annual resident-population counts by district,
+5-year age group, and sex. Planned education, other employment, entrepreneurship,
+uploaded CSV, and PDF sources are not reported as available.
 
 Start the Gemini API on Windows after copying the API key to the clipboard:
 

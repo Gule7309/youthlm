@@ -2,6 +2,7 @@ import unittest
 
 from pydantic import ValidationError
 
+from app.population_data import DATASET_ID as POPULATION_DATASET_ID
 from app.source_registry import (
     CompatibilityRequest,
     SourceNotFoundError,
@@ -16,6 +17,7 @@ class SourceRegistryTests(unittest.TestCase):
 
         self.assertEqual(source.policy_domain, "employment")
         self.assertEqual(source.geography_level, "municipality")
+        self.assertEqual(source.available_geographies, ["新北市"])
         self.assertEqual(source.available_dimensions, ["year", "age_group", "sex"])
         self.assertEqual(source.join_keys, ["year", "age_group", "sex"])
         self.assertEqual(source.query_tool, "query_youth_dataset")
@@ -29,6 +31,14 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(len(matches), 1)
         self.assertEqual(matches[0].source_id, DATASET_ID)
         self.assertFalse(hasattr(matches[0], "rows"))
+
+    def test_discovers_population_source_without_loading_rows(self) -> None:
+        matches = build_default_source_registry().search_sources("人口")
+
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0].source_id, POPULATION_DATASET_ID)
+        self.assertEqual(matches[0].policy_domain, "demographics")
+        self.assertIn("map", matches[0].capabilities)
 
     def test_rejects_unknown_source_id(self) -> None:
         with self.assertRaisesRegex(SourceNotFoundError, "missing"):
@@ -69,8 +79,44 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertTrue(report.refusal_required)
         age_check = report.checks[0]
         self.assertEqual(age_check.status, "partial")
-        self.assertIn("must not be split proportionally", age_check.explanation)
+        self.assertIn("must not be split", age_check.explanation)
         self.assertIn("25-29, 30-34", report.recommended_claim)
+
+    def test_population_supports_exact_district_and_published_age_scope(
+        self,
+    ) -> None:
+        report = build_default_source_registry().check_compatibility(
+            CompatibilityRequest(
+                source_id=POPULATION_DATASET_ID,
+                min_age=20,
+                max_age=34,
+                start_year=2020,
+                end_year=2024,
+                geography="板橋區",
+                sexes=["all"],
+                unit="人",
+            )
+        )
+
+        self.assertEqual(report.overall_status, "exact")
+        self.assertTrue(report.safe_to_claim_requested_scope)
+        self.assertFalse(report.refusal_required)
+
+    def test_population_refuses_exact_full_18_to_35_claim(self) -> None:
+        report = build_default_source_registry().check_compatibility(
+            CompatibilityRequest(
+                source_id=POPULATION_DATASET_ID,
+                min_age=18,
+                max_age=35,
+                geography="板橋區",
+                sexes=["all"],
+            )
+        )
+
+        self.assertEqual(report.overall_status, "partial")
+        self.assertTrue(report.safe_to_query)
+        self.assertTrue(report.refusal_required)
+        self.assertIn("15-19", report.recommended_claim)
 
     def test_rejects_non_overlapping_18_to_24_scope(self) -> None:
         report = build_default_source_registry().check_compatibility(

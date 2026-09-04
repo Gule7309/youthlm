@@ -94,13 +94,20 @@ def build_analysis_result(
 ) -> AnalysisResult | None:
     """Build the latest successful youth-data analysis, if one exists."""
     for execution in reversed(executions):
-        if execution.name != "query_youth_dataset" or not execution.succeeded:
+        if not execution.succeeded:
             continue
-        return _from_youth_dataset_result(
-            question=question,
-            summary=summary,
-            raw_result=execution.result,
-        )
+        if execution.name == "query_youth_dataset":
+            return _from_youth_dataset_result(
+                question=question,
+                summary=summary,
+                raw_result=execution.result,
+            )
+        if execution.name == "query_population_dataset":
+            return _from_population_dataset_result(
+                question=question,
+                summary=summary,
+                raw_result=execution.result,
+            )
     return None
 
 
@@ -200,4 +207,113 @@ def _build_series(
                     ],
                 )
             )
+    return series
+
+
+def _from_population_dataset_result(
+    *,
+    question: str,
+    summary: str,
+    raw_result: Any,
+) -> AnalysisResult:
+    if not isinstance(raw_result, dict):
+        raise AnalysisResultError(
+            "query_population_dataset result must be an object"
+        )
+
+    try:
+        dataset = raw_result["dataset"]
+        filters = raw_result["query"]
+        rows = raw_result["rows"]
+        warnings = raw_result["warnings"]
+        provenance = raw_result["provenance"]
+        compatibility = raw_result["youth_definition_compatibility"]
+        unit = dataset["unit"]
+    except (KeyError, TypeError) as error:
+        raise AnalysisResultError(
+            "query_population_dataset result is missing required analysis fields"
+        ) from error
+
+    if not isinstance(rows, list):
+        raise AnalysisResultError(
+            "query_population_dataset rows must be a list"
+        )
+
+    measure_field = "population_count"
+    return AnalysisResult(
+        question=question,
+        summary=summary,
+        dataset_ref=DatasetReference(
+            dataset_id=dataset["dataset_id"],
+            title=dataset["title"],
+            indicator=dataset["indicator"],
+            agency=dataset["agency"],
+            geography=dataset["geography"],
+            unit=unit,
+        ),
+        filters=filters,
+        dimensions=["year", "geography", "age_group", "sex"],
+        measure=MeasureSpec(
+            field=measure_field,
+            label="人口數",
+            unit=unit,
+        ),
+        rows=rows,
+        visualization_spec=VisualizationSpec(
+            type="line",
+            title=f"{dataset['geography']} {dataset['title']}",
+            x_axis_label="年份",
+            y_axis_label="人口數",
+            unit=unit,
+            series=_build_population_series(rows, filters, measure_field),
+        ),
+        warnings=warnings,
+        provenance=provenance,
+        youth_definition_compatibility=compatibility,
+        dataset_version={
+            "snapshot_retrieved_at": provenance["snapshot_retrieved_at"],
+            "source_sha256": provenance["source_sha256"],
+        },
+    )
+
+
+def _build_population_series(
+    rows: list[dict[str, Any]],
+    filters: dict[str, Any],
+    measure_field: str,
+) -> list[ChartSeries]:
+    series: list[ChartSeries] = []
+    sex_labels = {"all": "合計", "male": "男性", "female": "女性"}
+
+    for geography in filters["geographies"]:
+        for age_group in filters["age_groups"]:
+            for sex in filters["sexes"]:
+                matching_rows = sorted(
+                    (
+                        row
+                        for row in rows
+                        if row["geography"] == geography
+                        and row["age_group"] == age_group
+                        and row["sex"] == sex
+                    ),
+                    key=lambda row: row["year"],
+                )
+                if not matching_rows:
+                    continue
+                series.append(
+                    ChartSeries(
+                        key=f"{geography}:{age_group}:{sex}",
+                        label=(
+                            f"{geography} {age_group}歲 "
+                            f"{sex_labels.get(sex, sex)}"
+                        ),
+                        points=[
+                            ChartPoint(
+                                x=row["year"],
+                                y=row[measure_field],
+                            )
+                            for row in matching_rows
+                        ],
+                    )
+                )
     return series
