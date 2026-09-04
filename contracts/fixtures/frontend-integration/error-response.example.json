@@ -1,0 +1,13 @@
+{
+  "contract_version": "0.1.0",
+  "error": {
+    "code": "module_not_found",
+    "message": "Upstream module context is not available yet",
+    "retriable": false,
+    "details": {
+      "missing_module_ids": [
+        "analysis_missing"
+      ]
+    }
+  }
+}

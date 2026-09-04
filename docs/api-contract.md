@@ -23,6 +23,8 @@ AnalysisRequest
 ```
 
 The request sends only `upstream_module_ids`; it never sends prior results.
+Optional `source_selections` supplies raw data source IDs and source-specific
+filters. Raw source selection and prior module context are separate semantics.
 Until the Module Context storage checkpoint is implemented, non-empty upstream
 IDs receive a structured `module_not_found` response rather than being silently
 ignored. Canvas coordinates and other presentation state never cross this
@@ -32,7 +34,7 @@ boundary.
 
 | Contract | Required | Optional |
 | --- | --- | --- |
-| `AnalysisRequest` | version, project/module IDs, query, upstream IDs | none in v0 |
+| `AnalysisRequest` | version, project/module IDs, query, upstream IDs | source selections |
 | `AnalysisResult` | identity, dependency IDs, status, plan, filters, dimensions, data, summary, warnings, sources, versions, provenance | visualization |
 | `ModuleContext` | prior module identity, dependencies, status, sources, filters, dimensions, data, summary, warnings, provenance, versions | none in v0 |
 | `ErrorResponse` | version, error code, message, retriable flag | details |
@@ -66,3 +68,7 @@ HTTP response conforming to `error-response.json`.
 
 Provider implementation details, model IDs, tool-call transcripts, credentials,
 and stack traces are not part of the public frontend contract.
+
+The first executable frontend mapping, fixtures, HTTP statuses, and MVP storage
+decision are documented in
+[`frontend-integration-contract.md`](frontend-integration-contract.md).

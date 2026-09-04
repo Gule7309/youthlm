@@ -1,0 +1,25 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_frontend_demo",
+  "module_id": "analysis_population_chart",
+  "query": "比較板橋區2022至2024年20至24歲人口趨勢",
+  "upstream_module_ids": [],
+  "source_selections": [
+    {
+      "source_id": "ntpc_population_by_age_sex_district",
+      "filters": {
+        "geographies": [
+          "板橋區"
+        ],
+        "age_groups": [
+          "20-24"
+        ],
+        "sexes": [
+          "all"
+        ],
+        "start_year": 2022,
+        "end_year": 2024
+      }
+    }
+  ]
+}

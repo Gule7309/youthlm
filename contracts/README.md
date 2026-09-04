@@ -18,6 +18,11 @@ may depend on that example before the runtime API is contract-compliant.
 | `error-response.json` | Return validation, provider, agent, dataset, and system failures. |
 | `common.json` | Define shared identifiers, data, warnings, sources, versions, provenance, and visualization types. |
 
+The executable frontend integration fixtures are under
+[`fixtures/frontend-integration`](fixtures/frontend-integration). They define
+the exact Source-to-Chart request, successful result, blocked result, and error
+payload used by the API integration test.
+
 ## Stable frontend fields
 
 Frontend code may rely on these required `AnalysisResult` fields:
@@ -44,6 +49,15 @@ characters and may contain ASCII letters, numbers, `.`, `_`, `:`, and `-`.
 declares its name, label, data type, dimension-or-measure role, and optional unit.
 This lets multiple government datasets share one contract without requiring the
 frontend to understand tool-specific response shapes.
+
+### Source selections and module context
+
+Optional `AnalysisRequest.source_selections` identifies raw data inputs selected
+for the current request. Each selection contains a registry `source_id` and an
+object of source-specific `filters`. It is distinct from
+`upstream_module_ids`, which identifies previously generated structured module
+results. A selected source must either produce a compatibility-blocked result or
+be queried with those exact filters. Neither field contains Canvas layout state.
 
 Column names must be unique. Every record key and every visualization field must
 refer to a declared column. JSON Schema cannot enforce all cross-field references;

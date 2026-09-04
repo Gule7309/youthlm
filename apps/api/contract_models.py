@@ -16,6 +16,15 @@ Identifier = Annotated[
 ]
 
 
+class SourceSelection(BaseModel):
+    """One raw data input selected for this analysis module."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: Identifier
+    filters: dict[str, Any]
+
+
 class AnalysisRequest(BaseModel):
     """Frontend request for one semantic analysis module."""
 
@@ -26,6 +35,7 @@ class AnalysisRequest(BaseModel):
     module_id: Identifier
     query: str = Field(min_length=1, max_length=2_000)
     upstream_module_ids: list[Identifier]
+    source_selections: list[SourceSelection] = Field(default_factory=list)
 
     @field_validator("query")
     @classmethod
@@ -43,6 +53,17 @@ class AnalysisRequest(BaseModel):
     ) -> list[str]:
         if len(value) != len(set(value)):
             raise ValueError("upstream_module_ids must be unique")
+        return value
+
+    @field_validator("source_selections")
+    @classmethod
+    def require_unique_source_selections(
+        cls,
+        value: list[SourceSelection],
+    ) -> list[SourceSelection]:
+        source_ids = [selection.source_id for selection in value]
+        if len(source_ids) != len(set(source_ids)):
+            raise ValueError("source_selections source_id values must be unique")
         return value
 
 

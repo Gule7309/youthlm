@@ -32,6 +32,13 @@
       "items": {
         "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
       }
+    },
+    "source_selections": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/SourceSelection"
+      }
     }
   }
 }

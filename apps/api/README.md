@@ -21,6 +21,9 @@ uv run uvicorn main:app --app-dir apps/api
 `POST /v1/analysis` accepts the complete `AnalysisRequest` from
 `contracts/analysis-request.json` and returns an `AnalysisResult` directly.
 Validation, provider, and Agent failures use the shared `ErrorResponse` shape.
+When `source_selections` is present, the API validates shared source IDs and the
+adapter requires the Agent to run compatibility checking before a deterministic
+query with the exact selected filters.
 
 Requests with non-empty `upstream_module_ids` currently return
 `module_not_found`; resolving and persisting `ModuleContext` is the next separate
