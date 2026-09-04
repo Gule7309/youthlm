@@ -1,0 +1,27 @@
+[project]
+name = "youthlm-api"
+version = "0.1.0"
+description = "HTTP entrypoint for the YouthLM backend"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "bedrock-agentcore>=1,<2",
+  "boto3>=1.40,<2",
+  "fastapi>=0.115,<1",
+  "pydantic>=2.10,<3",
+  "uvicorn>=0.34,<1",
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.3,<9",
+  "ruff>=0.9,<1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["../..", "."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
