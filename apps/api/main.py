@@ -1,5 +1,6 @@
 """Contract v0 FastAPI boundary for the YouthLM monorepo."""
 
+import os
 from collections.abc import Sequence
 from typing import Any, Protocol
 
@@ -30,6 +31,11 @@ from contract_models import (
     ErrorDetail,
     ErrorResponse,
 )
+from module_store import (
+    ModuleStore,
+    ModuleStoreError,
+    SQLiteModuleStore,
+)
 
 DEFAULT_CORS_ORIGINS = (
     "http://localhost:3000",
@@ -50,6 +56,13 @@ def build_default_agent() -> YouthLMAgent:
     return YouthLMAgent(
         provider=create_model_provider(),
         tools=build_default_tool_registry(),
+    )
+
+
+def build_default_module_store() -> SQLiteModuleStore:
+    """Create the local persistent store without opening it eagerly."""
+    return SQLiteModuleStore(
+        os.getenv("YOUTHLM_SQLITE_PATH", "var/youthlm.sqlite3")
     )
 
 
@@ -79,9 +92,10 @@ def _error_response(
 def create_app(
     agent: AgentRunner | None = None,
     *,
+    module_store: ModuleStore | None = None,
     cors_origins: Sequence[str] = DEFAULT_CORS_ORIGINS,
 ) -> FastAPI:
-    """Create the Contract v0 API with an optional deterministic test Agent."""
+    """Create Contract v0 API with injectable Agent and module storage."""
     application = FastAPI(
         title="YouthLM API",
         version=CONTRACT_VERSION,
@@ -93,6 +107,7 @@ def create_app(
         allow_headers=["Content-Type"],
     )
     active_agent = agent
+    active_module_store = module_store or build_default_module_store()
     source_registry = build_default_source_registry()
 
     def resolve_agent() -> AgentRunner:
@@ -136,14 +151,34 @@ def create_app(
         response_model_exclude_none=True,
     )
     def analyze(request: AnalysisRequest) -> AnalysisResult | JSONResponse:
-        if request.upstream_module_ids:
+        module_contexts = []
+        missing_module_ids = []
+        try:
+            for module_id in request.upstream_module_ids:
+                context = active_module_store.get_context(
+                    request.project_id,
+                    module_id,
+                )
+                if context is None:
+                    missing_module_ids.append(module_id)
+                else:
+                    module_contexts.append(context)
+        except ModuleStoreError:
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Module context storage failed",
+                retriable=True,
+            )
+
+        if missing_module_ids:
             return _error_response(
                 404,
                 code="module_not_found",
                 message="Upstream module context is not available yet",
                 retriable=False,
                 details={
-                    "missing_module_ids": request.upstream_module_ids,
+                    "missing_module_ids": missing_module_ids,
                 },
             )
 
@@ -170,8 +205,12 @@ def create_app(
             )
 
         try:
-            result = resolve_agent().run(build_agent_prompt(request))
-            return to_contract_result(request, result)
+            result = resolve_agent().run(
+                build_agent_prompt(request, module_contexts)
+            )
+            contract_result = to_contract_result(request, result)
+            active_module_store.save(contract_result)
+            return contract_result
         except ProviderConfigurationError:
             return _error_response(
                 503,
@@ -192,6 +231,13 @@ def create_app(
                 code="agent_protocol_error",
                 message="Agent returned an invalid analysis result",
                 retriable=False,
+            )
+        except ModuleStoreError:
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Module context storage failed",
+                retriable=True,
             )
         except RuntimeError:
             return _error_response(

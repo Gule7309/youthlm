@@ -13,6 +13,7 @@ from app.tooling import build_default_tool_registry
 
 from contract_models import AnalysisRequest, AnalysisResult, ErrorResponse
 from main import create_app
+from module_store import InMemoryModuleStore
 
 REPOSITORY_ROOT = Path(__file__).parents[3]
 FIXTURE_ROOT = REPOSITORY_ROOT / "contracts/fixtures/frontend-integration"
@@ -32,6 +33,10 @@ def request(app, method: str, path: str, *, json: dict) -> httpx.Response:
             return await client.request(method, path, json=json)
 
     return asyncio.run(send())
+
+
+def build_test_app(agent):
+    return create_app(agent, module_store=InMemoryModuleStore())
 
 
 def successful_agent() -> YouthLMAgent:
@@ -129,7 +134,7 @@ class FrontendIntegrationFixtureTests(unittest.TestCase):
         expected_result = load_fixture("analysis-result.example.json")
 
         response = request(
-            create_app(successful_agent()),
+            build_test_app(successful_agent()),
             "POST",
             "/v1/analysis",
             json=request_payload,
@@ -168,7 +173,7 @@ class FrontendIntegrationFixtureTests(unittest.TestCase):
         }
 
         response = request(
-            create_app(blocked_agent()),
+            build_test_app(blocked_agent()),
             "POST",
             "/v1/analysis",
             json=payload,
@@ -187,7 +192,7 @@ class FrontendIntegrationFixtureTests(unittest.TestCase):
         payload["upstream_module_ids"] = ["analysis_missing"]
 
         response = request(
-            create_app(successful_agent()),
+            build_test_app(successful_agent()),
             "POST",
             "/v1/analysis",
             json=payload,
@@ -205,7 +210,7 @@ class FrontendIntegrationFixtureTests(unittest.TestCase):
         payload["source_selections"][0]["source_id"] = "unknown_source"
 
         response = request(
-            create_app(successful_agent()),
+            build_test_app(successful_agent()),
             "POST",
             "/v1/analysis",
             json=payload,
@@ -246,7 +251,7 @@ class FrontendIntegrationFixtureTests(unittest.TestCase):
         )
 
         response = request(
-            create_app(agent),
+            build_test_app(agent),
             "POST",
             "/v1/analysis",
             json=load_fixture("analysis-request.example.json"),
@@ -267,7 +272,7 @@ class FrontendIntegrationFixtureTests(unittest.TestCase):
         )
 
         response = request(
-            create_app(agent),
+            build_test_app(agent),
             "POST",
             "/v1/analysis",
             json=load_fixture("analysis-request.example.json"),

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from contract_models import AnalysisRequest, AnalysisResult
+from contract_models import AnalysisRequest, AnalysisResult, ModuleContext
 
 REPOSITORY_ROOT = Path(__file__).parents[3]
 
@@ -36,6 +36,18 @@ class ContractModelTests(unittest.TestCase):
 
         self.assertEqual(result.contract_version, "0.1.0")
         self.assertEqual(len(result.result_data.records), 6)
+
+    def test_accepts_canonical_module_context(self) -> None:
+        payload = json.loads(
+            (REPOSITORY_ROOT / "contracts/examples/module-context.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        context = ModuleContext.model_validate(payload)
+
+        self.assertEqual(context.project_id, "project_1")
+        self.assertEqual(context.module_id, "analysis_1")
 
     def test_rejects_visualization_using_undeclared_column(self) -> None:
         payload = json.loads(
