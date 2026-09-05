@@ -96,22 +96,25 @@ to the YouthLM Agent as module context.
 
 ## Presentation Artifact boundary
 
-Presentation generation is P1 and is not part of `AnalysisResult`. Until its API
-contract is merged, hide the action or label it as unavailable; do not generate a
-PPTX from the chart DOM and do not invent an endpoint.
+Presentation generation is P1 and is not part of `AnalysisResult`. Its standalone
+`PresentationRequest` and `PresentationResult` Contract v0 is proposed in PR
+#13. Until the API endpoint exists, hide the action or label it as unavailable;
+do not generate a PPTX from the chart DOM and do not invent an endpoint.
 
-The planned interaction is:
+The planned v0 interaction is synchronous:
 
 ```text
 User selects one or more completed/partial Analysis Modules
 → clicks Generate presentation
-→ frontend submits project_id + source_module_ids + presentation options
+→ frontend enters a local generating state
+→ POST /v1/presentations with project_id + source_module_ids + options
 → backend loads stored structured AnalysisResults
-→ python-pptx creates an editable PPTX
-→ frontend shows queued/generating/ready/failed
+→ python-pptx creates and stores an editable PPTX
+→ HTTP 201 returns PresentationResult(status=ready)
+   or non-2xx returns the existing ErrorResponse
 → ready state exposes a download action
 ```
 
-The future contract will be defined separately as `PresentationRequest` and
-`PresentationResult`. OpenSlide will not be installed. Presenton remains an
-optional adapter experiment after the deterministic python-pptx version works.
+Contract v0 has no backend queue or polling state. OpenSlide will not be
+installed. Presenton remains an optional adapter experiment after the
+deterministic python-pptx version works.
