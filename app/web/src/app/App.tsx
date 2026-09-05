@@ -1160,26 +1160,47 @@ export default function App() {
     <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden font-sans relative">
       
       {/* Floating Header */}
-      <header className="absolute top-4 left-4 right-4 z-40 flex items-center justify-between pointer-events-none">
-        <div className="flex items-center gap-3 pointer-events-auto bg-card border border-border shadow-sm rounded-lg px-3 py-2">
-          <button
-            type="button"
-            onClick={handleReturnToNotebooks}
-            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="返回筆記本列表"
-          >
-            <ChevronLeft className="size-4" />
-          </button>
-          <div className="size-6 bg-primary rounded flex items-center justify-center">
-            <Sparkles className="size-3.5 text-primary-foreground" />
+      <header className="absolute top-4 left-4 right-4 z-50 flex items-start justify-between gap-3 pointer-events-none">
+        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-3">
+          <div className="flex min-w-0 max-w-full items-center gap-3 pointer-events-auto bg-card border border-border shadow-sm rounded-lg px-3 py-2 sm:max-w-[420px]">
+            <button
+              type="button"
+              onClick={handleReturnToNotebooks}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="返回筆記本列表"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <div className="size-6 shrink-0 bg-primary rounded flex items-center justify-center">
+              <Sparkles className="size-3.5 text-primary-foreground" />
+            </div>
+            <span className="shrink-0 font-semibold text-sm tracking-tight pr-2 border-r border-border">YouthLM</span>
+            <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground px-1">
+              <span
+                className="truncate font-medium text-foreground"
+                title={activeNotebook?.name ?? '未命名筆記本'}
+              >
+                {activeNotebook?.name ?? '未命名筆記本'}
+              </span>
+            </div>
           </div>
-          <span className="font-semibold text-sm tracking-tight pr-2 border-r border-border">YouthLM</span>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground px-1">
-            <span className="font-medium text-foreground">{activeNotebook?.name ?? '未命名筆記本'}</span>
+
+          {/* Policy Radar stays beside the notebook title, outside canvas transforms. */}
+          <div
+            className="pointer-events-auto max-w-full shrink-0"
+            onPointerDown={event => event.stopPropagation()}
+          >
+            <PolicyRadarPanel
+              counts={policyRadarCounts}
+              state={activePolicyRadarState}
+              isStale={isPolicyRadarStale}
+              onToggle={handleTogglePolicyRadar}
+              onRun={handleRunPolicyRadar}
+            />
           </div>
         </div>
         
-        <div className="pointer-events-auto flex gap-2">
+        <div className="pointer-events-auto flex shrink-0 gap-2">
           <button className="h-9 px-3 text-sm font-medium bg-card border border-border text-foreground shadow-sm rounded-lg hover:bg-muted transition-colors flex items-center gap-2">
             <Share className="size-4" />
             分享
@@ -1530,25 +1551,6 @@ export default function App() {
           </button>
         </div>
       </main>
-
-      {/* Fixed Policy Radar - kept outside the transformed canvas */}
-      <div
-        className="absolute bottom-20 z-30 transition-[right] duration-300"
-        style={{
-          right: isRightOpen
-            ? (selectedSource || selectedResult ? 452 : 352)
-            : 86,
-        }}
-        onPointerDown={event => event.stopPropagation()}
-      >
-        <PolicyRadarPanel
-          counts={policyRadarCounts}
-          state={activePolicyRadarState}
-          isStale={isPolicyRadarStale}
-          onToggle={handleTogglePolicyRadar}
-          onRun={handleRunPolicyRadar}
-        />
-      </div>
 
       {/* Floating Left Panel (Collapsible) */}
       <div 

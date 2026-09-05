@@ -118,7 +118,7 @@ export function PolicyRadarPanel({
 
   return (
     <aside
-      className={`pointer-events-auto max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-violet-200 bg-white shadow-lg transition-[width] ${
+      className={`pointer-events-auto max-w-full overflow-hidden rounded-xl border border-violet-200 bg-white shadow-lg transition-[width] ${
         state.collapsed ? 'w-[238px]' : 'w-[328px]'
       }`}
       aria-label="政策雷達"
