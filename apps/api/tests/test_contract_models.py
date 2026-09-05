@@ -6,7 +6,13 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from contract_models import AnalysisRequest, AnalysisResult, ModuleContext
+from contract_models import (
+    AnalysisRequest,
+    AnalysisResult,
+    ModuleContext,
+    PresentationRequest,
+    PresentationResult,
+)
 
 REPOSITORY_ROOT = Path(__file__).parents[3]
 
@@ -48,6 +54,58 @@ class ContractModelTests(unittest.TestCase):
 
         self.assertEqual(context.project_id, "project_1")
         self.assertEqual(context.module_id, "analysis_1")
+
+    def test_accepts_canonical_presentation_request(self) -> None:
+        payload = json.loads(
+            (
+                REPOSITORY_ROOT / "contracts/examples/presentation-request.json"
+            ).read_text(encoding="utf-8")
+        )
+
+        request = PresentationRequest.model_validate(payload)
+
+        self.assertEqual(request.project_id, "project_1")
+        self.assertEqual(request.source_module_ids, ["analysis_1"])
+        self.assertEqual(request.output_format, "pptx")
+
+    def test_accepts_canonical_presentation_result(self) -> None:
+        payload = json.loads(
+            (
+                REPOSITORY_ROOT / "contracts/examples/presentation-result.json"
+            ).read_text(encoding="utf-8")
+        )
+
+        result = PresentationResult.model_validate(payload)
+
+        self.assertEqual(result.presentation_id, "presentation_1")
+        self.assertEqual(result.status, "ready")
+        self.assertEqual(len(result.warnings), 1)
+
+    def test_presentation_requires_at_least_one_unique_source_module(self) -> None:
+        payload = json.loads(
+            (
+                REPOSITORY_ROOT / "contracts/examples/presentation-request.json"
+            ).read_text(encoding="utf-8")
+        )
+        payload["source_module_ids"] = []
+
+        with self.assertRaisesRegex(ValidationError, "at least 1 item"):
+            PresentationRequest.model_validate(payload)
+
+        payload["source_module_ids"] = ["analysis_1", "analysis_1"]
+        with self.assertRaisesRegex(ValidationError, "must be unique"):
+            PresentationRequest.model_validate(payload)
+
+    def test_presentation_rejects_copied_module_payloads(self) -> None:
+        payload = json.loads(
+            (
+                REPOSITORY_ROOT / "contracts/examples/presentation-request.json"
+            ).read_text(encoding="utf-8")
+        )
+        payload["source_modules"] = [{"module_id": "analysis_1"}]
+
+        with self.assertRaisesRegex(ValidationError, "Extra inputs are not permitted"):
+            PresentationRequest.model_validate(payload)
 
     def test_rejects_visualization_using_undeclared_column(self) -> None:
         payload = json.loads(
