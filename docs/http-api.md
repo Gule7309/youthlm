@@ -1,15 +1,16 @@
 # YouthLM HTTP API
 
-The HTTP layer is a thin adapter around the provider-neutral `YouthLMAgent`.
-It does not contain model or dataset business logic.
+The frontend integration endpoint is the Contract v0 app at `apps/api/main.py`.
+The HTTP layer is a thin adapter around the provider-neutral `YouthLMAgent`; it
+does not contain model or dataset business logic.
 
 ## Endpoints
 
 - `GET /health` checks the process without loading provider credentials.
 - `GET /v1/data-sources` lists shared sources installed and available to every
   notebook.
-- `POST /v1/analysis` accepts `{"question": "..."}` and returns `AgentResult`,
-  including the optional structured `analysis` object.
+- `POST /v1/analysis` accepts Contract v0 `AnalysisRequest` and returns a
+  Contract v0 `AnalysisResult` directly.
 
 Local browser clients on ports `3000` and `5173` are allowed by the default CORS
 policy. Deployed frontend origins must be passed explicitly when composing the app;
@@ -26,18 +27,30 @@ Start the Gemini API on Windows after copying the API key to the clipboard:
 .\scripts\run-gemini-api.ps1
 ```
 
-Then open `http://127.0.0.1:8000/docs` or call:
+Then open `http://127.0.0.1:8000/docs`. The runner starts:
+
+```text
+uvicorn main:app --app-dir apps/api
+```
+
+In a second PowerShell window, execute the canonical Source-to-Chart request and
+a downstream Module Context request:
+
+```powershell
+uv run python -m spikes.analysis_api_smoke
+```
+
+The first request is loaded without modification from
+`contracts/fixtures/frontend-integration/analysis-request.example.json`. The
+second request references the first result using `upstream_module_ids`, so a
+pass proves that the live HTTP runtime stored and resolved project-scoped module
+context.
+
+To inspect the catalog directly:
 
 ```powershell
 Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/v1/data-sources"
-
-$body = @{
-    question = "比較2022到2024年新北市青年失業率"
-} | ConvertTo-Json
-
-Invoke-RestMethod `
-    -Method Post `
-    -Uri "http://127.0.0.1:8000/v1/analysis" `
-    -ContentType "application/json" `
-    -Body $body
 ```
+
+The legacy root `app.api` remains available only for backward compatibility. New
+frontend work must not use its `{ "question": "..." }` request shape.
