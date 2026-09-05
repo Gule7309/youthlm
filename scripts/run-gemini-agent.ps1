@@ -12,7 +12,10 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ([string]::IsNullOrWhiteSpace($env:GEMINI_API_KEY)) {
-    $clipboardKey = (Get-Clipboard -Raw).Trim()
+    $clipboardKey = Get-Clipboard -Raw
+    if ($null -ne $clipboardKey) {
+        $clipboardKey = $clipboardKey.Trim()
+    }
     if ([string]::IsNullOrWhiteSpace($clipboardKey)) {
         throw (
             "GEMINI_API_KEY is not set. Copy the Gemini API key to the " +
@@ -22,7 +25,7 @@ if ([string]::IsNullOrWhiteSpace($env:GEMINI_API_KEY)) {
 
     $env:GEMINI_API_KEY = $clipboardKey
     Remove-Variable clipboardKey
-    Set-Clipboard -Value ""
+    Set-Clipboard -Value " "
     Write-Host "Gemini API key loaded into this PowerShell process."
 }
 

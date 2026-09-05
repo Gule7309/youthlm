@@ -10,9 +10,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$repoRoot = Split-Path -Parent $PSScriptRoot
 
 if ([string]::IsNullOrWhiteSpace($env:GEMINI_API_KEY)) {
-    $clipboardKey = (Get-Clipboard -Raw).Trim()
+    $clipboardKey = Get-Clipboard -Raw
+    if ($null -ne $clipboardKey) {
+        $clipboardKey = $clipboardKey.Trim()
+    }
     if ([string]::IsNullOrWhiteSpace($clipboardKey)) {
         throw (
             "GEMINI_API_KEY is not set. Copy the Gemini API key to the " +
@@ -22,7 +26,7 @@ if ([string]::IsNullOrWhiteSpace($env:GEMINI_API_KEY)) {
 
     $env:GEMINI_API_KEY = $clipboardKey
     Remove-Variable clipboardKey
-    Set-Clipboard -Value ""
+    Set-Clipboard -Value " "
     Write-Host "Gemini API key loaded into this PowerShell process."
 }
 
@@ -33,8 +37,15 @@ $env:GEMINI_THINKING_LEVEL = "low"
 
 Write-Host "YouthLM API: http://127.0.0.1:$Port"
 Write-Host "OpenAPI docs: http://127.0.0.1:$Port/docs"
+Write-Host "Contract: AnalysisRequest -> AnalysisResult (v0.1.0)"
 
-uv run uvicorn app.api:app --host 127.0.0.1 --port $Port
-if ($LASTEXITCODE -ne 0) {
-    throw "YouthLM Gemini API failed."
+Push-Location $repoRoot
+try {
+    uv run uvicorn main:app --app-dir apps/api --host 127.0.0.1 --port $Port
+    if ($LASTEXITCODE -ne 0) {
+        throw "YouthLM Gemini Contract v0 API failed."
+    }
+}
+finally {
+    Pop-Location
 }

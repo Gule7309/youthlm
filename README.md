@@ -104,7 +104,20 @@ Copy the Gemini API key to the Windows clipboard, then run:
 ```
 
 Open `http://127.0.0.1:8000/docs` to exercise the API without writing frontend
-code first.
+code first. This script starts the Contract v0 entrypoint in `apps/api`, not the
+legacy root API.
+
+In a second PowerShell window, run the live Source-to-Chart and Module Context
+smoke:
+
+```powershell
+uv run python -m spikes.analysis_api_smoke
+```
+
+The smoke sends the canonical frontend request, validates a real
+`AnalysisResult`, and then submits a downstream module using the first result's
+ID. A passing second request proves that SQLite persistence and project-scoped
+Module Context lookup work through HTTP.
 
 To run the real population Agent path instead of the unemployment Golden Path:
 

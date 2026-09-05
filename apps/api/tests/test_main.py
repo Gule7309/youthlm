@@ -24,11 +24,27 @@ class ApiEntrypointTests(unittest.TestCase):
         self.assertEqual(response.json(), {"status": "ok"})
 
     def test_openapi_preserves_existing_http_boundary(self) -> None:
-        paths = app.openapi()["paths"]
+        openapi = app.openapi()
+        paths = openapi["paths"]
 
         self.assertIn("/health", paths)
         self.assertIn("/v1/data-sources", paths)
         self.assertIn("/v1/analysis", paths)
+        operation = paths["/v1/analysis"]["post"]
+        request_schema = operation["requestBody"]["content"][
+            "application/json"
+        ]["schema"]
+        response_schema = operation["responses"]["200"]["content"][
+            "application/json"
+        ]["schema"]
+        self.assertEqual(
+            request_schema,
+            {"$ref": "#/components/schemas/AnalysisRequest"},
+        )
+        self.assertEqual(
+            response_schema,
+            {"$ref": "#/components/schemas/AnalysisResult"},
+        )
 
 
 if __name__ == "__main__":
