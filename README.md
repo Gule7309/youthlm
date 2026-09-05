@@ -119,6 +119,12 @@ The smoke sends the canonical frontend request, validates a real
 ID. A passing second request proves that SQLite persistence and project-scoped
 Module Context lookup work through HTTP.
 
+The framework-neutral Chart Artifact adapter and frontend interaction handoff are
+documented in [`apps/web/README.md`](apps/web/README.md) and
+[`docs/frontend-chart-artifact.md`](docs/frontend-chart-artifact.md). They map
+Contract v0 results to explicit chart, table, blocked, and error view states
+without putting ECharts options or Canvas UI state into the backend contract.
+
 To run the real population Agent path instead of the unemployment Golden Path:
 
 ```powershell
