@@ -38,6 +38,8 @@ state never cross this boundary.
 | `AnalysisResult` | identity, dependency IDs, status, plan, filters, dimensions, data, summary, warnings, sources, versions, provenance | visualization |
 | `ModuleContext` | prior module identity, dependencies, status, sources, filters, dimensions, data, summary, warnings, provenance, versions | none in v0 |
 | `ErrorResponse` | version, error code, message, retriable flag | details |
+| `PresentationRequest` | version, project ID, source module IDs, title, output format | audience, language, template ID, instructions |
+| `PresentationResult` | identity, source module IDs, ready status, file metadata, digest, download URL, creation time, warnings | none in v0 |
 
 Arrays that may have no values remain required and are returned as `[]`. Objects
 that may have no values remain required and are returned as `{}`. This prevents
@@ -74,3 +76,16 @@ decision are documented in
 [`frontend-integration-contract.md`](frontend-integration-contract.md).
 The implemented storage lifecycle and project-isolation rules are documented in
 [`module-context-storage.md`](module-context-storage.md).
+
+## Presentation Artifact boundary
+
+Presentation generation is separate from `AnalysisResult`. Contract v0 defines a
+synchronous Hackathon MVP: the frontend owns its loading state while
+`POST /v1/presentations` runs, then receives a ready `PresentationResult` or a
+non-2xx `ErrorResponse`. The endpoint and `python-pptx` generator are not part of
+the schema checkpoint.
+
+Only `project_id` and `source_module_ids` cross the boundary; complete upstream
+results are loaded by the backend and never copied into the request. See
+[`presentation-contract.md`](presentation-contract.md) for the exact lifecycle,
+ownership rule, and compatibility impact.

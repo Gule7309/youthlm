@@ -17,6 +17,8 @@ may depend on that example before the runtime API is contract-compliant.
 | `module-context.json` | Retrieve prior structured module context without another model call. |
 | `error-response.json` | Return validation, provider, agent, dataset, and system failures. |
 | `common.json` | Define shared identifiers, data, warnings, sources, versions, provenance, and visualization types. |
+| `presentation-request.json` | Request an editable deck from stored project modules. |
+| `presentation-result.json` | Return ready PPTX metadata and a download location. |
 
 The executable frontend integration fixtures are under
 [`fixtures/frontend-integration`](fixtures/frontend-integration). They define
@@ -103,3 +105,7 @@ Before changing a contract, a PR must state the reason, backward compatibility,
 frontend impact, backend impact, and mock impact. Breaking changes require a new
 major contract version and migration plan. The schemas, examples, and
 `docs/api-contract.md` must be updated together.
+
+Presentation Artifact is a separate generated-output boundary. Its v0 schemas,
+synchronous MVP lifecycle, project isolation, and compatibility impact are
+documented in [`docs/presentation-contract.md`](../docs/presentation-contract.md).
