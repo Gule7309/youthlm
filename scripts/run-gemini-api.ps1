@@ -11,6 +11,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$apiRoot = Join-Path $repoRoot "apps\api"
 
 if ([string]::IsNullOrWhiteSpace($env:GEMINI_API_KEY)) {
     $clipboardKey = Get-Clipboard -Raw
@@ -38,6 +39,12 @@ $env:GEMINI_THINKING_LEVEL = "low"
 Write-Host "YouthLM API: http://127.0.0.1:$Port"
 Write-Host "OpenAPI docs: http://127.0.0.1:$Port/docs"
 Write-Host "Contract: AnalysisRequest -> AnalysisResult (v0.1.0)"
+
+$pythonPathEntries = @($repoRoot, $apiRoot)
+if (-not [string]::IsNullOrWhiteSpace($env:PYTHONPATH)) {
+    $pythonPathEntries += $env:PYTHONPATH
+}
+$env:PYTHONPATH = $pythonPathEntries -join [IO.Path]::PathSeparator
 
 Push-Location $repoRoot
 try {
