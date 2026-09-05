@@ -25,10 +25,10 @@ AnalysisRequest
 The request sends only `upstream_module_ids`; it never sends prior results.
 Optional `source_selections` supplies raw data source IDs and source-specific
 filters. Raw source selection and prior module context are separate semantics.
-Until the Module Context storage checkpoint is implemented, non-empty upstream
-IDs receive a structured `module_not_found` response rather than being silently
-ignored. Canvas coordinates and other presentation state never cross this
-boundary.
+The API resolves upstream IDs from local SQLite using the composite project and
+module identity. Missing IDs receive a structured `module_not_found` response
+rather than being silently ignored. Canvas coordinates and other presentation
+state never cross this boundary.
 
 ## Required and optional fields
 
@@ -72,3 +72,5 @@ and stack traces are not part of the public frontend contract.
 The first executable frontend mapping, fixtures, HTTP statuses, and MVP storage
 decision are documented in
 [`frontend-integration-contract.md`](frontend-integration-contract.md).
+The implemented storage lifecycle and project-isolation rules are documented in
+[`module-context-storage.md`](module-context-storage.md).

@@ -25,7 +25,8 @@ When `source_selections` is present, the API validates shared source IDs and the
 adapter requires the Agent to run compatibility checking before a deterministic
 query with the exact selected filters.
 
-Requests with non-empty `upstream_module_ids` currently return
-`module_not_found`; resolving and persisting `ModuleContext` is the next separate
-checkpoint. Moving the remaining backend modules under `apps/api/app/` is also
-deferred so it does not obscure the HTTP contract migration.
+Contract-valid results are stored in local SQLite. Requests with non-empty
+`upstream_module_ids` resolve project-scoped `ModuleContext` objects and supply
+them to the Agent; missing IDs return `module_not_found`. Configure the database
+path with `YOUTHLM_SQLITE_PATH` (default `var/youthlm.sqlite3`). Moving the
+remaining backend modules under `apps/api/app/` remains deferred.

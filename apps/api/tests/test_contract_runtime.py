@@ -11,6 +11,7 @@ from app.tooling import build_default_tool_registry
 from app.youth_data import DATASET_ID
 
 from main import create_app
+from module_store import InMemoryModuleStore
 
 
 def request(app, method: str, path: str, *, json: dict | None = None) -> httpx.Response:
@@ -23,6 +24,10 @@ def request(app, method: str, path: str, *, json: dict | None = None) -> httpx.R
             return await client.request(method, path, json=json)
 
     return asyncio.run(send())
+
+
+def build_test_app(agent=None):
+    return create_app(agent, module_store=InMemoryModuleStore())
 
 
 def analysis_request(**overrides) -> dict:
@@ -62,7 +67,7 @@ class ContractRuntimeTests(unittest.TestCase):
         )
 
         response = request(
-            create_app(agent),
+            build_test_app(agent),
             "POST",
             "/v1/analysis",
             json=analysis_request(query="  Hello  "),
@@ -105,7 +110,7 @@ class ContractRuntimeTests(unittest.TestCase):
         )
 
         response = request(
-            create_app(agent),
+            build_test_app(agent),
             "POST",
             "/v1/analysis",
             json=analysis_request(),
@@ -159,7 +164,7 @@ class ContractRuntimeTests(unittest.TestCase):
         )
 
         response = request(
-            create_app(agent),
+            build_test_app(agent),
             "POST",
             "/v1/analysis",
             json=analysis_request(query="分析板橋區20至24歲人口"),
@@ -188,7 +193,7 @@ class ContractRuntimeTests(unittest.TestCase):
         agent = StubAgent(AgentResult(answer="unused", model_steps=1))
 
         response = request(
-            create_app(agent),
+            build_test_app(agent),
             "POST",
             "/v1/analysis",
             json=analysis_request(upstream_module_ids=["analysis_missing"]),
@@ -204,7 +209,7 @@ class ContractRuntimeTests(unittest.TestCase):
 
     def test_returns_structured_validation_error(self) -> None:
         response = request(
-            create_app(),
+            build_test_app(),
             "POST",
             "/v1/analysis",
             json=analysis_request(contract_version="0.2.0", query="   "),
@@ -218,7 +223,7 @@ class ContractRuntimeTests(unittest.TestCase):
 
     def test_hides_provider_failure_details(self) -> None:
         response = request(
-            create_app(FailingAgent()),
+            build_test_app(FailingAgent()),
             "POST",
             "/v1/analysis",
             json=analysis_request(),

@@ -1,6 +1,7 @@
 """Translate the current AgentResult into YouthLM Contract v0."""
 
 import json
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Literal
 
@@ -15,6 +16,7 @@ from contract_models import (
     AnalysisResult,
     DataColumn,
     DatasetVersion,
+    ModuleContext,
     ProvenanceRecord,
     ResultData,
     SourceReference,
@@ -62,28 +64,47 @@ def to_contract_result(
         ) from error
 
 
-def build_agent_prompt(request: AnalysisRequest) -> str:
+def build_agent_prompt(
+    request: AnalysisRequest,
+    module_contexts: Sequence[ModuleContext] = (),
+) -> str:
     """Add raw-source constraints without exposing frontend implementation state."""
-    if not request.source_selections:
+    if not request.source_selections and not module_contexts:
         return request.query
 
-    selections = [
-        selection.model_dump(mode="json")
-        for selection in request.source_selections
-    ]
-    source_context = json.dumps(
-        selections,
+    prompt_parts = [request.query]
+    if request.source_selections:
+        selections = [
+            selection.model_dump(mode="json")
+            for selection in request.source_selections
+        ]
+        prompt_parts.append(
+            "YouthLM selected raw data inputs (not prior module results): "
+            f"{_compact_json(selections)}\n"
+            "Use only these selected sources. Before querying a selected source, "
+            "call check_compatibility for the requested claim. Apply every selected "
+            "source filter exactly to the deterministic query."
+        )
+    if module_contexts:
+        contexts = [
+            context.model_dump(mode="json", exclude_none=True)
+            for context in module_contexts
+        ]
+        prompt_parts.append(
+            "YouthLM verified upstream module contexts (not raw source inputs): "
+            f"{_compact_json(contexts)}\n"
+            "Use these structured prior results and preserve their warnings, "
+            "sources, versions, and provenance. Do not guess prior module content."
+        )
+    return "\n\n".join(prompt_parts)
+
+
+def _compact_json(value: Any) -> str:
+    return json.dumps(
+        value,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
-    )
-    return (
-        f"{request.query}\n\n"
-        "YouthLM selected raw data inputs (not prior module results): "
-        f"{source_context}\n"
-        "Use only these selected sources. Before querying a selected source, "
-        "call check_compatibility for the requested claim. Apply every selected "
-        "source filter exactly to the deterministic query."
     )
 
 

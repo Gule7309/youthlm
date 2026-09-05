@@ -287,6 +287,38 @@ class AnalysisResult(BaseModel):
         return self
 
 
+class ModuleContext(BaseModel):
+    """Stored structured context supplied to a downstream analysis module."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["0.1.0"]
+    project_id: Identifier
+    module_id: Identifier
+    upstream_module_ids: list[Identifier]
+    title: str = Field(min_length=1, max_length=200)
+    question: str = Field(min_length=1, max_length=2_000)
+    status: Literal["completed", "partial", "blocked"]
+    sources: list[SourceReference]
+    filters: dict[str, Any]
+    dimensions: list[Identifier]
+    result_data: ResultData
+    summary: str = Field(min_length=1)
+    warnings: list[Warning]
+    provenance: list[ProvenanceRecord]
+    dataset_versions: list[DatasetVersion]
+
+    @classmethod
+    def from_analysis_result(cls, result: AnalysisResult) -> "ModuleContext":
+        """Remove presentation and execution-plan fields from a valid result."""
+        return cls.model_validate(
+            result.model_dump(
+                mode="python",
+                exclude={"analysis_plan", "visualization"},
+            )
+        )
+
+
 class ErrorDetail(BaseModel):
     """Stable public error payload."""
 
