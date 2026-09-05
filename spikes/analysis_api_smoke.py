@@ -68,7 +68,14 @@ def _validate_source_chart(
     if result.module_id != request_payload["module_id"]:
         raise AnalysisApiSmokeError("Source-to-Chart response changed module_id")
     if result.visualization is None:
-        raise AnalysisApiSmokeError("Source-to-Chart response has no visualization")
+        warnings = "; ".join(
+            f"{warning.type}: {warning.message}"
+            for warning in result.warnings
+        ) or "none"
+        raise AnalysisApiSmokeError(
+            "Source-to-Chart response has no visualization "
+            f"(status={result.status}; warnings={warnings})"
+        )
     if not result.result_data.records:
         raise AnalysisApiSmokeError("Source-to-Chart response has no data records")
 

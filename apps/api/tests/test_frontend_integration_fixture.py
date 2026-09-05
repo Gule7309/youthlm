@@ -263,6 +263,85 @@ class FrontendIntegrationFixtureTests(unittest.TestCase):
             "agent_protocol_error",
         )
 
+    def test_latest_exact_check_supersedes_initial_broad_refusal(self) -> None:
+        agent = YouthLMAgent(
+            provider=FakeModelProvider(
+                [
+                    ModelTurn(
+                        stop_reason="tool_use",
+                        tool_calls=[
+                            ModelToolCall(
+                                call_id="broad-check",
+                                name="check_compatibility",
+                                arguments={
+                                    "source_id": DATASET_ID,
+                                    "min_age": 18,
+                                    "max_age": 35,
+                                    "start_year": 2022,
+                                    "end_year": 2024,
+                                    "geography": "板橋區",
+                                    "sexes": ["all"],
+                                    "unit": "人",
+                                },
+                            )
+                        ],
+                    ),
+                    ModelTurn(
+                        stop_reason="tool_use",
+                        tool_calls=[
+                            ModelToolCall(
+                                call_id="selected-scope-check",
+                                name="check_compatibility",
+                                arguments={
+                                    "source_id": DATASET_ID,
+                                    "min_age": 20,
+                                    "max_age": 24,
+                                    "start_year": 2022,
+                                    "end_year": 2024,
+                                    "geography": "板橋區",
+                                    "sexes": ["all"],
+                                    "unit": "人",
+                                },
+                            )
+                        ],
+                    ),
+                    ModelTurn(
+                        stop_reason="tool_use",
+                        tool_calls=[
+                            ModelToolCall(
+                                call_id="selected-query",
+                                name="query_population_dataset",
+                                arguments={
+                                    "dataset_id": DATASET_ID,
+                                    "geographies": ["板橋區"],
+                                    "age_groups": ["20-24"],
+                                    "sexes": ["all"],
+                                    "start_year": 2022,
+                                    "end_year": 2024,
+                                },
+                            )
+                        ],
+                    ),
+                    ModelTurn(
+                        stop_reason="end_turn",
+                        text="板橋區20至24歲人口逐年下降。",
+                    ),
+                ]
+            ),
+            tools=build_default_tool_registry(),
+        )
+
+        response = request(
+            build_test_app(agent),
+            "POST",
+            "/v1/analysis",
+            json=load_fixture("analysis-request.example.json"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "partial")
+        self.assertEqual(response.json()["visualization"]["type"], "line")
+
     def test_does_not_silently_ignore_selected_source(self) -> None:
         agent = YouthLMAgent(
             provider=FakeModelProvider(

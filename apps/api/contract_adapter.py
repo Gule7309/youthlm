@@ -82,8 +82,10 @@ def build_agent_prompt(
             "YouthLM selected raw data inputs (not prior module results): "
             f"{_compact_json(selections)}\n"
             "Use only these selected sources. Before querying a selected source, "
-            "call check_compatibility for the requested claim. Apply every selected "
-            "source filter exactly to the deterministic query."
+            "call check_compatibility using the exact scope in that selection's "
+            "filters, not the general YouthLM 18-35 target. For example, age_groups "
+            "20-24 means min_age 20 and max_age 24. Apply every selected source "
+            "filter exactly to the deterministic query."
         )
     if module_contexts:
         contexts = [
@@ -280,8 +282,7 @@ def _blocking_compatibility(
             continue
         if selected_source_ids and result_source_id not in selected_source_ids:
             continue
-        if execution.result.get("refusal_required"):
-            return execution
+        return execution if execution.result.get("refusal_required") else None
     return None
 
 
@@ -334,7 +335,7 @@ def _validate_selected_source(
     compatibility = next(
         (
             execution
-            for execution in agent_result.tool_executions
+            for execution in reversed(agent_result.tool_executions)
             if execution.succeeded
             and execution.name == "check_compatibility"
             and isinstance(execution.result, dict)
