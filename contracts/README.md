@@ -20,8 +20,13 @@ may depend on that example before the runtime API is contract-compliant.
 
 The executable frontend integration fixtures are under
 [`fixtures/frontend-integration`](fixtures/frontend-integration). They define
-the exact Source-to-Chart request, successful result, blocked result, and error
-payload used by the API integration test.
+the exact shared-source catalog, Source-to-Chart request, successful result,
+blocked result, and error payload used by the API integration test.
+
+`data-sources.example.json` is the canonical mock for
+`GET /v1/data-sources`. A frontend Source Node uses its registry `source_id`,
+published dimensions, ranges, capabilities, and limitations; it must not replace
+that identifier with its own Canvas node ID.
 
 ## Stable frontend fields
 
