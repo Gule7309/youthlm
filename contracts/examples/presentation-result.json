@@ -1,0 +1,27 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_1",
+  "presentation_id": "presentation_1",
+  "source_module_ids": [
+    "analysis_1"
+  ],
+  "title": "板橋區青年人口趨勢",
+  "status": "ready",
+  "output_format": "pptx",
+  "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "file_name": "banqiao-youth-population.pptx",
+  "file_size_bytes": 128942,
+  "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "download_url": "/v1/projects/project_1/presentations/presentation_1/download",
+  "created_at": "2026-09-05T14:30:00+08:00",
+  "warnings": [
+    {
+      "type": "age_mismatch",
+      "severity": "warning",
+      "message": "官方以5歲級距發布；簡報不得將20至34歲結果宣稱為完整18至35歲青年人口。",
+      "affected_source_ids": [
+        "ntpc_population_by_age_sex_district"
+      ]
+    }
+  ]
+}
