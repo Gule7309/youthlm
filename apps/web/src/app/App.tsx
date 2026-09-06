@@ -14,6 +14,14 @@ import { ResultCard } from './components/ResultCard';
 import { ResultInspector } from './components/ResultInspector';
 import { AssistantCard } from './components/AssistantCard';
 import { PolicyRadarPanel } from './components/PolicyRadarPanel';
+import { createChartDraftActions, getChartDraftActions, PRESENTATION_UNAVAILABLE_MESSAGE, usesRawSourceInputs } from './result-policy';
+import {
+  cloneWorkspaceNode,
+  duplicateWorkspaceNodes,
+  getPolicyRadarWorkspaceSignature,
+  removeSourceNode,
+  updateSourceConfig,
+} from './workspace-state';
 import type {
   AuthUser,
   CanvasNode,
@@ -57,37 +65,6 @@ function isSourceReady(node: CanvasNode) {
   if (node.source.kind === 'file') return Boolean(node.source.file?.name);
   if (node.source.kind === 'api') return Boolean(node.source.apiUrl?.trim());
   return false;
-}
-
-function getPolicyRadarWorkspaceSignature(workspace: CanvasNode[]) {
-  const trackedNodes = workspace
-    .filter(node => node.type === 'source' || node.type === 'result')
-    .sort((first, second) => first.id.localeCompare(second.id))
-    .map(node => {
-      if (node.type === 'source') {
-        return {
-          id: node.id,
-          type: node.type,
-          kind: node.source?.kind ?? null,
-          name: node.source?.name ?? '',
-          enabled: node.source?.enabled ?? false,
-          autoClean: node.source?.autoClean ?? false,
-          apiUrl: node.source?.apiUrl ?? '',
-          file: node.source?.file ? { ...node.source.file } : null,
-        };
-      }
-
-      return {
-        id: node.id,
-        type: node.type,
-        kind: node.result?.kind ?? null,
-        name: node.result?.name ?? '',
-        sourceIds: [...(node.result?.sourceIds ?? [])].sort(),
-        prompt: node.result?.prompt ?? '',
-      };
-    });
-
-  return JSON.stringify(trackedNodes);
 }
 
 function createPolicyRadarState(): PolicyRadarState {
@@ -142,68 +119,6 @@ function getFitTransform(
       y: topInset + availableHeight / 2 - centerY * nextZoom,
     },
   };
-}
-
-function cloneWorkspaceNode(node: CanvasNode): CanvasNode {
-  return {
-    ...node,
-    source: node.source
-      ? { ...node.source, file: node.source.file ? { ...node.source.file } : undefined }
-      : undefined,
-    result: node.result
-      ? { ...node.result, sourceIds: [...node.result.sourceIds] }
-      : undefined,
-    assistant: node.assistant
-      ? {
-        ...node.assistant,
-        messages: node.assistant.messages.map(message => ({ ...message })),
-        draftActions: node.assistant.draftActions.map(action => ({
-          ...action,
-          sourceIds: [...action.sourceIds],
-        })),
-      }
-      : undefined,
-  };
-}
-
-function duplicateWorkspaceNodes(nodes: CanvasNode[]): CanvasNode[] {
-  const duplicateKey = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const idMap = new Map(
-    nodes.map((node, index) => [node.id, `${node.type}-${duplicateKey}-${index + 1}`]),
-  );
-
-  return nodes.map(node => {
-    const clone = cloneWorkspaceNode(node);
-    const duplicateNodeId = idMap.get(node.id) ?? node.id;
-    return {
-      ...clone,
-      id: duplicateNodeId,
-      result: clone.result
-        ? {
-          ...clone.result,
-          sourceIds: clone.result.sourceIds
-            .map(sourceId => idMap.get(sourceId))
-            .filter((sourceId): sourceId is string => Boolean(sourceId)),
-        }
-        : undefined,
-      assistant: clone.assistant
-        ? {
-          ...clone.assistant,
-          messages: clone.assistant.messages.map((message, index) => ({
-            ...message,
-            id: `${duplicateNodeId}-message-${index + 1}`,
-          })),
-          draftActions: clone.assistant.draftActions.map((action, index) => ({
-            ...action,
-            id: `${duplicateNodeId}-draft-${index + 1}`,
-            sourceIds: action.sourceIds
-              .map(sourceId => idMap.get(sourceId))
-              .filter((sourceId): sourceId is string => Boolean(sourceId)),
-          })),
-        }
-        : undefined,
-    };
-  });
 }
 
 const DEMO_NODES: CanvasNode[] = [
@@ -559,15 +474,15 @@ export default function App() {
   const sourceNodes = nodes.filter(node => node.type === 'source');
   const resultNodes = nodes.filter(node => node.type === 'result');
   const assistantNodes = nodes.filter(node => node.type === 'assistant');
-  const currentSourceIds = new Set(sourceNodes.map(node => node.id));
+  const currentSourceNodeIds = new Set(sourceNodes.map(node => node.id));
   const policyRadarCounts: PolicyRadarCounts = {
     sourceCount: sourceNodes.length,
     readySourceCount: sourceNodes.filter(isSourceReady).length,
     resultCount: resultNodes.length,
     configuredResultCount: resultNodes.filter(node => Boolean(
-      node.result?.kind
-      && node.result.sourceIds.length > 0
-      && node.result.sourceIds.every(sourceId => currentSourceIds.has(sourceId)),
+      node.result?.kind === 'chart'
+      && node.result.sourceNodeIds.length > 0
+      && node.result.sourceNodeIds.every(sourceNodeId => currentSourceNodeIds.has(sourceNodeId)),
     )).length,
   };
   const policyRadarWorkspaceSignature = getPolicyRadarWorkspaceSignature(nodes);
@@ -766,7 +681,7 @@ export default function App() {
       result: {
         kind: null,
         name: resultName,
-        sourceIds: [],
+        sourceNodeIds: [],
         prompt: '',
       },
     };
@@ -870,7 +785,9 @@ export default function App() {
   const handleSaveSource = (source: SourceConfig) => {
     if (!selectedSource) return;
     setNodes(current => current.map(node =>
-      node.id === selectedSource.id ? { ...node, source: { ...source } } : node,
+      node.id === selectedSource.id
+        ? { ...node, source: updateSourceConfig(node.source, source) }
+        : node,
     ));
     setDirtyInspectorNodeId(null);
     setNotebooks(current => current.map(notebook =>
@@ -879,10 +796,10 @@ export default function App() {
   };
 
   const handleSaveResult = (result: ResultConfig) => {
-    if (!selectedResult) return;
+    if (!selectedResult || result.kind !== 'chart') return;
     setNodes(current => current.map(node =>
       node.id === selectedResult.id
-        ? { ...node, result: { ...result, sourceIds: [...result.sourceIds] } }
+        ? { ...node, result: { ...result, sourceNodeIds: [...result.sourceNodeIds] } }
         : node,
     ));
     setDirtyInspectorNodeId(null);
@@ -894,12 +811,12 @@ export default function App() {
   const handleAssistantSubmit = (id: string, prompt: string) => {
     const submittedAt = Date.now();
     setNodes(current => {
-      const sourceIds = current
+      const sourceNodeIds = current
         .filter(node => node.type === 'source')
         .map(node => node.id);
-      const response = sourceIds.length > 0
-        ? `需求已記錄，並依目前 ${sourceIds.length} 張來源準備 2 項前端操作草稿：洞察圖表與政策簡報。這不是 AI 分析，也尚未產生任何統計、圖表或簡報內容。`
-        : '需求已記錄。這是前端操作示意：目前沒有來源卡片，所以尚不能建立成果草稿。請先新增來源，再重新送出需求；AI 與資料分析尚未串接。';
+      const response = sourceNodeIds.length > 0
+        ? `需求已記錄，並依目前 ${sourceNodeIds.length} 張來源準備 1 項洞察圖表設定草稿。這是固定的前端操作示意，不是 AI 分析，也沒有統計結果。${PRESENTATION_UNAVAILABLE_MESSAGE}`
+        : `需求已記錄，目前沒有來源卡片，因此沒有建立圖表草稿。請先新增來源後再送出；AI 與資料分析尚未串接。${PRESENTATION_UNAVAILABLE_MESSAGE}`;
 
       return current.map(node => {
         if (node.id !== id || node.type !== 'assistant' || !node.assistant) return node;
@@ -923,22 +840,7 @@ export default function App() {
                 createdAt: new Date(submittedAt).toISOString(),
               },
             ],
-            draftActions: [
-              {
-                id: `${id}-draft-chart-${submittedAt}`,
-                kind: 'chart',
-                name: '政策洞察圖表',
-                sourceIds: [...sourceIds],
-                prompt,
-              },
-              {
-                id: `${id}-draft-presentation-${submittedAt}`,
-                kind: 'presentation',
-                name: '政策洞察簡報',
-                sourceIds: [...sourceIds],
-                prompt,
-              },
-            ],
+            draftActions: createChartDraftActions(`${id}-draft-chart-${submittedAt}`, prompt, sourceNodeIds),
           },
         };
       });
@@ -954,7 +856,7 @@ export default function App() {
       const assistantNode = current.find(node => node.id === id && node.type === 'assistant');
       if (!assistantNode?.assistant || assistantNode.assistant.draftActions.length === 0) return current;
 
-      const currentSourceIds = new Set(
+      const currentSourceNodeIds = new Set(
         current.filter(node => node.type === 'source').map(node => node.id),
       );
       const existingResultNames = new Set(
@@ -964,12 +866,12 @@ export default function App() {
       );
       let workingNodes = [...current];
       let createdCount = 0;
-      const linkedSourceIds = new Set<string>();
+      const linkedSourceNodeIds = new Set<string>();
 
-      assistantNode.assistant.draftActions.forEach((action, index) => {
-        const validSourceIds = action.sourceIds.filter(sourceId => currentSourceIds.has(sourceId));
-        if (validSourceIds.length === 0) return;
-        validSourceIds.forEach(sourceId => linkedSourceIds.add(sourceId));
+      getChartDraftActions(assistantNode.assistant.draftActions).forEach((action, index) => {
+        const validSourceNodeIds = action.sourceNodeIds.filter(sourceNodeId => currentSourceNodeIds.has(sourceNodeId));
+        if (validSourceNodeIds.length === 0) return;
+        validSourceNodeIds.forEach(sourceNodeId => linkedSourceNodeIds.add(sourceNodeId));
 
         const position = findOpenCardPosition(
           assistantNode.x + ASSISTANT_CARD_SIZE.width + 96,
@@ -985,7 +887,7 @@ export default function App() {
           result: {
             kind: action.kind,
             name: getUniqueName(action.name, existingResultNames),
-            sourceIds: validSourceIds,
+            sourceNodeIds: validSourceNodeIds,
             prompt: action.prompt,
           },
         };
@@ -994,7 +896,7 @@ export default function App() {
       });
 
       const notice = createdCount > 0
-        ? `已建立 ${createdCount} 張成果草稿，並連結 ${linkedSourceIds.size} 張來源。這些卡片只有前端設定；尚未產生圖表、簡報內容或分析結論。`
+        ? `已建立 ${createdCount} 張圖表草稿，並連結 ${linkedSourceNodeIds.size} 張來源。這些卡片只有前端設定；尚未產生圖表或分析結論。${PRESENTATION_UNAVAILABLE_MESSAGE}`
         : '目前沒有可用的來源連結，因此沒有建立成果草稿。請重新選擇或新增來源後，再送出一次需求。';
 
       return workingNodes.map(node => {
@@ -1037,32 +939,7 @@ export default function App() {
       setDirtyInspectorNodeId(null);
     }
 
-    setNodes(current => current
-      .filter(node => node.id !== id)
-      .map(node => {
-        if (node.type === 'result' && node.result) {
-          return {
-            ...node,
-            result: {
-              ...node.result,
-              sourceIds: node.result.sourceIds.filter(sourceId => sourceId !== id),
-            },
-          };
-        }
-        if (node.type === 'assistant' && node.assistant) {
-          return {
-            ...node,
-            assistant: {
-              ...node.assistant,
-              draftActions: node.assistant.draftActions.map(action => ({
-                ...action,
-                sourceIds: action.sourceIds.filter(sourceId => sourceId !== id),
-              })),
-            },
-          };
-        }
-        return node;
-      }));
+    setNodes(current => removeSourceNode(current, id));
     if (selectedNodeId === id) {
       setSelectedNodeId(null);
       setDirtyInspectorNodeId(null);
@@ -1138,9 +1015,9 @@ export default function App() {
 
   const transformOutput = transform ? { x: transform.x + 365, y: transform.y + 220 } : null;
   const analysisInput = analysis ? { x: analysis.x, y: analysis.y + 85 } : null;
-  const resultConnections = resultNodes.flatMap(resultNode =>
-    (resultNode.result?.sourceIds ?? []).flatMap(sourceId => {
-      const sourceNode = sourceNodes.find(node => node.id === sourceId);
+  const resultConnections = resultNodes.filter(node => usesRawSourceInputs(node.result)).flatMap(resultNode =>
+    (resultNode.result?.sourceNodeIds ?? []).flatMap(sourceNodeId => {
+      const sourceNode = sourceNodes.find(node => node.id === sourceNodeId);
       if (!sourceNode) return [];
       return [{
         id: `${sourceNode.id}-${resultNode.id}`,
@@ -1289,7 +1166,7 @@ export default function App() {
               key={node.id}
               node={node}
               selected={node.id === selectedNodeId}
-              connected={resultNodes.some(resultNode => resultNode.result?.sourceIds.includes(node.id))}
+              connected={resultNodes.some(resultNode => usesRawSourceInputs(resultNode.result) && resultNode.result?.sourceNodeIds.includes(node.id))}
               onSelect={handleSelectNode}
               onEdit={handleSelectNode}
               onDelete={handleDeleteSource}
@@ -1303,9 +1180,9 @@ export default function App() {
               node={node}
               selected={node.id === selectedNodeId}
               sourcesReady={Boolean(
-                node.result?.sourceIds.length
-                && node.result.sourceIds.every(sourceId => {
-                  const sourceNode = sourceNodes.find(source => source.id === sourceId);
+                node.result?.kind === 'chart' && node.result.sourceNodeIds.length
+                && node.result.sourceNodeIds.every(sourceNodeId => {
+                  const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
                   return sourceNode ? isSourceReady(sourceNode) : false;
                 })
               )}
@@ -1317,11 +1194,12 @@ export default function App() {
           ))}
 
           {assistantNodes.map(node => {
-            const sourceIdSet = new Set(sourceNodes.map(source => source.id));
+            const sourceNodeIdSet = new Set(sourceNodes.map(source => source.id));
+            const chartDraftActions = getChartDraftActions(node.assistant?.draftActions ?? []);
             const canExecuteDraft = Boolean(
-              node.assistant?.draftActions.length
-              && node.assistant.draftActions.every(action =>
-                action.sourceIds.some(sourceId => sourceIdSet.has(sourceId)),
+              chartDraftActions.length
+              && chartDraftActions.every(action =>
+                action.sourceNodeIds.some(sourceNodeId => sourceNodeIdSet.has(sourceNodeId)),
               ),
             );
 
@@ -1659,7 +1537,7 @@ export default function App() {
                   </span>
                   <span>
                     <span className="block text-sm font-semibold text-violet-950">成果</span>
-                    <span className="mt-1 block text-[11px] leading-4 text-violet-800/80">連結來源，設定圖表或簡報</span>
+                    <span className="mt-1 block text-[11px] leading-4 text-violet-800/80">連結來源設定圖表；簡報尚未提供</span>
                   </span>
                 </span>
               </button>

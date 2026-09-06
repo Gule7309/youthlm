@@ -119,6 +119,20 @@ The smoke sends the canonical frontend request, validates a real
 ID. A passing second request proves that SQLite persistence and project-scoped
 Module Context lookup work through HTTP.
 
+The React/Vite frontend lives in `apps/web/`, alongside the framework-neutral
+Chart Artifact adapter. The Python domain core remains in `app/`.
+
+```bash
+cd apps/web
+npm ci
+npm run dev
+```
+
+Use `npm run check` to run strict TypeScript checking, build the UI, and execute
+the adapter's six fixture-based tests, stopping on the first failure. Each gate
+can also run separately with `npm run typecheck`, `npm run build`, or `npm test`.
+The UI is still a frontend mock, not a live API integration.
+
 The framework-neutral Chart Artifact adapter and frontend interaction handoff are
 documented in [`apps/web/README.md`](apps/web/README.md) and
 [`docs/frontend-chart-artifact.md`](docs/frontend-chart-artifact.md). They map

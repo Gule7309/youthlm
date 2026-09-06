@@ -8,6 +8,7 @@ import {
   X,
 } from 'lucide-react';
 import type { CanvasNode, ResultConfig } from '../types';
+import { PRESENTATION_UNAVAILABLE_MESSAGE } from '../result-policy';
 
 type EditableResultKind = Exclude<ResultConfig['kind'], null>;
 
@@ -43,21 +44,22 @@ export function ResultInspector({
   const sourceNodeIdsKey = sourceNodes.map(sourceNode => sourceNode.id).join('|');
   const [kind, setKind] = useState<EditableResultKind | null>(node.result?.kind ?? null);
   const [name, setName] = useState(node.result?.name ?? '');
-  const [sourceIds, setSourceIds] = useState<string[]>(node.result?.sourceIds ?? []);
+  const [sourceNodeIds, setSourceNodeIds] = useState<string[]>(node.result?.kind === 'presentation' ? [] : node.result?.sourceNodeIds ?? []);
+  const isPresentation = kind === 'presentation';
   const [prompt, setPrompt] = useState(node.result?.prompt ?? '');
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const selectedSourcesReady = sourceIds.length > 0 && sourceIds.every(sourceId => {
-    const sourceNode = sourceNodes.find(source => source.id === sourceId);
+  const selectedSourcesReady = sourceNodeIds.length > 0 && sourceNodeIds.every(sourceNodeId => {
+    const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
     return sourceNode ? sourceIsReady(sourceNode) : false;
   });
 
   useEffect(() => {
-    const availableSourceIds = new Set(sourceNodes.map(sourceNode => sourceNode.id));
+    const availableSourceNodeIds = new Set(sourceNodes.map(sourceNode => sourceNode.id));
     setKind(node.result?.kind ?? null);
     setName(node.result?.name ?? '');
-    setSourceIds((node.result?.sourceIds ?? []).filter(sourceId => availableSourceIds.has(sourceId)));
+    setSourceNodeIds(node.result?.kind === 'presentation' ? [] : (node.result?.sourceNodeIds ?? []).filter(sourceNodeId => availableSourceNodeIds.has(sourceNodeId)));
     setPrompt(node.result?.prompt ?? '');
     setError('');
     setSaved(false);
@@ -72,15 +74,16 @@ export function ResultInspector({
   };
 
   const chooseKind = (nextKind: EditableResultKind) => {
+    if (nextKind === 'presentation') return;
     setKind(nextKind);
     setError('');
     markDirty();
   };
 
-  const toggleSource = (sourceId: string) => {
-    setSourceIds(currentIds => currentIds.includes(sourceId)
-      ? currentIds.filter(id => id !== sourceId)
-      : [...currentIds, sourceId]);
+  const toggleSource = (sourceNodeId: string) => {
+    setSourceNodeIds(currentIds => currentIds.includes(sourceNodeId)
+      ? currentIds.filter(id => id !== sourceNodeId)
+      : [...currentIds, sourceNodeId]);
     setError('');
     markDirty();
   };
@@ -89,11 +92,11 @@ export function ResultInspector({
     const trimmedName = name.trim();
     const trimmedPrompt = prompt.trim();
 
-    if (!kind) {
-      setError('請選擇要產生圖表或簡報。');
+    if (kind !== 'chart') {
+      setError(isPresentation ? PRESENTATION_UNAVAILABLE_MESSAGE : '請選擇洞察圖表。');
       return;
     }
-    if (sourceIds.length === 0) {
+    if (sourceNodeIds.length === 0) {
       setError('請至少選擇一張來源卡片。');
       return;
     }
@@ -109,7 +112,7 @@ export function ResultInspector({
     onSave({
       kind,
       name: trimmedName,
-      sourceIds,
+      sourceNodeIds,
       prompt: trimmedPrompt,
     });
     setError('');
@@ -150,7 +153,7 @@ export function ResultInspector({
           )}
         </div>
         <p className="mt-3 text-xs leading-5 text-slate-500">
-          選擇資料來源並描述分析需求。此版本只保存設定，不會實際產生圖表或簡報。
+          選擇資料來源並描述圖表需求。此版本只保存設定，不會實際執行分析。
         </p>
       </div>
 
@@ -173,8 +176,9 @@ export function ResultInspector({
             </button>
             <button
               type="button"
-              onClick={() => chooseKind('presentation')}
-              className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border px-3 text-center text-xs font-medium transition ${
+              disabled
+              aria-describedby="presentation-unavailable"
+              className={`flex min-h-20 cursor-not-allowed flex-col items-center justify-center gap-2 rounded-lg border px-3 text-center text-xs font-medium opacity-60 ${
                 kind === 'presentation'
                   ? 'border-violet-400 bg-violet-50 text-violet-700 ring-2 ring-violet-100'
                   : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
@@ -183,15 +187,24 @@ export function ResultInspector({
             >
               <Presentation className="size-5" />
               洞察簡報
+              <span className="text-[10px] font-normal">尚未提供</span>
             </button>
           </div>
+          <p id="presentation-unavailable" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+            {PRESENTATION_UNAVAILABLE_MESSAGE}
+          </p>
         </div>
 
+        {isPresentation ? (
+          <p className="text-sm leading-6 text-slate-600" role="status">
+            這張舊簡報草稿暫不可執行，原始來源連線不再使用。可改選「洞察圖表」並重新選擇來源，或保留卡片等待簡報功能開放。
+          </p>
+        ) : (<>
         <div>
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-slate-700">使用的來源</span>
             {sourceNodes.length > 0 && (
-              <span className="text-[11px] text-slate-500">已選 {sourceIds.length} 個</span>
+              <span className="text-[11px] text-slate-500">已選 {sourceNodeIds.length} 個</span>
             )}
           </div>
 
@@ -204,7 +217,7 @@ export function ResultInspector({
           ) : (
             <div className="space-y-2">
               {sourceNodes.map(sourceNode => {
-                const checked = sourceIds.includes(sourceNode.id);
+                const checked = sourceNodeIds.includes(sourceNode.id);
                 const sourceName = sourceNode.source?.name || '未設定的資料來源';
                 return (
                   <button
@@ -248,7 +261,7 @@ export function ResultInspector({
               markDirty();
             }}
             className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-            placeholder={kind === 'presentation' ? '例如：青年就業政策簡報' : '例如：教育程度與起薪比較圖'}
+            placeholder="例如：教育程度與起薪比較圖"
             maxLength={80}
           />
         </label>
@@ -271,8 +284,9 @@ export function ResultInspector({
 
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-800">
           <Info className="mt-0.5 size-3.5 shrink-0" />
-          目前只會保存前端設定；圖表繪製、簡報生成、AI 洞察與檔案輸出仍需串接後端服務。
+          目前只會保存圖表設定；實際分析、圖表繪製與檔案輸出仍需串接後端服務。
         </div>
+        </>)}
       </div>
 
       <div className="border-t border-slate-200 bg-white px-5 py-4">
@@ -291,10 +305,10 @@ export function ResultInspector({
         <button
           type="button"
           onClick={handleSave}
-          disabled={sourceNodes.length === 0}
+          disabled={isPresentation || sourceNodes.length === 0}
           className="h-10 w-full rounded-lg bg-slate-950 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          儲存成果設定
+          {isPresentation ? '簡報功能尚未提供' : '儲存成果設定'}
         </button>
       </div>
     </section>

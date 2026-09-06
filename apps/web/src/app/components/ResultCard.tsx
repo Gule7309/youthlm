@@ -8,6 +8,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { CanvasNode } from '../types';
+import { PRESENTATION_UNAVAILABLE_MESSAGE } from '../result-policy';
 
 export type ResultCardProps = {
   node: CanvasNode;
@@ -33,8 +34,9 @@ export function ResultCard({
   onOutputPointerDown,
 }: ResultCardProps) {
   const config = node.result;
+  const isPresentation = config?.kind === 'presentation';
   const isConfigured = Boolean(
-    config?.kind && config.name.trim() && config.sourceIds.length > 0 && config.prompt.trim(),
+    config?.kind === 'chart' && config.name.trim() && config.sourceNodeIds.length > 0 && config.prompt.trim(),
   );
   const isReadyForGeneration = isConfigured && sourcesReady;
   const ResultIcon = config?.kind === 'chart'
@@ -47,7 +49,7 @@ export function ResultCard({
     : config?.kind === 'presentation'
       ? '洞察簡報'
       : '尚未選擇成果類型';
-  const sourceCount = config?.sourceIds.length ?? 0;
+  const sourceCount = isPresentation ? 0 : config?.sourceNodeIds.length ?? 0;
   const promptSummary = config?.prompt.trim() || '請先描述希望產生的內容與洞察方向';
 
   return (
@@ -66,20 +68,20 @@ export function ResultCard({
     >
       <button
         type="button"
-        disabled={!onInputPointerDown}
+        disabled={isPresentation || !onInputPointerDown}
         onPointerDown={(event) => {
           event.stopPropagation();
-          onInputPointerDown?.(event, node.id);
+          if (!isPresentation) onInputPointerDown?.(event, node.id);
         }}
         className={`absolute -left-2.5 top-1/2 size-5 -translate-y-1/2 rounded-full border-[3px] border-white shadow-sm ${
-          onInputPointerDown
+          !isPresentation && onInputPointerDown
             ? 'cursor-crosshair bg-violet-600 hover:bg-violet-700'
             : sourceCount > 0
               ? 'cursor-default bg-violet-600'
               : 'cursor-not-allowed bg-slate-300'
         }`}
         aria-label="成果輸入連接點"
-        title={onInputPointerDown ? '拖曳以連接來源卡片' : sourceCount > 0 ? `已連接 ${sourceCount} 個來源` : '請在成果設定中選擇來源'}
+        title={isPresentation ? PRESENTATION_UNAVAILABLE_MESSAGE : onInputPointerDown ? '拖曳以連接來源卡片' : sourceCount > 0 ? `已連接 ${sourceCount} 個來源` : '請在成果設定中選擇來源'}
       />
 
       <div
@@ -111,7 +113,7 @@ export function ResultCard({
             <div className="flex items-center justify-between gap-2">
               <p className="truncate text-xs font-medium text-slate-700">{resultType}</p>
               <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">
-                {sourceCount} 個來源
+                {isPresentation ? '需分析成果' : `${sourceCount} 個來源`}
               </span>
             </div>
             <p
@@ -131,7 +133,7 @@ export function ResultCard({
           }`}
         >
           <span className={`size-1.5 rounded-full ${isReadyForGeneration ? 'bg-violet-500' : 'bg-amber-500'}`} />
-          {isReadyForGeneration
+          {isPresentation ? '簡報功能尚未提供' : isReadyForGeneration
             ? '設定已儲存，等待後端生成'
             : isConfigured
               ? '設定已儲存，來源尚待設定'
