@@ -82,8 +82,9 @@ The implemented storage lifecycle and project-isolation rules are documented in
 Presentation generation is separate from `AnalysisResult`. Contract v0 defines a
 synchronous Hackathon MVP: the frontend owns its loading state while
 `POST /v1/presentations` runs, then receives a ready `PresentationResult` or a
-non-2xx `ErrorResponse`. The endpoint and `python-pptx` generator are not part of
-the schema checkpoint.
+non-2xx `ErrorResponse`. The endpoint now resolves stored modules by project,
+generates an editable deck with `python-pptx`, stores it locally, and returns a
+project-scoped download URL.
 
 Only `project_id` and `source_module_ids` cross the boundary; complete upstream
 results are loaded by the backend and never copied into the request. See

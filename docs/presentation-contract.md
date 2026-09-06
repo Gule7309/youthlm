@@ -58,7 +58,7 @@ The v0 download URL includes both identities:
 /v1/projects/{project_id}/presentations/{presentation_id}/download
 ```
 
-The future download route must resolve the artifact by this composite identity.
+The download route resolves the artifact by this composite identity.
 A URL is not an authorization boundary; real authentication remains a later
 deployment concern.
 
@@ -85,14 +85,14 @@ The frontend must not:
    have a different lifecycle from analytical results.
 2. **Backward compatibility:** yes. Two standalone schemas and models are added;
    no existing field, endpoint, or meaning changes.
-3. **Frontend impact:** none until the endpoint exists. Later the frontend sends
-   `PresentationRequest`, shows a local loading state, then consumes the ready
-   result or the existing error shape.
-4. **Backend impact:** later work must add project-scoped module loading,
-   deterministic `python-pptx` generation, local artifact storage, and a
-   project-scoped download route.
+3. **Frontend impact:** the frontend may now send `PresentationRequest`, show a
+   local loading state, then consume the ready result or existing error shape.
+4. **Backend impact:** project-scoped module loading, deterministic
+   `python-pptx` generation, local artifact storage, and the project-scoped
+   download route are implemented in `apps/api`.
 5. **Mock impact:** new canonical request/result examples are added; existing
    Analysis fixtures remain unchanged.
 
-OpenSlide is not a dependency. Presenton remains a later adapter comparison only
-after the deterministic generator passes its integration tests.
+OpenSlide is not a dependency. Presenton remains a later adapter comparison; the
+current deterministic generator has HTTP, project-isolation, PPTX parsing, and
+download integration tests.

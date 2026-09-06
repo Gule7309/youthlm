@@ -11,6 +11,10 @@ does not contain model or dataset business logic.
   notebook.
 - `POST /v1/analysis` accepts Contract v0 `AnalysisRequest` and returns a
   Contract v0 `AnalysisResult` directly.
+- `POST /v1/presentations` loads stored Analysis modules and returns HTTP `201`
+  with a ready `PresentationResult`.
+- `GET /v1/projects/{project_id}/presentations/{presentation_id}/download`
+  downloads the generated editable PPTX within the same project boundary.
 
 Local browser clients on ports `3000` and `5173` are allowed by the default CORS
 policy. Deployed frontend origins must be passed explicitly when composing the app;
@@ -54,3 +58,36 @@ Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/v1/data-sources"
 
 The legacy root `app.api` remains available only for backward compatibility. New
 frontend work must not use its `{ "question": "..." }` request shape.
+
+## Generate a presentation
+
+First create or reuse one or more stored Analysis modules. Then send only their
+IDs and project identity:
+
+```powershell
+$body = Get-Content contracts/examples/presentation-request.json -Raw
+$result = Invoke-RestMethod `
+    -Method Post `
+    -Uri "http://127.0.0.1:8000/v1/presentations" `
+    -ContentType "application/json" `
+    -Body $body
+
+Invoke-WebRequest `
+    -Uri ("http://127.0.0.1:8000" + $result.download_url) `
+    -OutFile $result.file_name
+```
+
+The example's `project_id` and `source_module_ids` must match modules already
+stored by `POST /v1/analysis`. Generated files default to `var/artifacts`; both
+the SQLite database and artifact directory are local runtime state.
+
+For the canonical demo module, first run the Analysis smoke and then the
+Presentation smoke in the same API process:
+
+```powershell
+uv run python -m spikes.analysis_api_smoke
+uv run python -m spikes.presentation_api_smoke
+```
+
+The second command verifies the returned contract, downloaded byte size and
+SHA-256 digest, then saves the editable file under `var/smoke`.

@@ -40,6 +40,13 @@ class SQLiteModuleStoreTests(unittest.TestCase):
             self.assertFalse(hasattr(context, "visualization"))
             self.assertFalse(hasattr(context, "analysis_plan"))
 
+            full_result = SQLiteModuleStore(database_path).get_result(
+                result.project_id,
+                result.module_id,
+            )
+            self.assertEqual(full_result, result)
+            self.assertIsNot(full_result, result)
+
     def test_same_module_id_in_another_project_is_not_visible(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteModuleStore(Path(directory) / "youthlm.sqlite3")
@@ -47,8 +54,10 @@ class SQLiteModuleStoreTests(unittest.TestCase):
             store.save(result)
 
             context = store.get_context("different_project", result.module_id)
+            full_result = store.get_result("different_project", result.module_id)
 
             self.assertIsNone(context)
+            self.assertIsNone(full_result)
 
     def test_save_updates_only_the_same_project_module_key(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
