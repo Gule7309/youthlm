@@ -40,6 +40,8 @@ The first HTTP boundary is now available:
 - `GET /health`
 - `GET /v1/data-sources`
 - `POST /v1/analysis`
+- `POST /v1/presentations`
+- `GET /v1/projects/{project_id}/presentations/{presentation_id}/download`
 
 See [`docs/http-api.md`](docs/http-api.md) for the request and response workflow.
 
@@ -118,6 +120,18 @@ The smoke sends the canonical frontend request, validates a real
 `AnalysisResult`, and then submits a downstream module using the first result's
 ID. A passing second request proves that SQLite persistence and project-scoped
 Module Context lookup work through HTTP.
+
+After an Analysis module is stored, `POST /v1/presentations` can generate an
+editable `.pptx` without another model call. The deterministic generator uses
+the stored result's summary, structured data, visualization mapping, sources,
+versions, and warnings. Generated files are stored under
+`YOUTHLM_ARTIFACT_DIR` (default `var/artifacts`) and remain project-scoped.
+After the Analysis smoke has stored its canonical module, verify the full
+generation and download boundary with:
+
+```powershell
+uv run python -m spikes.presentation_api_smoke
+```
 
 The framework-neutral Chart Artifact adapter and frontend interaction handoff are
 documented in [`apps/web/README.md`](apps/web/README.md) and

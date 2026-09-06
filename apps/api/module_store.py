@@ -23,6 +23,12 @@ class ModuleStore(Protocol):
         module_id: str,
     ) -> ModuleContext | None: ...
 
+    def get_result(
+        self,
+        project_id: str,
+        module_id: str,
+    ) -> AnalysisResult | None: ...
+
 
 class InMemoryModuleStore:
     """Deterministic test double; production defaults to SQLite."""
@@ -40,10 +46,18 @@ class InMemoryModuleStore:
         project_id: str,
         module_id: str,
     ) -> ModuleContext | None:
-        result = self._results.get((project_id, module_id))
+        result = self.get_result(project_id, module_id)
         if result is None:
             return None
         return ModuleContext.from_analysis_result(result)
+
+    def get_result(
+        self,
+        project_id: str,
+        module_id: str,
+    ) -> AnalysisResult | None:
+        result = self._results.get((project_id, module_id))
+        return result.model_copy(deep=True) if result is not None else None
 
 
 class SQLiteModuleStore:
@@ -85,6 +99,17 @@ class SQLiteModuleStore:
         module_id: str,
     ) -> ModuleContext | None:
         """Return only a module from the requested project."""
+        result = self.get_result(project_id, module_id)
+        if result is None:
+            return None
+        return ModuleContext.from_analysis_result(result)
+
+    def get_result(
+        self,
+        project_id: str,
+        module_id: str,
+    ) -> AnalysisResult | None:
+        """Return a full result from the requested project."""
         try:
             with self._connect() as connection:
                 row = connection.execute(
@@ -102,10 +127,9 @@ class SQLiteModuleStore:
             return None
 
         try:
-            stored_result = AnalysisResult.model_validate(json.loads(row[0]))
+            return AnalysisResult.model_validate(json.loads(row[0]))
         except (json.JSONDecodeError, TypeError, ValueError) as error:
             raise ModuleStoreError("Stored module result is invalid") from error
-        return ModuleContext.from_analysis_result(stored_result)
 
     def _connect(self) -> sqlite3.Connection:
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
