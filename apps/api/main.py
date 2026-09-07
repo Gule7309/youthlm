@@ -1,5 +1,6 @@
 """Contract v0 FastAPI boundary for the YouthLM monorepo."""
 
+import logging
 import os
 from collections.abc import Sequence
 from typing import Any, Protocol
@@ -14,10 +15,10 @@ from app.data_catalog import DataSourceCatalog, build_default_data_source_catalo
 from app.provider_factory import ProviderConfigurationError, create_model_provider
 from app.source_registry import SourceNotFoundError, build_default_source_registry
 from app.tooling import build_default_tool_registry
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from contract_adapter import (
     ContractMappingError,
@@ -30,12 +31,30 @@ from contract_models import (
     AnalysisResult,
     ErrorDetail,
     ErrorResponse,
+    PresentationRequest,
+    PresentationResult,
 )
 from module_store import (
     ModuleStore,
     ModuleStoreError,
     SQLiteModuleStore,
 )
+from presentation_generator import (
+    PptxPresentationGenerator,
+    PresentationGenerationError,
+)
+from presentation_service import (
+    PPTX_MEDIA_TYPE,
+    PresentationModulesBlockedError,
+    PresentationModulesNotFoundError,
+    PresentationService,
+)
+from presentation_store import (
+    LocalPresentationArtifactStore,
+    PresentationArtifactStoreError,
+)
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CORS_ORIGINS = (
     "http://localhost:3000",
@@ -66,6 +85,19 @@ def build_default_module_store() -> SQLiteModuleStore:
     )
 
 
+def build_default_presentation_service(
+    module_store: ModuleStore,
+) -> PresentationService:
+    """Compose deterministic PPTX generation over local project storage."""
+    return PresentationService(
+        module_store=module_store,
+        generator=PptxPresentationGenerator(),
+        artifact_store=LocalPresentationArtifactStore(
+            os.getenv("YOUTHLM_ARTIFACT_DIR", "var/artifacts")
+        ),
+    )
+
+
 def _error_response(
     status_code: int,
     *,
@@ -93,6 +125,7 @@ def create_app(
     agent: AgentRunner | None = None,
     *,
     module_store: ModuleStore | None = None,
+    presentation_service: PresentationService | None = None,
     cors_origins: Sequence[str] = DEFAULT_CORS_ORIGINS,
 ) -> FastAPI:
     """Create Contract v0 API with injectable Agent and module storage."""
@@ -108,6 +141,10 @@ def create_app(
     )
     active_agent = agent
     active_module_store = module_store or build_default_module_store()
+    active_presentation_service = (
+        presentation_service
+        or build_default_presentation_service(active_module_store)
+    )
     source_registry = build_default_source_registry()
 
     def resolve_agent() -> AgentRunner:
@@ -118,7 +155,7 @@ def create_app(
 
     @application.exception_handler(RequestValidationError)
     async def validation_error(
-        _request: Any,
+        request: Request,
         error: RequestValidationError,
     ) -> JSONResponse:
         errors = [
@@ -132,7 +169,11 @@ def create_app(
         return _error_response(
             422,
             code="validation_error",
-            message="Analysis request validation failed",
+            message=(
+                "Presentation request validation failed"
+                if request.url.path == "/v1/presentations"
+                else "Analysis request validation failed"
+            ),
             retriable=False,
             details={"errors": errors},
         )
@@ -246,6 +287,93 @@ def create_app(
                 message="Model provider request failed",
                 retriable=True,
             )
+
+    @application.post(
+        "/v1/presentations",
+        response_model=PresentationResult,
+        response_model_exclude_none=True,
+        status_code=201,
+    )
+    def create_presentation(
+        request: PresentationRequest,
+    ) -> PresentationResult | JSONResponse:
+        try:
+            return active_presentation_service.create(request)
+        except PresentationModulesNotFoundError as error:
+            return _error_response(
+                404,
+                code="module_not_found",
+                message="One or more presentation source modules are not available",
+                retriable=False,
+                details={"missing_module_ids": error.module_ids},
+            )
+        except PresentationModulesBlockedError as error:
+            return _error_response(
+                422,
+                code="dataset_error",
+                message="Blocked analysis modules cannot generate a presentation",
+                retriable=False,
+                details={"blocked_module_ids": error.module_ids},
+            )
+        except ModuleStoreError:
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Module context storage failed",
+                retriable=True,
+            )
+        except PresentationGenerationError:
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Presentation generation failed",
+                retriable=True,
+            )
+        except PresentationArtifactStoreError:
+            logger.exception("Presentation artifact storage failed")
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Presentation artifact storage failed",
+                retriable=True,
+            )
+
+    @application.get(
+        "/v1/projects/{project_id}/presentations/{presentation_id}/download",
+        response_class=FileResponse,
+        response_model=None,
+    )
+    def download_presentation(
+        project_id: str,
+        presentation_id: str,
+    ) -> FileResponse | JSONResponse:
+        try:
+            artifact = active_presentation_service.get_artifact(
+                project_id,
+                presentation_id,
+            )
+        except PresentationArtifactStoreError:
+            logger.exception("Presentation artifact storage failed")
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Presentation artifact storage failed",
+                retriable=True,
+            )
+
+        if artifact is None:
+            return _error_response(
+                404,
+                code="module_not_found",
+                message="Presentation artifact is not available",
+                retriable=False,
+                details={"presentation_id": presentation_id},
+            )
+        return FileResponse(
+            artifact.path,
+            media_type=PPTX_MEDIA_TYPE,
+            filename=artifact.file_name,
+        )
 
     return application
 

@@ -90,12 +90,15 @@ expected account ID prevents accidentally using a personal AWS account.
     -ExpectedAccountId "<event-account-id>"
 ```
 
-The preflight stops at the first failure and verifies, in order:
+The preflight now runs the complete backend demo acceptance path and stops at the
+first failure. It verifies, in order:
 
 1. Offline tests.
 2. Ruff.
 3. AWS CLI identity and optional expected account ID.
-4. A real request through `BedrockConverseProvider`.
+4. A temporary live Contract v0 API using `BedrockConverseProvider`.
+5. Source-to-Chart analysis and project-scoped upstream module retrieval.
+6. Editable PPTX generation, download, file size, and SHA-256.
 
 Only after it prints `YouthLM Bedrock event-day preflight passed` should you start
 the isolated AgentCore smoke app:

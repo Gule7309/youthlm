@@ -81,7 +81,7 @@ git diff --check origin/main...HEAD
 3. 小幫手輸入「請分析並製作簡報」：有來源時只提供 1 項圖表設定草稿，並說明簡報限制；沒有來源時不提供可執行草稿。
 4. 若開發熱更新保留了舊簡報卡，應顯示不可用，不顯示原始來源連線／選擇器，不能儲存為簡報。可明確改選圖表並重新勾選來源；舊小幫手簡報草稿不能執行。
 
-後續待獨立簡報契約與服務實作後，再串接同一 project 下 completed／partial 分析模組；只有名稱和 Prompt 的圖表卡不能當成已完成分析。
+同步的 main `9430470` 已提供獨立簡報契約、`POST /v1/presentations` 與 PPTX 下載服務。前端仍需先完成 Source → Chart，再串接同一 project 下 completed／partial 分析模組；只有名稱和 Prompt 的圖表卡不能當成已完成分析，因此這次仍維持簡報停用。
 
 ## Chart Artifact 交接模組
 

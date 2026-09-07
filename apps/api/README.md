@@ -38,3 +38,10 @@ Contract-valid results are stored in local SQLite. Requests with non-empty
 them to the Agent; missing IDs return `module_not_found`. Configure the database
 path with `YOUTHLM_SQLITE_PATH` (default `var/youthlm.sqlite3`). Moving the
 remaining backend modules under `apps/api/app/` remains deferred.
+
+`POST /v1/presentations` accepts the separate `PresentationRequest`, resolves
+every source module by `(project_id, module_id)`, and returns HTTP `201` with a
+ready `PresentationResult`. The response's project-scoped `download_url` serves
+the editable PPTX. Configure generated-file storage with
+`YOUTHLM_ARTIFACT_DIR` (default `var/artifacts`). Blocked or cross-project source
+modules never reach the generator.

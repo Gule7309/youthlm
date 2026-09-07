@@ -1,0 +1,13 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_1",
+  "source_module_ids": [
+    "analysis_1"
+  ],
+  "title": "板橋區青年人口趨勢",
+  "audience": "新北市青年政策規劃人員",
+  "language": "zh-TW",
+  "template_id": "youthlm_default",
+  "output_format": "pptx",
+  "instructions": "使用清楚的政策簡報語氣，保留所有資料限制與來源。"
+}

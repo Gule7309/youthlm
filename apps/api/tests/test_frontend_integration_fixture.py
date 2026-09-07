@@ -23,7 +23,13 @@ def load_fixture(name: str) -> dict:
     return json.loads((FIXTURE_ROOT / name).read_text(encoding="utf-8"))
 
 
-def request(app, method: str, path: str, *, json: dict) -> httpx.Response:
+def request(
+    app,
+    method: str,
+    path: str,
+    *,
+    json: dict | None = None,
+) -> httpx.Response:
     async def send() -> httpx.Response:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -129,6 +135,32 @@ def blocked_agent() -> YouthLMAgent:
 
 
 class FrontendIntegrationFixtureTests(unittest.TestCase):
+    def test_data_source_catalog_fixture_matches_endpoint(self) -> None:
+        response = request(
+            build_test_app(successful_agent()),
+            "GET",
+            "/v1/data-sources",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            load_fixture("data-sources.example.json"),
+        )
+        self.assertEqual(
+            [source["source_id"] for source in response.json()["sources"]],
+            [
+                "ntpc_unemployment_by_age_sex",
+                "ntpc_population_by_age_sex_district",
+            ],
+        )
+        self.assertTrue(
+            all(
+                source["default_for_notebooks"]
+                for source in response.json()["sources"]
+            )
+        )
+
     def test_source_to_chart_fixture_matches_real_analysis_endpoint(self) -> None:
         request_payload = load_fixture("analysis-request.example.json")
         expected_result = load_fixture("analysis-result.example.json")

@@ -40,6 +40,8 @@ The first HTTP boundary is now available:
 - `GET /health`
 - `GET /v1/data-sources`
 - `POST /v1/analysis`
+- `POST /v1/presentations`
+- `GET /v1/projects/{project_id}/presentations/{presentation_id}/download`
 
 See [`docs/http-api.md`](docs/http-api.md) for the request and response workflow.
 
@@ -54,6 +56,17 @@ YouthLM selects one provider explicitly through `MODEL_PROVIDER`:
 There is no automatic provider fallback. See
 [`docs/provider-switching.md`](docs/provider-switching.md) for the current workflow
 and the event-day preflight command.
+
+For one-command backend demo acceptance, see
+[`docs/demo-readiness.md`](docs/demo-readiness.md). On Windows, copy the Gemini key
+and run:
+
+```powershell
+.\scripts\run-demo-preflight.ps1
+```
+
+It starts a temporary API, proves Source-to-Chart and stored upstream context,
+generates and validates an editable PPTX, then always stops the temporary server.
 
 ## Local setup
 
@@ -129,9 +142,22 @@ npm run dev
 ```
 
 Use `npm run check` to run strict TypeScript checking, build the UI, and execute
-the adapter's six fixture-based tests, stopping on the first failure. Each gate
+all 31 frontend tests, including the adapter's six fixture-based tests, stopping
+on the first failure. Each gate
 can also run separately with `npm run typecheck`, `npm run build`, or `npm test`.
 The UI is still a frontend mock, not a live API integration.
+
+After an Analysis module is stored, `POST /v1/presentations` can generate an
+editable `.pptx` without another model call. The deterministic generator uses
+the stored result's summary, structured data, visualization mapping, sources,
+versions, and warnings. Generated files are stored under
+`YOUTHLM_ARTIFACT_DIR` (default `var/artifacts`) and remain project-scoped.
+After the Analysis smoke has stored its canonical module, verify the full
+generation and download boundary with:
+
+```powershell
+uv run python -m spikes.presentation_api_smoke
+```
 
 The framework-neutral Chart Artifact adapter and frontend interaction handoff are
 documented in [`apps/web/README.md`](apps/web/README.md) and

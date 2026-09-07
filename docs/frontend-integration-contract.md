@@ -48,6 +48,33 @@ compatibility check, and verifies that the deterministic query kept both the
 source ID and every selected filter. It does not ask the model to manufacture
 rows, chart points, warnings, versions, or provenance.
 
+## Shared source catalog
+
+Before building an `AnalysisRequest`, the frontend loads shared installed sources:
+
+```text
+GET /v1/data-sources
+→ DataSourceCatalog
+→ Source Node registry selector and filter controls
+```
+
+The exact response is frozen as
+`contracts/fixtures/frontend-integration/data-sources.example.json`. This mock
+contains the two sources currently installed for every notebook:
+
+- `ntpc_unemployment_by_age_sex`;
+- `ntpc_population_by_age_sex_district`.
+
+The frontend may use `available_geographies`, `available_age_groups`,
+`available_sexes`, `available_years`, and `capabilities` to constrain its filter
+controls. It must preserve the selected registry `source_id`; a Canvas Source
+Node ID is only UI identity and never substitutes for it.
+
+Only sources whose `status` is `available` and `default_for_notebooks` is `true`
+should appear in the first P0 selector. File uploads and arbitrary API sources
+remain separate P1 registration workflows and cannot be sent as invented source
+IDs.
+
 ## First integration golden path
 
 The implemented P0 path is:
@@ -70,6 +97,7 @@ Canvas construction, and advanced PDF workflows are outside this path.
 
 | Case | Request | Response | HTTP status |
 | --- | --- | --- | --- |
+| Load shared Source Nodes | none | `contracts/fixtures/frontend-integration/data-sources.example.json` | `200` |
 | Source-to-Chart success | `contracts/fixtures/frontend-integration/analysis-request.example.json` | `contracts/fixtures/frontend-integration/analysis-result.example.json` | `200` |
 | Safely blocked exact 18–35 claim | Request below | `contracts/fixtures/frontend-integration/blocked-result.example.json` | `200` |
 | Missing upstream module | Request below | `contracts/fixtures/frontend-integration/error-response.example.json` | `404` |

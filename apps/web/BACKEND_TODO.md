@@ -4,11 +4,11 @@
 
 這份文件追蹤前端、後端、AI、資料保存、原始資料與 AWS 部署的交接狀態。「後端已有實作」不等於「前端已串接」，也不等於「已在比賽 AWS 環境驗證」。每完成一個功能，都應同步更新狀態、驗證方式與負責人；正式契約的變更另由團隊確認。
 
-本次核對基準：2026-09-06 15:04（台灣時間），GitHub `main` 為 `4d94577`，已合併 [PR #11 圖表交接模組](https://github.com/Gule7309/youthlm/pull/11)。以下後端狀態依本機對應程式、測試定義及文件確認；這次文件校正沒有重跑後端測試、呼叫真實模型或驗證 AWS。前端已執行的檢查另列於下方。
+初次資料／後端稽核基準：2026-09-06 15:04（台灣時間），當時 `main` 為 `4d94577`，已合併 [PR #11 圖表交接模組](https://github.com/Gule7309/youthlm/pull/11)。2026-09-07 為解除 PR #12 的 README 衝突，前端分支再同步至 main `9430470`；下方簡報與 API 狀態已依新增程式及文件校正。本次未重跑後端測試、呼叫真實模型或驗證 AWS；前端檢查另列於下方。
 
 - 正式前端：`apps/web/`；FastAPI application：`apps/api/`；Python 核心：`app/`。
 - 正式介面以 [API 契約](../../docs/api-contract.md)、[前端整合契約](../../docs/frontend-integration-contract.md) 及 [contracts](../../contracts/README.md) 為準，版本為 `0.1.0`（Contract v0）。
-- [PR #13 簡報契約](https://github.com/Gule7309/youthlm/pull/13) 與 [PR #14 資料目錄 fixture](https://github.com/Gule7309/youthlm/pull/14) 在上述時間仍未合併；不能當成 main 已提供的簡報服務或已合併測試。資料目錄 API 本身已存在，不必等 PR #14 才算實作。
+- 最新同步基準已包含 [PR #13 簡報契約](https://github.com/Gule7309/youthlm/pull/13)、[PR #14 資料目錄 fixture](https://github.com/Gule7309/youthlm/pull/14)、[PR #15 簡報生成](https://github.com/Gule7309/youthlm/pull/15)、[PR #16 示範驗收工具](https://github.com/Gule7309/youthlm/pull/16) 與 [PR #17 Windows 簡報檔案路徑修正](https://github.com/Gule7309/youthlm/pull/17)。簡報後端與 PPTX 下載已存在，但前端尚未串接；不能把本次同步視為真實模型或 AWS 驗收。
 
 ## 2026-09-07：Tooltip 零值與 PR 空白修正
 
@@ -23,6 +23,8 @@
 - [ ] 等待 reviewer 重驗及核准，再依團隊流程合併；不自動合併到 main。
 
 提交檢查要求：必須再執行 reviewer 指定的 `git diff --check origin/main...HEAD` 並確認 exit code 0，才可推送；結果與實際 commit SHA 一併記錄於 PR 留言。尚未提交時該指令仍檢查舊 HEAD，不能用工作目錄檢查取代提交後的驗證。
+
+本輪修正已以 `a8acfe3` 推送，提交後上述空白檢查為 exit code 0，已回覆 PR 並請求 review。之後同步 main `9430470` 時，唯一衝突為根目錄 README：保留前端啟動與後端簡報說明兩段，不改動後端實作；前端功能與簡報停用狀態維持不變。
 
 提示框元件尚未接到白板圖表；本次採 React 靜態渲染測試，只替換不具伺服器端尺寸的 ResponsiveContainer 版面容器，保留真實 ChartContainer context 與 Tooltip JSX。沒有新增測試框架、依賴或產品測試頁。重測指令見 README。
 
@@ -101,7 +103,7 @@
 | 登入、註冊與筆記本 | 表單、列表與操作原型 | 分析 API 有 project 範圍，但不是登入權限 | 真實驗證、Notebook CRUD、使用者權限與恢復登入 |
 | 來源卡片 | 拖放、設定及摘要；檔案僅 metadata，網址不連線 | 兩份官方快照、Source Registry、`GET /v1/data-sources`、確定性查詢與相容性檢查 | 串接目錄、篩選／預覽；通用上傳、清理、抓取與更新 pipeline |
 | 圖表成果 | 設定 UI；adapter 與六個測試已合併，未接 React | `POST /v1/analysis` 回傳結構化資料、圖表規格、警告與引用 | Source → Chart 請求、四種回應狀態、實際圖表／表格、來源追溯與匯出 |
-| 簡報成果 | 選項停用，明示需完成／部分完成分析成果；舊簡報卡不接原始來源 | 本文核對時間 PR #13 為未合併契約提案，main 無簡報 endpoint | 真實分析模組選取、生成／預覽、PPTX／PDF，待獨立服務 |
+| 簡報成果 | 選項停用，明示需完成／部分完成分析成果；舊簡報卡不接原始來源 | 簡報契約、同步生成服務及 project-scoped PPTX 下載已合併至 main | 前端真實分析模組選取、生成／下載串接與預覽；PDF 另待設計 |
 | 小幫手 | 訊息及固定操作草稿，未呼叫 AI | Research Agent、工具迴圈、Gemini／Bedrock adapters | Notebook 對話生命週期、串流／停止、畫布操作工具與紀錄保存 |
 | 政策雷達 | 固定面板、卡片數量盤點與本次頁面最近紀錄 | 可重用既有分析能力，但無專用雷達服務 | 雷達契約、真實政策分析、失敗處理、最近成功結果永久保存 |
 | 分析／白板保存 | 白板仍為 React 記憶體 | SQLite 保存 `(project_id, module_id)` 分析結果並解析上游模組 | 整本筆記本／節點／連線／對話保存及還原；雲端持久化 |
@@ -266,13 +268,14 @@
 - [x] `POST /v1/analysis` 直接回傳 Contract v0 `AnalysisResult`，包含結構化查詢資料、可選的 visualization、摘要、警告、來源、版本與 provenance；不是圖片或舊版 `AgentResult` 包裝。
 - [x] 已定義 `completed`／`partial`／`blocked` 分析狀態及非 2xx `ErrorResponse`，並提供 [正式整合 fixtures](../../contracts/fixtures/frontend-integration/)。
 - [x] SQLite 以 `(project_id, module_id)` 保存有效 `AnalysisResult`，需要上游資料時再讀出並轉為 `ModuleContext`；同一 key 更新目前結果，不是獨立的上下文快照或完整版本歷史。
-- [ ] 獨立的簡報大綱／頁面內容生成服務。PR #13 是契約提案，不是已實作 endpoint；依 [圖表交接文件](../../docs/frontend-chart-artifact.md) 使用已保存的 completed／partial 分析模組，不直接接 raw Source Nodes。
-- [ ] PPTX／PDF 匯出方式與使用套件。
+- [x] 獨立簡報服務已合併：`POST /v1/presentations` 使用已保存的 completed／partial 分析模組，確定性產生可編輯 PPTX，成功回傳 HTTP 201／ready `PresentationResult`；不直接接 raw Source Nodes，也不另外呼叫模型。前端未串接。
+- [x] 已有 project-scoped PPTX 生成及下載端點，見 [HTTP API](../../docs/http-api.md)；project 範圍不是登入授權，檔案仍為本機儲存。
+- [ ] PDF 匯出／預覽與雲端檔案保存。
 - [ ] 圖表圖片或 SVG 匯出。
 - [ ] UI 重新分析流程、成果版本與完整歷史；既有 SQLite 最新分析結果保存不涵蓋這些功能。
 - [ ] Notebook／成果編輯設定的名稱、Prompt 與畫布連線保存；不要把這項與 AnalysisResult 已有的 filters、來源及版本混為一談。
-- [ ] 下載網址、檔案期限與權限控制。
-- [ ] 前端串接已有的分析狀態／錯誤格式；簡報生成失敗與重試依後續獨立契約處理，不自訂尚不存在的 job／polling API。
+- [ ] 前端使用既有 `download_url`；補齊雲端檔案期限及使用者權限控制，不把 project-scoped 下載當成身分驗證。
+- [ ] 前端串接已有的分析狀態／錯誤格式與 [簡報契約](../../docs/presentation-contract.md)；不自訂非同步 job／polling API。
 
 ## 3. 小幫手卡片
 
@@ -371,6 +374,8 @@
 | 健康檢查 | `GET /health` | 服務狀態，不代表模型權限／所有外部依賴已通過測試 |
 | 共用資料目錄 | `GET /v1/data-sources` | `DataSourceCatalog`，含 `sources: SourceMetadata[]`；目前為兩份已安裝資料，非使用者來源 CRUD |
 | 結構化分析 | `POST /v1/analysis` | 直接回傳 `AnalysisResult`；HTTP 200 包含 completed／partial／blocked，非 2xx 使用 `ErrorResponse` |
+| 簡報生成 | `POST /v1/presentations` | 使用保存的分析模組，成功回傳 HTTP 201／ready `PresentationResult`；前端尚未接 |
+| 簡報下載 | `GET /v1/projects/{project_id}/presentations/{presentation_id}/download` | 下載同一 project 下已生成的可編輯 PPTX；不是使用者登入權限驗證 |
 
 串接時必須分清：
 
@@ -382,9 +387,9 @@
 
 ### 待設計、不可視為現有 endpoint
 
-登入／註冊、Notebook CRUD、白板保存、上傳／自訂來源註冊、通用 pipeline、Notebook 對話、政策雷達、簡報生成與檔案下載仍需各自確認介面。舊版 `/api/...` 路徑表只是原型提案，本文件不再把它列成串接清單；歷史規劃保留於 [9/1 規劃文件](./docs/frontend-plan-2026-09-01.md)，不得據此實作或要求後端遵循。
+登入／註冊、Notebook CRUD、白板保存、上傳／自訂來源註冊、通用 pipeline、Notebook 對話及政策雷達仍需各自確認介面。簡報生成／PPTX 下載已列入上方現有端點，不再視為待設計。舊版 `/api/...` 路徑表只是原型提案；歷史規劃保留於 [9/1 規劃文件](./docs/frontend-plan-2026-09-01.md)，不得據此實作或要求後端遵循。
 
-簡報提案 PR #13 及資料目錄 fixture PR #14 的狀態見文件頂部。後續使用合併後契約與範例；本次不新增或修改 `apps/api/`、`contracts/`。
+簡報契約 PR #13 與資料目錄 fixture PR #14 均已合併，後續使用 main 的契約與範例。本次僅同步 main 並解決 README 衝突，不自行修改 `apps/api/`、`contracts/`。
 
 ## AWS 部署與基礎設施
 
@@ -459,7 +464,7 @@ VITE_DEMO_MODE
 - [ ] 是否另找可精確描述 18–35 歲的資料，以及展示範圍；既有不可拆分年齡組／不造數值規則已確定。
 - [ ] 地圖邊界來源與地圖套件。
 - [x] 圖表以 AnalysisResult 結構化 records／visualization 與既有 adapter 交接。
-- [ ] 圖表匯出格式及簡報契約、生成／下載服務；PR #13 尚待合併與服務實作。
+- [ ] 圖表匯出格式與前端簡報生成／下載串接；簡報契約、PPTX 生成及下載服務已合併，PDF 與雲端保存仍待完成。
 - [ ] 檔案上傳大小與保存期限。
 - [ ] 政策雷達是否只保存最新結果或保留完整歷史。
 - [ ] 主辦 AWS 平台的服務限制與部署截止時間。
