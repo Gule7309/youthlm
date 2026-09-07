@@ -32,7 +32,7 @@ React／ReactDOM 18.3.1 已列為應用程式直接依賴，React 型別也固�
 
 ## 人工驗收（型別檢查這一步）
 
-型別設定本身不應改變畫面或既有操作。請在 `apps/web` 的終端先執行 `npm run check`，確認沒有 `error TS...`、建置錯誤或失敗測試。目前包含 6 個圖表交接、15 個白板狀態及 4 個簡報分界測試（含子測試），共 25 個測試。若要重測乾淨安裝，先停止原本的開發伺服器，再執行 `npm ci` 與 `npm run check`。
+型別設定本身不應改變畫面或既有操作。請在 `apps/web` 的終端先執行 `npm run check`，確認沒有 `error TS...`、建置錯誤或失敗測試。目前包含 6 個圖表交接、15 個白板狀態、4 個簡報分界及 6 個 Tooltip 渲染測試（含子測試），共 31 個測試。若要重測乾淨安裝，先停止原本的開發伺服器，再執行 `npm ci` 與 `npm run check`。
 
 啟動 `npm run dev`，開啟終端顯示的網址，檢查：
 
@@ -41,7 +41,19 @@ React／ReactDOM 18.3.1 已列為應用程式直接依賴，React 型別也固�
 3. 卡片可拖動，`Ctrl`＋滾輪可縮放，政策雷達仍固定在左上標題右側，展開／收合正常。
 4. 瀏覽器開發者工具的 Console 沒有新的紅色錯誤，頁面沒有白屏或 Vite 錯誤遮罩。
 
-重新整理頁面仍會重置前端模擬資料，這不是本次型別調整造成的新問題。Canvas ID 已分離；簡報已明示不可用，不再使用原始來源。使用者已逐步接受本輪修正，以上步驟保留供重測；本輪修正以本機 commit 保存，尚未 push，也尚未取得後續 PR review 核准。
+重新整理頁面仍會重置前端模擬資料，這不是本次型別調整造成的新問題。Canvas ID 已分離；簡報已明示不可用，不再使用原始來源。使用者已逐步接受上一輪修正，並以 `24b7f5d` 推送；以上步驟保留供重測。本次追加 Tooltip／空白修正，提交檢查結果與 review／合併狀態以 PR #12 為準。
+
+## Tooltip 零值回歸與 PR 空白檢查
+
+從 `apps/web` 執行 `node --test test/chart-tooltip.test.js`，應有 6 個測試通過。測試直接渲染真正的 Tooltip，確認 `0` 位於有樣式的數值 `<span>` 中、正負數維持格式化、缺值省略，以及自訂 formatter 仍收到零值。元件目前尚未接到白板圖表，因此這一步沒有新增可從白板開啟的 Tooltip 測試畫面。
+
+除了 `npm run check`，PR 提交後還要在 repository 根目錄執行：
+
+```sh
+git diff --check origin/main...HEAD
+```
+
+必須為 exit code 0。單獨的 `git diff --check` 只看未暫存差異，工作目錄乾淨時不會檢查 PR 中已有的空白問題。若修正尚未提交，可先執行 `git merge-base origin/main HEAD` 取得基底 SHA，再以 `git diff --check <基底SHA>` 檢查包含本機修改的已追蹤檔案；新增檔案需另外檢查，提交後仍需重跑上述三點比較指令。
 
 ## 卡片 ID 與資料來源 ID
 
@@ -90,7 +102,7 @@ React／ReactDOM 18.3.1 已列為應用程式直接依賴，React 型別也固�
 
 - 正式前後端資料格式以根目錄的 [contracts](../../contracts/README.md) 與 [前端整合契約](../../docs/frontend-integration-contract.md) 為準。
 - [BACKEND_TODO.md](./BACKEND_TODO.md) 已依 2026-09-06 的 main／PR 狀態校正，分開後端已實作、前端未串接及待設計事項，並列出兩份官方資料的範圍與缺口；不把本機分析保存或 provider adapter 視為整本筆記本恢復或 AWS 已驗收。
-- [PR #12 review 回覆與交接清單](./docs/pr-12-review-response.md) 對照本輪六項 review 要求、已執行檢查，以及下一個 Source → Chart PR 的範圍；尚未發布到 GitHub。
+- [PR #12 review 回覆與交接清單](./docs/pr-12-review-response.md) 對照第一輪六項 review 要求、已執行檢查，以及下一個 Source → Chart PR 的範圍；已隨 `24b7f5d` 推送，保留提交時的紀錄。最新修正進度以 BACKEND_TODO 為準。
 - [9/1 前端規劃](./docs/frontend-plan-2026-09-01.md) 是歷史提案，其中的 API 路徑、架構與功能優先序不視為目前已凍結的契約。
 - 後續先完成目前 PR 的 review 修正，再用另一個小 PR 接上 Source → Chart 流程。此次不包含真實 API 串接、簡報生成或 AWS 部署。
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Share, Database, FileText, Plus, Settings2, Sparkles, 
-  MessageSquare, GripHorizontal, ChevronLeft, 
+import {
+  Share, Database, FileText, Plus, Settings2, Sparkles,
+  MessageSquare, GripHorizontal, ChevronLeft,
   PanelLeftClose, PanelLeftOpen,
   PanelRightClose, PanelRightOpen, ArrowRight, SlidersHorizontal,
   AlertTriangle, CheckCircle2
@@ -209,7 +209,7 @@ export default function App() {
     e.stopPropagation();
     const node = nodes.find(n => n.id === id);
     if (!node) return;
-    
+
     setDraggingNode(id);
     setNodeDragOffset({
       x: e.clientX,
@@ -229,9 +229,9 @@ export default function App() {
       } else if (draggingNode) {
         const dx = (e.clientX - nodeDragOffset.x) / zoom;
         const dy = (e.clientY - nodeDragOffset.y) / zoom;
-        setNodes(nodes.map(n => 
-          n.id === draggingNode 
-            ? { ...n, x: nodeDragOffset.nodeStartX + dx, y: nodeDragOffset.nodeStartY + dy } 
+        setNodes(nodes.map(n =>
+          n.id === draggingNode
+            ? { ...n, x: nodeDragOffset.nodeStartX + dx, y: nodeDragOffset.nodeStartY + dy }
             : n
         ));
       }
@@ -1035,7 +1035,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden font-sans relative">
-      
+
       {/* Floating Header */}
       <header className="absolute top-4 left-4 right-4 z-50 flex items-start justify-between gap-3 pointer-events-none">
         <div className="flex min-w-0 flex-1 flex-wrap items-start gap-3">
@@ -1076,7 +1076,7 @@ export default function App() {
             />
           </div>
         </div>
-        
+
         <div className="pointer-events-auto flex shrink-0 gap-2">
           <button className="h-9 px-3 text-sm font-medium bg-card border border-border text-foreground shadow-sm rounded-lg hover:bg-muted transition-colors flex items-center gap-2">
             <Share className="size-4" />
@@ -1092,12 +1092,12 @@ export default function App() {
         onDragOver={handleCanvasDragOver}
         onDrop={handleCanvasDrop}
       >
-        
+
         {/* Infinite Grid Background (Scales & Pans with Canvas) */}
-        <div 
-          className="absolute inset-0 pointer-events-none z-0" 
-          style={{ 
-            backgroundSize: `${24 * zoom}px ${24 * zoom}px`, 
+        <div
+          className="absolute inset-0 pointer-events-none z-0"
+          style={{
+            backgroundSize: `${24 * zoom}px ${24 * zoom}px`,
             backgroundPosition: `${pan.x}px ${pan.y}px`,
             backgroundImage: 'radial-gradient(circle, var(--color-border) 1px, transparent 1px)',
             opacity: 0.6
@@ -1105,18 +1105,18 @@ export default function App() {
         />
 
         {/* Panning Interaction Receiver */}
-        <div 
+        <div
           className="absolute inset-0 z-0 touch-none"
           style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
           onPointerDown={handleCanvasPointerDown}
         />
 
         {/* Transformed Canvas Content Container */}
-        <div 
+        <div
           className={`absolute inset-0 pointer-events-none z-10 ${nodes.length === 0 ? 'hidden' : ''}`}
-          style={{ 
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, 
-            transformOrigin: '0 0' 
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: '0 0'
           }}
         >
           {/* Dynamic SVG Connections */}
@@ -1147,12 +1147,12 @@ export default function App() {
             })}
             {transformOutput && analysisInput && (
               <>
-                <path 
+                <path
                   d={`M ${transformOutput.x} ${transformOutput.y} C ${transformOutput.x + 70} ${transformOutput.y}, ${analysisInput.x - 70} ${analysisInput.y}, ${analysisInput.x} ${analysisInput.y}`}
-                  fill="none" 
-                  stroke="var(--color-ring)" 
-                  strokeWidth="2" 
-                  strokeDasharray="4 4" 
+                  fill="none"
+                  stroke="var(--color-ring)"
+                  strokeWidth="2"
+                  strokeDasharray="4 4"
                   opacity="0.5"
                 />
                 <circle cx={transformOutput.x} cy={transformOutput.y} r="4" fill="var(--color-ring)" opacity="0.8" />
@@ -1318,14 +1318,14 @@ export default function App() {
           </div>
 
           {/* Analysis Node - Large */}
-          <div 
+          <div
             className={`${analysis ? '' : 'hidden'} absolute pointer-events-auto w-[360px] bg-card rounded-xl border border-border shadow-sm flex flex-col hover:shadow-md transition-shadow`}
             style={{ left: 0, top: 0, transform: `translate(${analysis?.x ?? 0}px, ${analysis?.y ?? 0}px)` }}
             onPointerDown={(e) => e.stopPropagation()} // Prevent canvas drag when clicking inside node
           >
             {/* Input Port */}
             <div className="absolute left-[-5px] top-[80px] size-2.5 rounded-full border-2 border-primary bg-background ring-4 ring-background"></div>
-            <div 
+            <div
               className="h-10 border-b border-border px-3 flex items-center justify-between bg-muted/30 rounded-t-xl group cursor-grab active:cursor-grabbing"
               onPointerDown={(e) => analysis && handleNodePointerDown(e, analysis.id)}
             >
@@ -1337,7 +1337,7 @@ export default function App() {
                 <Settings2 className="size-3.5" />
               </button>
             </div>
-            
+
             <div className="p-4 space-y-4">
               {/* Question */}
               <div>
@@ -1391,13 +1391,13 @@ export default function App() {
             </div>
           </div>
         )}
-        
+
         {/* Zoom & Fit Controls */}
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-card border border-border rounded-full shadow-sm p-1.5 z-40">
           <span className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-muted-foreground/80">
             Ctrl + 滾輪縮放
           </span>
-          <button 
+          <button
             onClick={handleZoomOut}
             className="size-7 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors"
             aria-label="縮小白板"
@@ -1413,7 +1413,7 @@ export default function App() {
               {Math.round(zoom * 100)}%
             </output>
           </div>
-          <button 
+          <button
             onClick={handleZoomIn}
             className="size-7 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors"
             aria-label="放大白板"
@@ -1421,7 +1421,7 @@ export default function App() {
             <span className="text-lg font-medium leading-none mb-0.5">+</span>
           </button>
           <div className="w-px h-4 bg-border/50 mx-1" />
-          <button 
+          <button
             onClick={handleFitView}
             className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors"
           >
@@ -1431,23 +1431,23 @@ export default function App() {
       </main>
 
       {/* Floating Left Panel (Collapsible) */}
-      <div 
+      <div
         className={`absolute top-20 bottom-6 left-4 z-40 flex bg-card border border-border shadow-sm rounded-xl transition-all duration-300 ease-in-out ${
           isLeftOpen ? 'w-[280px]' : 'w-14'
         }`}
       >
         {/* Rail (Always visible) */}
         <div className="w-14 flex-none border-r border-border/50 flex flex-col items-center py-4 gap-4">
-          <button 
+          <button
             onClick={() => setIsLeftOpen(!isLeftOpen)}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
             title={isLeftOpen ? "收合卡片工具" : "開啟卡片工具"}
           >
             {isLeftOpen ? <PanelLeftClose className="size-5" /> : <PanelLeftOpen className="size-5" />}
           </button>
-          
+
           <div className="w-8 h-px bg-border/50" />
-          
+
           <button
             type="button"
             draggable
@@ -1504,7 +1504,7 @@ export default function App() {
                 <p className="mt-1 text-[11px] text-muted-foreground">點擊，或拖放到白板指定位置</p>
               </div>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
               <button
                 type="button"
@@ -1569,7 +1569,7 @@ export default function App() {
       </div>
 
       {/* Floating Right Panel - Selected Card Settings */}
-      <div 
+      <div
         className={`absolute top-20 bottom-6 right-4 z-40 flex bg-card border border-border shadow-sm rounded-xl transition-all duration-300 ease-in-out ${
           isRightOpen ? (selectedSource || selectedResult ? 'w-[420px]' : 'w-[320px]') : 'w-14'
         }`}
@@ -1642,16 +1642,16 @@ export default function App() {
 
         {/* Rail (Always visible on right edge) */}
         <div className="w-14 flex-none border-l border-border/50 flex flex-col items-center py-4 gap-4 bg-card rounded-r-xl">
-          <button 
+          <button
             onClick={() => setIsRightOpen(!isRightOpen)}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
             title={isRightOpen ? "收合卡片設定" : "開啟卡片設定"}
           >
             {isRightOpen ? <PanelRightClose className="size-5" /> : <PanelRightOpen className="size-5" />}
           </button>
-          
+
           <div className="w-8 h-px bg-border/50" />
-          
+
           <button
             type="button"
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors relative group"

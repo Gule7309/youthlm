@@ -1,6 +1,6 @@
 # YouthLM 後端整合與未完成事項
 
-最後更新：2026-09-06
+最後更新：2026-09-07
 
 這份文件追蹤前端、後端、AI、資料保存、原始資料與 AWS 部署的交接狀態。「後端已有實作」不等於「前端已串接」，也不等於「已在比賽 AWS 環境驗證」。每完成一個功能，都應同步更新狀態、驗證方式與負責人；正式契約的變更另由團隊確認。
 
@@ -10,9 +10,25 @@
 - 正式介面以 [API 契約](../../docs/api-contract.md)、[前端整合契約](../../docs/frontend-integration-contract.md) 及 [contracts](../../contracts/README.md) 為準，版本為 `0.1.0`（Contract v0）。
 - [PR #13 簡報契約](https://github.com/Gule7309/youthlm/pull/13) 與 [PR #14 資料目錄 fixture](https://github.com/Gule7309/youthlm/pull/14) 在上述時間仍未合併；不能當成 main 已提供的簡報服務或已合併測試。資料目錄 API 本身已存在，不必等 PR #14 才算實作。
 
+## 2026-09-07：Tooltip 零值與 PR 空白修正
+
+依 [9/6 22:03 review](https://github.com/Gule7309/youthlm/pull/12#pullrequestreview-5125543386)，上一輪主要架構修正已被確認正確。本節記錄後續兩項修正與驗證；提交／推送結果另見 PR #12 留言，不代表 reviewer 已核准或 PR 已合併。
+
+- [x] Tooltip 改為明確排除 `undefined`／`null`，合法的 `0` 仍進入數值 `<span>`，保留字型、對齊與格式化。
+- [x] 新增 6 個實際元件渲染測試：零值、正負數格式化、null、undefined、自訂 formatter 收到零值，以及未啟用／空 payload。零值測試在修正前失敗、修正後通過；不能只檢查 HTML 是否含有字串 `0`，因為舊寫法可能渲染裸文字 `0`。
+- [x] 清除 `index.html`、`App.tsx` 的行尾空白及檔尾多餘空白行；以忽略行尾空白／空行的 Git diff 確認兩檔沒有其他內容變動。
+- [x] `npm run check` 通過 typecheck、Vite build 與全部 31 個測試（既有 25 個，加上本次 6 個 Tooltip 渲染測試）；本輪沒有重跑瀏覽器、後端測試或 AWS 驗收。
+- [x] 以 PR merge-base 對照目前工作目錄，整體空白檢查為 exit code 0；不能只用 `git diff --check` 檢查未提交差異，否則會漏掉前次 commit 已帶入的問題。
+- [x] 使用者於 2026-09-07 回覆「好的下一步」，接受本步修正並進入提交、推送與重新請求 review 的流程。本輪未修改後端、契約或既有 Chart Artifact adapter，未加入 API 串接。
+- [ ] 等待 reviewer 重驗及核准，再依團隊流程合併；不自動合併到 main。
+
+提交檢查要求：必須再執行 reviewer 指定的 `git diff --check origin/main...HEAD` 並確認 exit code 0，才可推送；結果與實際 commit SHA 一併記錄於 PR 留言。尚未提交時該指令仍檢查舊 HEAD，不能用工作目錄檢查取代提交後的驗證。
+
+提示框元件尚未接到白板圖表；本次採 React 靜態渲染測試，只替換不具伺服器端尺寸的 ResponsiveContainer 版面容器，保留真實 ChartContainer context 與 Tooltip JSX。沒有新增測試框架、依賴或產品測試頁。重測指令見 README。
+
 ## 2026-09-06：PR #12 修正進度
 
-依 [PR #12 最新 review](https://github.com/Gule7309/youthlm/pull/12#pullrequestreview-5124038212) 分步修正，每步完成後停下供人工檢查。本輪修正以本機 commit 保存，尚未 push，GitHub PR 內容不等於目前本機內容。
+依 [PR #12 第一輪人工 review](https://github.com/Gule7309/youthlm/pull/12#pullrequestreview-5124038212) 分步修正，每步完成後停下供人工檢查。此輪已以 `24b7f5d` 提交並推送；後續修正另列於上方。
 
 - [x] 本機前端分支同步 main 的 PR #11 圖表交接模組，並保留既有雷達位置修改。
 - [x] React UI 從 `app/web/` 移至正式的 `apps/web/`，包括隱藏設定檔；不另留第二套前端。
@@ -38,9 +54,9 @@
 - [x] Playwright 驗證舊簡報卡無原始來源連線／選擇器、簡報選項及儲存停用、舊混合草稿與新需求只建立圖表，以及圖表儲存／收合／重開；Console 0 errors／0 warnings。測試使用前端假資料，沒有呼叫簡報或分析 API。
 - [x] 使用者於 2026-09-06 回覆「應該是沒問題，請你繼續」，接受本次簡報分界步驟；人工重測方式保留於 README。
 - [x] 收尾再次執行 `npm run check`：型別檢查、正式建置及 25 個測試全數通過；相對 `origin/main` 未修改 Python 核心、API、contracts 或既有 Chart Artifact 模組與六個測試。
-- [x] 整理 [PR #12 review 回覆與交接清單](./docs/pr-12-review-response.md)，逐項對照修正及驗證結果；目前只是本機文件，未發布 GitHub 留言或重新 request review。
+- [x] 整理 [PR #12 review 回覆與交接清單](./docs/pr-12-review-response.md)，逐項對照修正及驗證結果；該文件保留提交時紀錄，推送確認另見 GitHub 留言。
 - [x] 使用者同意先 commit、不 push；本輪以 `fix(web): address PR #12 frontend review` 建立本機 checkpoint，包含目錄搬遷、型別檢查、ID 分離、簡報分界及交接文件。
-- [ ] 待使用者授權 push 後，更新 PR 並重新 request review；上次核對 GitHub 的最新人工 review 仍為 Changes requested。
+- [x] 使用者後續授權推送；`24b7f5d` 已更新到 PR #12，發布 [修正摘要](https://github.com/Gule7309/youthlm/pull/12#issuecomment-5559152356) 並請 Gule7309 重新 review。沒有修改或合併到 main。
 - [ ] 上述 review 修正完成後，再以小 PR 串接 Source → Chart；本次尚未使用 adapter 繪製 React 成果卡。
 
 ## 狀態說明
@@ -55,7 +71,7 @@
 ## 目前已完成
 
 - [x] 已建立 Git repository、commit 與 GitHub `origin`：[Gule7309/youthlm](https://github.com/Gule7309/youthlm)。本機工作分支為 `codex/frontend-ui`，前端已有 [PR #12](https://github.com/Gule7309/youthlm/pull/12)。
-- [x] 本次 review 修正經使用者逐步接受後，以本機 commit 保存；尚未 push，不宣稱 PR 已同步或 reviewer 已核准。
+- [x] 上一輪 review 修正經使用者逐步接受後，以 `24b7f5d` 保存並推送；本輪 Tooltip／空白修正與驗證另見前方紀錄，不宣稱 reviewer 已核准。
 - [x] 網站目前可見文字已改為繁體中文。
 - [x] 登入與註冊 UI。
 - [x] 登入／註冊的前端表單驗證與 loading 狀態。
@@ -74,7 +90,7 @@
 - [x] 政策雷達固定顯示於白板，可收合、執行前端盤點、保留本次頁面最近一次紀錄，並在來源／成果設定變更後提示重新盤點。
 - [x] 每本筆記本在本次瀏覽器工作階段內各自保留白板卡片與設定。
 - [x] 來源設定支援檔案 metadata 與公開 API 網址的前端表單及驗證。
-- [x] `npm run check` 已通過型別檢查、建置及 25 個測試（6 個圖表交接、15 個白板狀態、4 個簡報分界）；型別檢查步驟亦已完成乾淨安裝與上述瀏覽器回歸。
+- [x] `npm run check` 已通過型別檢查、建置及 31 個測試（6 個圖表交接、15 個白板狀態、4 個簡報分界、6 個 Tooltip 渲染）；先前型別檢查步驟亦已完成乾淨安裝與上述瀏覽器回歸。
 
 目前的帳號、筆記本與白板資料都只存在 React 記憶體中，重新整理頁面後會重置。後端另有 SQLite 分析模組保存，但前端未串接，且它不保存帳號、筆記本清單或白板配置。
 
@@ -411,7 +427,7 @@ VITE_DEMO_MODE
 - [ ] 資料刪除、帳號刪除與保留期限。
 - [ ] 前端不可顯示內部錯誤堆疊或敏感設定。
 - [x] 後端已有單元、provider、資料、API 契約及模組保存測試定義；此文件更新未重新執行，不以檔案存在宣稱本次測試通過。
-- [x] 前端 `npm run check` 已通過型別、build 及 25 個測試；6 個圖表 adapter、15 個白板 ID／狀態、4 個簡報分界測試。
+- [x] 前端 `npm run check` 已通過型別、build 及 31 個測試；6 個圖表 adapter、15 個白板 ID／狀態、4 個簡報分界、6 個 Tooltip 渲染測試。
 - [ ] 補新增 UI／整合案例、自動化瀏覽器測試套件與 CI 品質門檻；一次手動或瀏覽器回歸不等於已有完整 CI／E2E。
 - [ ] 1440×900 比賽展示尺寸檢查。
 - [ ] 鍵盤操作、焦點管理、對比與螢幕閱讀器標籤。
@@ -434,7 +450,7 @@ VITE_DEMO_MODE
 - [x] repository 為 `Gule7309/youthlm`；已使用前端分支及 PR #12 協作。
 - [x] 架構為 `app/` Python 核心、`apps/api/` FastAPI、`apps/web/` React／Vite；JSON schemas、Pydantic models、文件與 fixtures 用於 Contract v0 交接。
 - [x] 分析模組採本機 SQLite；Gemini／Bedrock adapters 已存在，切換方式已文件化。
-- [ ] 本機 review 修正的 push 時機、後續 Source → Chart 小 PR 與比賽 release 流程；本輪已先依使用者指示建立本機 commit。
+- [ ] 本輪 Tooltip／空白修正的 review／合併、後續 Source → Chart 小 PR 與比賽 release 流程。
 - [ ] Cognito 或自建登入。
 - [ ] Notebook／白板／對話的保存設計，以及分析 SQLite 在 AWS 的儲存、備份或替代方案。
 - [ ] 比賽使用的模型、provider、權限、配額與真實執行驗收。
@@ -460,4 +476,4 @@ VITE_DEMO_MODE
 - 時間格式、時區與檔案網址期限。
 - 對應的前端 loading、empty、error 與 retry 狀態。
 
-有正式契約但尚未串接時，前端 mock 應使用對應 fixtures；尚無契約的功能明示「前端草稿／尚未提供」，不要假裝已執行 AI 或已保存到後端。Canvas ID 分離及簡報不可用修正已逐步驗收並以本機 commit 保存，尚未 push；待本輪 PR 重新 review／合併後，再以獨立小 PR 串接 Source → Chart。
+有正式契約但尚未串接時，前端 mock 應使用對應 fixtures；尚無契約的功能明示「前端草稿／尚未提供」，不要假裝已執行 AI 或已保存到後端。Canvas ID 分離及簡報不可用修正已以 `24b7f5d` 推送；目前補 Tooltip 零值與空白修正，待本輪 PR 重新 review／合併後，再以獨立小 PR 串接 Source → Chart。
