@@ -4,7 +4,7 @@ import asyncio
 import unittest
 
 import httpx
-from app.agent import AgentResult, YouthLMAgent
+from app.agent import AgentProtocolError, AgentResult, YouthLMAgent
 from app.population_data import DATASET_ID as POPULATION_DATASET_ID
 from app.provider import FakeModelProvider, ModelToolCall, ModelTurn
 from app.tooling import build_default_tool_registry
@@ -55,6 +55,11 @@ class StubAgent:
 class FailingAgent:
     def run(self, prompt: str) -> AgentResult:
         raise RuntimeError(f"private provider failure for {prompt}")
+
+
+class InvalidAgent:
+    def run(self, prompt: str) -> AgentResult:
+        raise AgentProtocolError(f"private protocol failure for {prompt}")
 
 
 class ContractRuntimeTests(unittest.TestCase):
@@ -246,6 +251,34 @@ class ContractRuntimeTests(unittest.TestCase):
         self.assertIsNotNone(logged_exception)
         self.assertIn(
             "private provider failure for",
+            str(logged_exception[1]),
+        )
+
+    def test_hides_protocol_failure_details_and_logs_exception(self) -> None:
+        with self.assertLogs("main", level="ERROR") as captured_logs:
+            response = request(
+                build_test_app(InvalidAgent()),
+                "POST",
+                "/v1/analysis",
+                json=analysis_request(),
+            )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(
+            response.json(),
+            {
+                "contract_version": "0.1.0",
+                "error": {
+                    "code": "agent_protocol_error",
+                    "message": "Agent returned an invalid analysis result",
+                    "retriable": False,
+                },
+            },
+        )
+        logged_exception = captured_logs.records[0].exc_info
+        self.assertIsNotNone(logged_exception)
+        self.assertIn(
+            "private protocol failure for",
             str(logged_exception[1]),
         )
 
