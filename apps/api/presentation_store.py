@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
+OPAQUE_KEY_HEX_LENGTH = 32
+
 
 class PresentationArtifactStoreError(RuntimeError):
     """Raised when a presentation artifact cannot be stored or loaded."""
@@ -52,7 +54,7 @@ class LocalPresentationArtifactStore:
             raise PresentationArtifactStoreError("Presentation artifact is empty")
 
         path = self._artifact_path(project_id, presentation_id)
-        temporary_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+        temporary_path = self._temporary_path(path)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary_path.write_bytes(content)
@@ -76,20 +78,41 @@ class LocalPresentationArtifactStore:
         project_id: str,
         presentation_id: str,
     ) -> StoredPresentationArtifact | None:
-        path = self._artifact_path(project_id, presentation_id)
+        paths = (
+            self._artifact_path(project_id, presentation_id),
+            self._legacy_artifact_path(project_id, presentation_id),
+        )
         try:
-            if not path.is_file():
-                return None
+            path = next((candidate for candidate in paths if candidate.is_file()), None)
         except OSError as error:
             raise PresentationArtifactStoreError(
                 "Could not load presentation artifact"
             ) from error
+        if path is None:
+            return None
         return StoredPresentationArtifact(
             path=path,
             file_name=f"{presentation_id}.pptx",
         )
 
     def _artifact_path(self, project_id: str, presentation_id: str) -> Path:
+        project_key = self._opaque_key(project_id)
+        artifact_key = self._opaque_key(presentation_id)
+        return self._root_directory / project_key / f"{artifact_key}.pptx"
+
+    def _legacy_artifact_path(
+        self,
+        project_id: str,
+        presentation_id: str,
+    ) -> Path:
         project_key = sha256(project_id.encode("utf-8")).hexdigest()
         artifact_key = sha256(presentation_id.encode("utf-8")).hexdigest()
         return self._root_directory / project_key / f"{artifact_key}.pptx"
+
+    @staticmethod
+    def _opaque_key(value: str) -> str:
+        return sha256(value.encode("utf-8")).hexdigest()[:OPAQUE_KEY_HEX_LENGTH]
+
+    @staticmethod
+    def _temporary_path(path: Path) -> Path:
+        return path.with_name(f".tmp-{uuid4().hex}")

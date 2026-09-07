@@ -77,4 +77,6 @@ Temporary YouthLM API stopped.
 
 The reported run directory contains the editable `.pptx` plus server logs. A
 failure leaves the same run directory in place so the exact API error can be
-reviewed without rerunning the demo blindly.
+reviewed without rerunning the demo blindly. Artifact keys are opaque 128-bit
+hash prefixes so both final and temporary paths remain below the common Windows
+260-character limit even when the repository is inside OneDrive.

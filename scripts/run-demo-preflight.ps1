@@ -24,6 +24,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $apiRoot = Join-Path $repoRoot "apps\api"
 $serverProcess = $null
+$runRoot = $null
 
 function Require-NativeSuccess {
     param([string]$Message)
@@ -180,7 +181,6 @@ try {
         --timeout-seconds $RequestTimeoutSeconds
     Require-NativeSuccess "YouthLM end-to-end demo preflight failed."
 
-    Write-Host "Demo artifacts and logs: $runRoot"
     Write-Host "YouthLM $Provider demo is ready."
 }
 finally {
@@ -188,6 +188,9 @@ finally {
         Stop-Process -Id $serverProcess.Id
         Wait-Process -Id $serverProcess.Id -ErrorAction SilentlyContinue
         Write-Host "Temporary YouthLM API stopped."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($runRoot)) {
+        Write-Host "Demo artifacts and logs: $runRoot"
     }
     Pop-Location
 }
