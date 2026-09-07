@@ -57,6 +57,17 @@ There is no automatic provider fallback. See
 [`docs/provider-switching.md`](docs/provider-switching.md) for the current workflow
 and the event-day preflight command.
 
+For one-command backend demo acceptance, see
+[`docs/demo-readiness.md`](docs/demo-readiness.md). On Windows, copy the Gemini key
+and run:
+
+```powershell
+.\scripts\run-demo-preflight.ps1
+```
+
+It starts a temporary API, proves Source-to-Chart and stored upstream context,
+generates and validates an editable PPTX, then always stops the temporary server.
+
 ## Local setup
 
 ```bash
