@@ -222,12 +222,13 @@ class ContractRuntimeTests(unittest.TestCase):
         self.assertFalse(payload["error"]["retriable"])
 
     def test_hides_provider_failure_details(self) -> None:
-        response = request(
-            build_test_app(FailingAgent()),
-            "POST",
-            "/v1/analysis",
-            json=analysis_request(),
-        )
+        with self.assertLogs("main", level="ERROR") as captured_logs:
+            response = request(
+                build_test_app(FailingAgent()),
+                "POST",
+                "/v1/analysis",
+                json=analysis_request(),
+            )
 
         self.assertEqual(response.status_code, 502)
         self.assertEqual(
@@ -240,6 +241,12 @@ class ContractRuntimeTests(unittest.TestCase):
                     "retriable": True,
                 },
             },
+        )
+        logged_exception = captured_logs.records[0].exc_info
+        self.assertIsNotNone(logged_exception)
+        self.assertIn(
+            "private provider failure for",
+            str(logged_exception[1]),
         )
 
 
