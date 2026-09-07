@@ -11,7 +11,7 @@ export type Notebook = {
   cardCount: number;
 };
 
-export type SourceKind = 'file' | 'api' | null;
+export type SourceKind = 'registry' | 'file' | 'api' | null;
 
 export type SourceFileMetadata = {
   name: string;
@@ -41,6 +41,74 @@ export type SourceConfig = {
   // Backend registry identity, not CanvasNode.id. Unbound local sources omit it.
   registrySourceId?: string;
   filters?: SourceFilters;
+};
+
+export type RegistryDataSource = {
+  source_id: string;
+  title: string;
+  agency: string;
+  policy_domain: string;
+  status: string;
+  geography: string;
+  available_geographies: string[];
+  available_age_groups: string[];
+  available_sexes: string[];
+  available_dimensions: string[];
+  available_years: {
+    start: number;
+    end: number;
+  };
+  unit: string;
+  youth_compatibility: {
+    target: string;
+    status: string;
+    explanation: string;
+  };
+};
+
+export type AnalysisRequestPayload = {
+  contract_version: '0.1.0';
+  project_id: string;
+  module_id: string;
+  query: string;
+  upstream_module_ids: string[];
+  source_selections: Array<{
+    source_id: string;
+    filters: SourceFilters;
+  }>;
+};
+
+export type AnalysisWarningView = {
+  type: string;
+  severity: string;
+  message: string;
+};
+
+export type ChartArtifactView = {
+  kind: 'chart' | 'table' | 'blocked' | 'error';
+  status?: 'completed' | 'partial' | 'blocked';
+  title?: string;
+  summary?: string;
+  warnings?: AnalysisWarningView[];
+  chartOption?: Record<string, unknown> | null;
+  table?: {
+    columns: Array<{ name: string; label: string; unit?: string }>;
+    records: Array<Record<string, unknown>>;
+  };
+  sources?: Array<{
+    source_id: string;
+    title: string;
+    agency: string;
+  }>;
+  httpStatus?: number;
+  code?: string;
+  message?: string;
+  retriable?: boolean;
+};
+
+export type AnalysisExecution = {
+  state: 'running' | 'ready' | 'failed';
+  view?: ChartArtifactView;
 };
 
 export type ResultKind = 'chart' | 'presentation' | null;

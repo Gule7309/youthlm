@@ -7,7 +7,8 @@ import {
   Presentation,
   X,
 } from 'lucide-react';
-import type { CanvasNode, ResultConfig } from '../types';
+import type { AnalysisExecution, CanvasNode, ResultConfig } from '../types';
+import { AnalysisResultPanel } from './AnalysisResultPanel';
 import { PRESENTATION_UNAVAILABLE_MESSAGE } from '../result-policy';
 
 type EditableResultKind = Exclude<ResultConfig['kind'], null>;
@@ -15,13 +16,16 @@ type EditableResultKind = Exclude<ResultConfig['kind'], null>;
 export type ResultInspectorProps = {
   node: CanvasNode;
   sourceNodes: CanvasNode[];
+  execution?: AnalysisExecution;
   onSave: (config: ResultConfig) => void;
+  onRun?: () => void;
   onClose?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
 
 function sourceTypeLabel(sourceNode: CanvasNode) {
   if (sourceNode.source?.enabled === false) return '已停用';
+  if (sourceNode.source?.kind === 'registry') return '已安裝資料集';
   if (sourceNode.source?.kind === 'file') return '上傳檔案';
   if (sourceNode.source?.kind === 'api') return '公開 API';
   return '尚未設定';
@@ -29,15 +33,16 @@ function sourceTypeLabel(sourceNode: CanvasNode) {
 
 function sourceIsReady(sourceNode: CanvasNode) {
   if (!sourceNode.source?.enabled) return false;
-  if (sourceNode.source.kind === 'file') return Boolean(sourceNode.source.file?.name);
-  if (sourceNode.source.kind === 'api') return Boolean(sourceNode.source.apiUrl?.trim());
+  if (sourceNode.source.kind === 'registry') return Boolean(sourceNode.source.registrySourceId);
   return false;
 }
 
 export function ResultInspector({
   node,
   sourceNodes,
+  execution,
   onSave,
+  onRun,
   onClose,
   onDirtyChange,
 }: ResultInspectorProps) {
@@ -153,7 +158,7 @@ export function ResultInspector({
           )}
         </div>
         <p className="mt-3 text-xs leading-5 text-slate-500">
-          選擇資料來源並描述圖表需求。此版本只保存設定，不會實際執行分析。
+          選擇已安裝資料集並描述需求，儲存後即可呼叫 YouthLM Agent 產生圖表。
         </p>
       </div>
 
@@ -282,10 +287,11 @@ export function ResultInspector({
           <span className="mt-1.5 block text-right text-[10px] text-slate-400">{prompt.length}/1200</span>
         </label>
 
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-800">
+        <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-[11px] leading-5 text-blue-800">
           <Info className="mt-0.5 size-3.5 shrink-0" />
-          目前只會保存圖表設定；實際分析、圖表繪製與檔案輸出仍需串接後端服務。
+          圖表只會使用 Contract v0 的 result_data 與 visualization；警告、來源與失敗狀態會原樣呈現。
         </div>
+        <AnalysisResultPanel execution={execution} onRetry={onRun} />
         </>)}
       </div>
 
@@ -295,21 +301,31 @@ export function ResultInspector({
           <p className="mb-2 flex items-center gap-1.5 text-xs text-emerald-600" role="status">
             <Check className="size-3.5" />
             {selectedSourcesReady
-              ? '前端設定已更新，等待後端生成'
+              ? '設定已更新，可執行分析'
               : '前端設定已更新，請先完成所選來源設定'}
           </p>
         )}
         {dirty && !error && (
           <p className="mb-2 text-xs text-amber-700" role="status">有尚未儲存的變更</p>
         )}
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isPresentation || sourceNodes.length === 0}
-          className="h-10 w-full rounded-lg bg-slate-950 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          {isPresentation ? '簡報功能尚未提供' : '儲存成果設定'}
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isPresentation || sourceNodes.length === 0}
+            className="h-10 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+          >
+            {isPresentation ? '簡報尚未提供' : '儲存設定'}
+          </button>
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={!onRun || dirty || execution?.state === 'running'}
+            className="h-10 rounded-lg bg-violet-700 text-sm font-medium text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {execution?.state === 'running' ? '分析中…' : execution ? '重新分析' : '執行分析'}
+          </button>
+        </div>
       </div>
     </section>
   );

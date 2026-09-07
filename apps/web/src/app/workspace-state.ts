@@ -6,6 +6,10 @@ export function cloneSourceConfig(source: SourceConfig): SourceConfig {
 
 function hasSameSourceData(previous: SourceConfig | undefined, next: SourceConfig) {
   if (!previous || previous.kind !== next.kind) return false;
+  if (next.kind === 'registry') {
+    return Boolean(next.registrySourceId)
+      && previous.registrySourceId === next.registrySourceId;
+  }
   if (next.kind === 'api') {
     return Boolean(next.apiUrl?.trim()) && previous.apiUrl?.trim() === next.apiUrl?.trim();
   }
@@ -21,12 +25,19 @@ function hasSameSourceData(previous: SourceConfig | undefined, next: SourceConfi
   return false;
 }
 
-// The current inspector edits local file/API metadata, not registry bindings.
-// Preserve a binding for cosmetic edits, but invalidate it when its input changes.
+// Registry selections carry explicit IDs and filters. Local file/API drafts may
+// preserve an old binding only while their underlying identity stays unchanged.
 export function updateSourceConfig(
   previous: SourceConfig | undefined,
   next: SourceConfig,
 ): SourceConfig {
+  if (next.kind === 'registry') {
+    return cloneSourceConfig({
+      ...next,
+      filters: next.filters ?? {},
+    });
+  }
+
   const sameSourceData = hasSameSourceData(previous, next);
   return cloneSourceConfig({
     ...next,

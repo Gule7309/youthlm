@@ -183,6 +183,22 @@ test("saving a new local source never invents a registry ID or query filters", (
   assert.deepEqual(updated.filters, {});
 });
 
+test("saving an installed registry source preserves its explicit identity and filters", () => {
+  const filters = { age_groups: ["20-24"], start_year: 2022, end_year: 2024 };
+  const updated = updateSourceConfig(undefined, {
+    kind: "registry",
+    name: "現住人口之年齡分配",
+    enabled: true,
+    autoClean: true,
+    registrySourceId: REGISTRY_SOURCE_ID,
+    filters,
+  });
+
+  assert.equal(updated.registrySourceId, REGISTRY_SOURCE_ID);
+  assert.deepEqual(updated.filters, filters);
+  assert.notEqual(updated.filters, filters);
+});
+
 test("workspace cloning independently copies source-node links, messages, and drafts", () => {
   const original = workspaceFixture();
   const before = structuredClone(original);

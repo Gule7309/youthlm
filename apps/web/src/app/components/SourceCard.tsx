@@ -33,12 +33,26 @@ export function SourceCard({
 }: SourceCardProps) {
   const config = node.source;
   const isConfigured = Boolean(
-    config?.kind === 'file' ? config.file?.name : config?.kind === 'api' ? config.apiUrl : false,
+    config?.kind === 'registry'
+      ? config.registrySourceId
+      : config?.kind === 'file'
+        ? config.file?.name
+        : config?.kind === 'api'
+          ? config.apiUrl
+          : false,
   );
   const isEnabled = config?.enabled ?? true;
   const SourceIcon = config?.kind === 'file' ? FileSpreadsheet : config?.kind === 'api' ? Globe2 : Database;
-  const sourceType = config?.kind === 'file' ? '上傳檔案' : config?.kind === 'api' ? '公開 API' : '尚未選擇來源';
-  const sourceDetail = config?.kind === 'file'
+  const sourceType = config?.kind === 'registry'
+    ? '已安裝資料集'
+    : config?.kind === 'file'
+      ? '上傳檔案'
+      : config?.kind === 'api'
+        ? '公開 API'
+        : '尚未選擇來源';
+  const sourceDetail = config?.kind === 'registry'
+    ? config.registrySourceId
+    : config?.kind === 'file'
     ? config.file?.name
     : config?.kind === 'api'
       ? config.apiUrl
@@ -100,7 +114,7 @@ export function SourceCard({
             }`}
           >
             <span className={`size-1.5 rounded-full ${!isConfigured ? 'bg-amber-500' : isEnabled ? 'bg-blue-500' : 'bg-slate-400'}`} />
-            {!isConfigured ? '尚未設定' : isEnabled ? '等待後端處理' : '已停用'}
+            {!isConfigured ? '尚未設定' : isEnabled ? config?.kind === 'registry' ? '可執行分析' : '等待後端串接' : '已停用'}
           </span>
           {isConfigured && config?.autoClean && (
             <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700">
