@@ -267,6 +267,7 @@ def create_app(
                 retriable=True,
             )
         except (AgentProtocolError, ContractMappingError):
+            logger.exception("Agent result violated the analysis contract")
             return _error_response(
                 502,
                 code="agent_protocol_error",
@@ -281,6 +282,7 @@ def create_app(
                 retriable=True,
             )
         except RuntimeError:
+            logger.exception("Model provider request failed during analysis")
             return _error_response(
                 502,
                 code="provider_unavailable",
