@@ -1,0 +1,158 @@
+import type { CanvasNode, SourceConfig } from './types';
+
+export function cloneSourceConfig(source: SourceConfig): SourceConfig {
+  return structuredClone(source);
+}
+
+function hasSameSourceData(previous: SourceConfig | undefined, next: SourceConfig) {
+  if (!previous || previous.kind !== next.kind) return false;
+  if (next.kind === 'api') {
+    return Boolean(next.apiUrl?.trim()) && previous.apiUrl?.trim() === next.apiUrl?.trim();
+  }
+  if (next.kind === 'file') {
+    const first = previous.file;
+    const second = next.file;
+    return Boolean(first && second
+      && first.name === second.name
+      && first.size === second.size
+      && first.type === second.type
+      && first.lastModified === second.lastModified);
+  }
+  return false;
+}
+
+// The current inspector edits local file/API metadata, not registry bindings.
+// Preserve a binding for cosmetic edits, but invalidate it when its input changes.
+export function updateSourceConfig(
+  previous: SourceConfig | undefined,
+  next: SourceConfig,
+): SourceConfig {
+  const sameSourceData = hasSameSourceData(previous, next);
+  return cloneSourceConfig({
+    ...next,
+    registrySourceId: sameSourceData ? previous?.registrySourceId : undefined,
+    filters: sameSourceData ? previous?.filters ?? {} : {},
+  });
+}
+
+export function cloneWorkspaceNode(node: CanvasNode): CanvasNode {
+  return {
+    ...node,
+    source: node.source ? cloneSourceConfig(node.source) : undefined,
+    result: node.result
+      ? { ...node.result, sourceNodeIds: [...node.result.sourceNodeIds] }
+      : undefined,
+    assistant: node.assistant
+      ? {
+        ...node.assistant,
+        messages: node.assistant.messages.map(message => ({ ...message })),
+        draftActions: node.assistant.draftActions.map(action => ({
+          ...action,
+          sourceNodeIds: [...action.sourceNodeIds],
+        })),
+      }
+      : undefined,
+  };
+}
+
+export function duplicateWorkspaceNodes(nodes: CanvasNode[]): CanvasNode[] {
+  const duplicateKey = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const idMap = new Map(
+    nodes.map((node, index) => [node.id, `${node.type}-${duplicateKey}-${index + 1}`]),
+  );
+
+  return nodes.map(node => {
+    const clone = cloneWorkspaceNode(node);
+    const duplicateNodeId = idMap.get(node.id) ?? node.id;
+    return {
+      ...clone,
+      id: duplicateNodeId,
+      result: clone.result
+        ? {
+          ...clone.result,
+          sourceNodeIds: clone.result.sourceNodeIds
+            .map(sourceNodeId => idMap.get(sourceNodeId))
+            .filter((sourceNodeId): sourceNodeId is string => Boolean(sourceNodeId)),
+        }
+        : undefined,
+      assistant: clone.assistant
+        ? {
+          ...clone.assistant,
+          messages: clone.assistant.messages.map((message, index) => ({
+            ...message,
+            id: `${duplicateNodeId}-message-${index + 1}`,
+          })),
+          draftActions: clone.assistant.draftActions.map((action, index) => ({
+            ...action,
+            id: `${duplicateNodeId}-draft-${index + 1}`,
+            sourceNodeIds: action.sourceNodeIds
+              .map(sourceNodeId => idMap.get(sourceNodeId))
+              .filter((sourceNodeId): sourceNodeId is string => Boolean(sourceNodeId)),
+          })),
+        }
+        : undefined,
+    };
+  });
+}
+
+export function removeSourceNode(nodes: CanvasNode[], sourceNodeId: string): CanvasNode[] {
+  return nodes
+    .filter(node => node.id !== sourceNodeId)
+    .map(node => {
+      if (node.type === 'result' && node.result) {
+        return {
+          ...node,
+          result: {
+            ...node.result,
+            sourceNodeIds: node.result.sourceNodeIds.filter(id => id !== sourceNodeId),
+          },
+        };
+      }
+      if (node.type === 'assistant' && node.assistant) {
+        return {
+          ...node,
+          assistant: {
+            ...node.assistant,
+            draftActions: node.assistant.draftActions.map(action => ({
+              ...action,
+              sourceNodeIds: action.sourceNodeIds.filter(id => id !== sourceNodeId),
+            })),
+          },
+        };
+      }
+      return node;
+    });
+}
+
+export function getPolicyRadarWorkspaceSignature(workspace: CanvasNode[]) {
+  const trackedNodes = workspace
+    .filter(node => node.type === 'source' || node.type === 'result')
+    .sort((first, second) => first.id.localeCompare(second.id))
+    .map(node => {
+      if (node.type === 'source') {
+        return {
+          id: node.id,
+          type: node.type,
+          kind: node.source?.kind ?? null,
+          name: node.source?.name ?? '',
+          enabled: node.source?.enabled ?? false,
+          autoClean: node.source?.autoClean ?? false,
+          apiUrl: node.source?.apiUrl ?? '',
+          file: node.source?.file ? { ...node.source.file } : null,
+          registrySourceId: node.source?.registrySourceId ?? null,
+          filters: node.source?.filters ?? {},
+        };
+      }
+
+      return {
+        id: node.id,
+        type: node.type,
+        kind: node.result?.kind ?? null,
+        name: node.result?.name ?? '',
+        sourceNodeIds: [...(node.result?.sourceNodeIds ?? [])].sort(),
+        prompt: node.result?.prompt ?? '',
+      };
+    });
+
+  return JSON.stringify(trackedNodes);
+}

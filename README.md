@@ -132,6 +132,21 @@ The smoke sends the canonical frontend request, validates a real
 ID. A passing second request proves that SQLite persistence and project-scoped
 Module Context lookup work through HTTP.
 
+The React/Vite frontend lives in `apps/web/`, alongside the framework-neutral
+Chart Artifact adapter. The Python domain core remains in `app/`.
+
+```bash
+cd apps/web
+npm ci
+npm run dev
+```
+
+Use `npm run check` to run strict TypeScript checking, build the UI, and execute
+all 31 frontend tests, including the adapter's six fixture-based tests, stopping
+on the first failure. Each gate
+can also run separately with `npm run typecheck`, `npm run build`, or `npm test`.
+The UI is still a frontend mock, not a live API integration.
+
 After an Analysis module is stored, `POST /v1/presentations` can generate an
 editable `.pptx` without another model call. The deterministic generator uses
 the stored result's summary, structured data, visualization mapping, sources,
