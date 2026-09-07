@@ -281,6 +281,7 @@ def create_app(
                 retriable=True,
             )
         except RuntimeError:
+            logger.exception("Model provider request failed during analysis")
             return _error_response(
                 502,
                 code="provider_unavailable",
