@@ -1,5 +1,6 @@
 """Contract v0 FastAPI boundary for the YouthLM monorepo."""
 
+import logging
 import os
 from collections.abc import Sequence
 from typing import Any, Protocol
@@ -52,6 +53,8 @@ from presentation_store import (
     LocalPresentationArtifactStore,
     PresentationArtifactStoreError,
 )
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CORS_ORIGINS = (
     "http://localhost:3000",
@@ -327,6 +330,7 @@ def create_app(
                 retriable=True,
             )
         except PresentationArtifactStoreError:
+            logger.exception("Presentation artifact storage failed")
             return _error_response(
                 500,
                 code="internal_error",
@@ -349,6 +353,7 @@ def create_app(
                 presentation_id,
             )
         except PresentationArtifactStoreError:
+            logger.exception("Presentation artifact storage failed")
             return _error_response(
                 500,
                 code="internal_error",

@@ -23,6 +23,12 @@ class DemoPreflightRunnerContractTests(unittest.TestCase):
         self.assertIn("$env:YOUTHLM_ARTIFACT_DIR", script)
         self.assertNotIn("Remove-Item", script)
 
+    def test_runner_always_reports_log_directory_after_runtime_starts(self) -> None:
+        script = Path("scripts/run-demo-preflight.ps1").read_text(encoding="utf-8")
+        finally_block = script[script.index("finally {") :]
+
+        self.assertIn('Write-Host "Demo artifacts and logs: $runRoot"', finally_block)
+
     def test_runner_handles_clipboard_without_printing_or_null_clear(self) -> None:
         script = Path("scripts/run-demo-preflight.ps1").read_text(encoding="utf-8")
 
