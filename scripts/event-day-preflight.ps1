@@ -17,6 +17,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Write-Host (
+    "Final-round provider policy: use Amazon Bedrock or SageMaker AI; " +
+    "Gemini fallback is not permitted."
+)
+Write-Host (
+    "Organizer AWS window: 2026-09-12 08:00 through " +
+    "2026-09-13 13:00 (Asia/Taipei)."
+)
 $preflightArgs = @{
     Provider = "bedrock"
     AwsRegion = $AwsRegion

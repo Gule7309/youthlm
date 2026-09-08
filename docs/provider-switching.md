@@ -1,9 +1,10 @@
 # YouthLM provider switching runbook
 
-The workshop AWS credentials expired on 2026-08-18. Do not block development on
-Bedrock access and do not try to repair expired credentials. Develop with Gemini,
-keep deterministic tests on `FakeModelProvider`, and switch to Bedrock only after
-the organizer issues fresh credentials.
+The workshop AWS credentials expired on 2026-08-18. The organizer's final-round
+environment is available only from 2026-09-12 08:00 through 2026-09-13 13:00
+(Asia/Taipei). Do not try to repair the expired workshop credentials. Develop with
+Gemini before the event, keep deterministic tests on `FakeModelProvider`, and
+switch to Bedrock after the final-round environment opens.
 
 The switch is explicit. If `MODEL_PROVIDER=bedrock` is selected and AWS fails,
 YouthLM fails visibly instead of silently falling back to Gemini.
@@ -79,6 +80,12 @@ Do not paste their values into chat, source code, `.env.example`, or GitHub.
 
 ## Event day: one preflight command
 
+Use the competition-registration email and the team Access Code directly in the
+AWS Workshop portal. Keep the Access Code in the organizer email; never copy it
+into this repository, chat, a shell-history command, or a shared screenshot. See
+[`docs/final-environment-runbook.md`](final-environment-runbook.md) for the exact
+sequence.
+
 Replace the three placeholders with organizer-issued values. Supplying the
 expected account ID prevents accidentally using a personal AWS account.
 
@@ -124,15 +131,16 @@ Invoke-RestMethod `
 AgentCore deployment comes after both the provider preflight and local
 `/invocations` smoke succeed.
 
-## Fast rollback to Gemini
+## Gemini is local-development only
 
-If Bedrock is unavailable and the competition rules permit the substitute, switch
-the current PowerShell session back explicitly:
+The final-round rules permit only Amazon Bedrock or SageMaker AI foundation models
+and AWS cloud services. Do not use Gemini as a final-round fallback. Gemini remains
+available only for local development before the organizer environment opens:
 
 ```powershell
 .\scripts\run-gemini-agent.ps1 `
     -ModelId "gemini-3.1-flash-lite"
 ```
 
-This rollback is a conscious operator action; the application never performs it
-automatically.
+The application never switches providers automatically. A final-round Bedrock
+failure must remain visible and be fixed against the organizer environment.
