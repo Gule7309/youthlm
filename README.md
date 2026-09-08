@@ -67,6 +67,8 @@ and run:
 
 It starts a temporary API, proves Source-to-Chart and stored upstream context,
 generates and validates an editable PPTX, then always stops the temporary server.
+For the organizer-issued final-round AWS environment and the mandatory Bedrock
+switch, follow [`docs/final-environment-runbook.md`](docs/final-environment-runbook.md).
 
 ## Local setup
 
