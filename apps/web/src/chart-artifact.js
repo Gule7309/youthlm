@@ -65,6 +65,22 @@ export function buildChartArtifactView(payload, { httpStatus = 200 } = {}) {
 }
 
 /**
+ * Keep model-written summaries readable without allowing arbitrary HTML.
+ * React will still escape the returned plain text when it is rendered.
+ *
+ * @param {string} summary
+ * @returns {string}
+ */
+export function normalizeAnalysisSummary(summary) {
+  return summary
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/^\s*[-*]\s+/gm, "• ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
  * Build an ECharts option from line/bar VisualizationSpec and deterministic rows.
  * Arbitrary ECharts configuration never crosses the public backend contract.
  *
@@ -159,8 +175,10 @@ function buildAnalysisBase(result) {
     moduleId: result.module_id,
     title: result.title,
     question: result.question,
+    analysisPlan: result.analysis_plan.map((step) => ({ ...step })),
+    filters: structuredClone(result.filters),
     status: result.status,
-    summary: result.summary,
+    summary: normalizeAnalysisSummary(result.summary),
     warnings,
     showWarningBanner: result.status === "partial" || warnings.length > 0,
     highestWarningSeverity: highestWarningSeverity(warnings),
@@ -275,6 +293,10 @@ function assertAnalysisResult(result) {
   if (!RESULT_STATUSES.has(result.status)) {
     throw new Error(`Unsupported AnalysisResult status: ${result.status}`);
   }
+  if (!Array.isArray(result.analysis_plan)) {
+    throw new TypeError("AnalysisResult.analysis_plan must be an array");
+  }
+  assertObject(result.filters, "AnalysisResult.filters");
   assertObject(result.result_data, "AnalysisResult.result_data");
   if (!Array.isArray(result.result_data.columns)) {
     throw new TypeError("AnalysisResult.result_data.columns must be an array");

@@ -8,3 +8,5 @@ export function buildChartArtifactView(
 export function buildEChartsOption(
   result: Record<string, unknown>,
 ): Record<string, unknown>;
+
+export function normalizeAnalysisSummary(summary: string): string;

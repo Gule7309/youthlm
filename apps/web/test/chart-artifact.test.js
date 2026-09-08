@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   buildChartArtifactView,
   buildEChartsOption,
+  normalizeAnalysisSummary,
 } from "../src/chart-artifact.js";
 
 function fixture(name) {
@@ -20,6 +21,34 @@ test("partial analysis renders a chart and preserves trust information", () => {
 
   assert.equal(view.kind, "chart");
   assert.equal(view.status, "partial");
+  assert.equal(
+    view.question,
+    "比較板橋區2022至2024年20至24歲人口趨勢",
+  );
+  assert.deepEqual(view.analysisPlan, [
+    {
+      step_id: "tool_1_check_compatibility",
+      description: "檢查分析範圍與資料相容性",
+      status: "completed",
+    },
+    {
+      step_id: "tool_2_query_population_dataset",
+      description: "查詢青年人口資料",
+      status: "completed",
+    },
+    {
+      step_id: "synthesize_result",
+      description: "整理資料、限制與分析摘要",
+      status: "completed",
+    },
+  ]);
+  assert.deepEqual(view.filters, {
+    geographies: ["板橋區"],
+    age_groups: ["20-24"],
+    sexes: ["all"],
+    start_year: 2022,
+    end_year: 2024,
+  });
   assert.equal(view.showWarningBanner, true);
   assert.equal(view.highestWarningSeverity, "warning");
   assert.deepEqual(view.chartOption.xAxis.data, [2022, 2023, 2024]);
@@ -33,6 +62,17 @@ test("partial analysis renders a chart and preserves trust information", () => {
     "2026-08-31:226feaf05ffb",
   );
   assert.equal(view.sources[0].provenance.length, 1);
+  assert.equal(
+    view.sources[0].provenance[0].query_tool,
+    "query_population_dataset",
+  );
+  assert.deepEqual(
+    view.sources[0].provenance[0].query_parameters,
+    {
+      dataset_id: "ntpc_population_by_age_sex_district",
+      ...view.filters,
+    },
+  );
 });
 
 test("blocked analysis never renders a chart", () => {
@@ -43,6 +83,17 @@ test("blocked analysis never renders a chart", () => {
   assert.equal(view.chartOption, null);
   assert.equal(view.highestWarningSeverity, "blocking");
   assert.deepEqual(view.table.records, []);
+  assert.equal(view.analysisPlan.length, 2);
+  assert.equal(view.sources.length, 0);
+});
+
+test("model Markdown markers become safe readable summary text", () => {
+  assert.equal(
+    normalizeAnalysisSummary(
+      "### 趨勢\n* **2022 年**：5.1%\n* **2024 年**：6.3%",
+    ),
+    "趨勢\n• 2022 年：5.1%\n• 2024 年：6.3%",
+  );
 });
 
 test("HTTP error becomes an explicit error view", () => {

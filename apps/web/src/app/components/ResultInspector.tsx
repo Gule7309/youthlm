@@ -158,7 +158,7 @@ export function ResultInspector({
           )}
         </div>
         <p className="mt-3 text-xs leading-5 text-slate-500">
-          選擇已安裝資料集並描述需求，儲存後即可呼叫 YouthLM Agent 產生圖表。
+          選擇已安裝資料集並設定資料範圍，再描述希望 YouthLM Agent 如何解讀資料。
         </p>
       </div>
 
@@ -272,7 +272,7 @@ export function ResultInspector({
         </label>
 
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-slate-700">生成需求</span>
+          <span className="mb-1.5 block text-xs font-semibold text-slate-700">分析問題／解讀重點</span>
           <textarea
             value={prompt}
             onChange={(event) => {
@@ -281,15 +281,18 @@ export function ResultInspector({
               markDirty();
             }}
             className="min-h-32 w-full resize-y rounded-lg border border-slate-200 px-3 py-2.5 text-sm leading-6 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-            placeholder="例如：比較青年教育程度與起薪水準，標示明顯趨勢並整理三項政策建議。"
+            placeholder="例如：說明 2022–2024 年的變化趨勢，並提出兩項政策觀察。"
             maxLength={1200}
           />
-          <span className="mt-1.5 block text-right text-[10px] text-slate-400">{prompt.length}/1200</span>
+          <span className="mt-1.5 flex items-start justify-between gap-3 text-[10px] leading-4 text-slate-400">
+            <span>此欄位不會改變資料範圍；年份、年齡、性別與地區請至來源卡設定。</span>
+            <span className="shrink-0">{prompt.length}/1200</span>
+          </span>
         </label>
 
         <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-[11px] leading-5 text-blue-800">
           <Info className="mt-0.5 size-3.5 shrink-0" />
-          圖表只會使用 Contract v0 的 result_data 與 visualization；警告、來源與失敗狀態會原樣呈現。
+          圖表只使用 Contract v0 的 result_data 與 visualization；展開執行紀錄可核對問題、篩選條件、工具與資料版本。
         </div>
         <AnalysisResultPanel execution={execution} onRetry={onRun} />
         </>)}
