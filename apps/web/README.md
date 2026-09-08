@@ -1,6 +1,6 @@
 # YouthLM 前端互動原型與圖表交接模組
 
-這是 YouthLM 的 React／Vite 前端，包含筆記本、白板、來源卡、成果卡、小幫手與政策雷達的互動 UI。目前尚未串接正式 AI、登入認證、資料上傳或資料庫；畫面中的對話、草稿與雷達內容是前端模擬結果，不代表後端已執行分析。重新整理頁面不會從後端還原整本筆記本。
+這是 YouthLM 的 React／Vite 前端，包含筆記本、白板、來源卡、成果卡、小幫手與政策雷達。Source Node → Chart Artifact 已串接正式的 `GET /v1/data-sources` 與 `POST /v1/analysis`：使用者可選擇已安裝資料集與篩選條件，呼叫 Research Agent，並在成果設定面板看到 ECharts 圖表、表格、摘要、來源、警告或錯誤。登入、整本筆記本保存、檔案上傳、任意 API、小幫手與政策雷達仍是前端原型。
 
 ## 目錄與啟動
 
@@ -14,7 +14,7 @@ npm ci
 npm run dev
 ```
 
-開啟終端顯示的本機網址，通常是 `http://localhost:5173/`。`apps/web` 是程式目錄，不是瀏覽器網址前綴。若終端仍停在舊的前端目錄，請先切換到新的 `apps/web` 再啟動。
+請先在另一個終端用根目錄的 `scripts/run-gemini-api.ps1` 啟動 API，再開啟 Vite 顯示的網址（通常是 `http://localhost:5173/`）。開發伺服器會把 `/v1` 轉送至 `http://127.0.0.1:8000`；若部署時 API 不在同一個 origin，可設定 `VITE_YOUTHLM_API_BASE_URL`。
 
 執行完整前端品質檢查：
 
@@ -32,14 +32,14 @@ React／ReactDOM 18.3.1 已列為應用程式直接依賴，React 型別也固�
 
 ## 人工驗收（型別檢查這一步）
 
-型別設定本身不應改變畫面或既有操作。請在 `apps/web` 的終端先執行 `npm run check`，確認沒有 `error TS...`、建置錯誤或失敗測試。目前包含 6 個圖表交接、15 個白板狀態、4 個簡報分界及 6 個 Tooltip 渲染測試（含子測試），共 31 個測試。若要重測乾淨安裝，先停止原本的開發伺服器，再執行 `npm ci` 與 `npm run check`。
+請在 `apps/web` 的終端執行 `npm run check`，確認沒有 `error TS...`、建置錯誤或失敗測試。目前包含圖表交接、白板狀態、簡報分界、Tooltip 與前後端 request mapping 測試，共 36 個測試。若要重測乾淨安裝，先停止原本的開發伺服器，再執行 `npm ci` 與 `npm run check`。
 
 啟動 `npm run dev`，開啟終端顯示的網址，檢查：
 
 1. 用測試用電子郵件與至少 8 個字元的密碼登入，可開啟「青年教育與就業研究」。帳號仍是前端模擬，不會傳送到後端。
-2. 新增一張來源卡，輸入名稱；點白板空白處可收合設定，重新開啟後未儲存文字仍保留。
+2. 新增一張來源卡，選「已安裝資料集」、資料集與篩選條件後儲存。
 3. 卡片可拖動，`Ctrl`＋滾輪可縮放，政策雷達仍固定在左上標題右側，展開／收合正常。
-4. 瀏覽器開發者工具的 Console 沒有新的紅色錯誤，頁面沒有白屏或 Vite 錯誤遮罩。
+4. 新增圖表成果，選取來源、輸入需求、儲存後按「執行分析」；確認成果面板能呈現圖表或明確的 blocked/error 狀態，Console 沒有新的紅色錯誤。
 
 重新整理頁面仍會重置前端模擬資料，這不是本次型別調整造成的新問題。Canvas ID 已分離；簡報已明示不可用，不再使用原始來源。使用者已逐步接受上一輪修正，並以 `24b7f5d` 推送；以上步驟保留供重測。本次追加 Tooltip／空白修正，提交檢查結果與 review／合併狀態以 PR #12 為準。
 
@@ -58,19 +58,19 @@ git diff --check origin/main...HEAD
 ## 卡片 ID 與資料來源 ID
 
 - `CanvasNode.id`：白板卡片的識別碼；成果和小幫手草稿透過 `sourceNodeIds` 連到來源卡片。
-- `SourceConfig.registrySourceId`：預留給後端 Source Registry 的資料集識別碼；目前檔案／API 原型尚未綁定，不會用卡片 ID 或檔名自動填入。
-- `SourceConfig.filters`：預留 JSON 篩選條件，支援巢狀物件、陣列及 null；不是已完成的篩選 UI 或 API 請求。
+- `SourceConfig.registrySourceId`：後端 Source Registry 的正式資料集識別碼；只由「已安裝資料集」選擇器設定。
+- `SourceConfig.filters`：送進 Contract v0 `source_selections[].filters` 的篩選條件。Canvas ID、x/y、zoom 等 UI state 不會進入 API request。
 
 複製筆記本只重建 Canvas ID 與連線，保留 Registry ID 並深拷貝篩選條件。一般來源名稱／啟用／清理選項編輯會保留既有綁定；更換檔案 metadata、來源方式或 API 網址則清除舊綁定及 filters。這是目前 metadata 原型的防護，真正上傳後仍需後端提供版本／內容識別，不能只靠檔名與大小判斷資料一致。
 
 ### 人工驗收（本次 ID 分離）
 
-1. 先重新整理頁面再建立測試筆記本（目前原型重新整理會清空本次頁面資料），避免沿用改名前的開發熱更新狀態。新增兩張來源，使用公開 API 模式填入不同測試網址並儲存；目前只保存網址，不會連線。
+1. 先啟動 YouthLM API，再重新整理頁面並建立測試筆記本。新增兩張來源，使用「已安裝資料集」選擇資料與篩選條件並儲存。
 2. 新增圖表成果，勾選兩張來源，填名稱與生成需求後儲存；確認兩條連線與來源數量正確。點空白處收合後再開啟，設定應仍保留。
 3. 新增小幫手，送出需求並建立圖表草稿，確認草稿沿用來源連線。簡報不可用，不會另外建立簡報卡片。
 4. 返回列表、建立此筆記本的副本；開啟副本後刪除其中一張來源，成果應只剩另一張的連線。返回原筆記本，兩張來源及連線都應仍在。
 
-程式測試另涵蓋 UI 尚未開放的 Registry 綁定／巢狀 filters，包含複製後互不影響、替換資料清除綁定及雷達過期判斷。`npm test` 使用 Node 內建 runner；新增白板測試透過已安裝的 TypeScript 編譯器載入實際 helper，所以完整測試需先 `npm ci`，不需新增測試框架或模型金鑰。
+程式測試另涵蓋 Registry 綁定／巢狀 filters，包含複製後互不影響、替換資料清除綁定、request mapping 及雷達過期判斷。`npm test` 使用 Node 內建 runner；完整測試需先 `npm ci`，純前端測試不需模型金鑰。
 
 ## 簡報輸入分界與人工驗收
 
@@ -94,7 +94,7 @@ git diff --check origin/main...HEAD
 - `blocked`：顯示無法分析的原因，不繪製空圖。
 - `error`：顯示 HTTP／API 錯誤，只有 `retriable` 為 true 時提供重試。
 
-本次只合併交接模組，尚未把它接到 React 成果卡，也尚未安裝 ECharts。後續再使用既定的 npm 安裝 ECharts，將 API JSON 與 HTTP status 傳入 `buildChartArtifactView()`，僅在 `view.kind === "chart"` 時把 `view.chartOption` 交給 ECharts。`partial` 結果仍可呈現，但必須保留警告；圖表數值只能取自 `result_data.records`，不能從 AI 摘要猜測。
+React 成果設定面板已使用 Apache ECharts 呈現 `view.kind === "chart"` 的結果；`partial` 結果保留警告，`blocked` 不畫空圖，HTTP/API error 會明確顯示。圖表數值只取自 `result_data.records`，不從 AI 摘要猜測。
 
 詳細規則見 [圖表交接文件](../../docs/frontend-chart-artifact.md)，包含互動、可追溯性、無障礙與未來簡報輸入的分界。UI 的座標、縮放、側欄與節點尺寸不屬於後端分析契約。
 
@@ -104,7 +104,7 @@ git diff --check origin/main...HEAD
 - [BACKEND_TODO.md](./BACKEND_TODO.md) 已依 2026-09-06 的 main／PR 狀態校正，分開後端已實作、前端未串接及待設計事項，並列出兩份官方資料的範圍與缺口；不把本機分析保存或 provider adapter 視為整本筆記本恢復或 AWS 已驗收。
 - [PR #12 review 回覆與交接清單](./docs/pr-12-review-response.md) 對照第一輪六項 review 要求、已執行檢查，以及下一個 Source → Chart PR 的範圍；已隨 `24b7f5d` 推送，保留提交時的紀錄。最新修正進度以 BACKEND_TODO 為準。
 - [9/1 前端規劃](./docs/frontend-plan-2026-09-01.md) 是歷史提案，其中的 API 路徑、架構與功能優先序不視為目前已凍結的契約。
-- 後續先完成目前 PR 的 review 修正，再用另一個小 PR 接上 Source → Chart 流程。此次不包含真實 API 串接、簡報生成或 AWS 部署。
+- Source → Chart 已在本 checkpoint 接上真實 API。簡報 UI、Assistant API、檔案上傳與 AWS 部署仍是後續獨立 checkpoint。
 
 ## 原始設計與授權
 

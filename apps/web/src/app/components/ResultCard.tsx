@@ -3,17 +3,21 @@ import {
   BarChart3,
   FileOutput,
   GripHorizontal,
+  LoaderCircle,
   Pencil,
+  Play,
   Presentation,
   Trash2,
 } from 'lucide-react';
-import type { CanvasNode } from '../types';
+import type { AnalysisExecution, CanvasNode } from '../types';
 import { PRESENTATION_UNAVAILABLE_MESSAGE } from '../result-policy';
 
 export type ResultCardProps = {
   node: CanvasNode;
   selected?: boolean;
   sourcesReady?: boolean;
+  execution?: AnalysisExecution;
+  onRun?: (id: string) => void;
   onSelect: (id: string) => boolean | void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
@@ -26,6 +30,8 @@ export function ResultCard({
   node,
   selected = false,
   sourcesReady = false,
+  execution,
+  onRun,
   onSelect,
   onEdit,
   onDelete,
@@ -39,6 +45,7 @@ export function ResultCard({
     config?.kind === 'chart' && config.name.trim() && config.sourceNodeIds.length > 0 && config.prompt.trim(),
   );
   const isReadyForGeneration = isConfigured && sourcesReady;
+  const isRunning = execution?.state === 'running';
   const ResultIcon = config?.kind === 'chart'
     ? BarChart3
     : config?.kind === 'presentation'
@@ -133,22 +140,43 @@ export function ResultCard({
           }`}
         >
           <span className={`size-1.5 rounded-full ${isReadyForGeneration ? 'bg-violet-500' : 'bg-amber-500'}`} />
-          {isPresentation ? '簡報功能尚未提供' : isReadyForGeneration
-            ? '設定已儲存，等待後端生成'
+          {isPresentation ? '簡報功能尚未提供' : isRunning
+            ? 'YouthLM Agent 分析中'
+            : execution?.view?.kind === 'error'
+              ? '分析失敗，可重試'
+              : execution?.view?.status === 'blocked'
+                ? '資料限制阻擋分析'
+                : execution?.state === 'ready'
+                  ? '分析結果已產生'
+                  : isReadyForGeneration
+                    ? '可執行真實分析'
             : isConfigured
               ? '設定已儲存，來源尚待設定'
               : '尚未設定'}
         </span>
 
         <div className="flex items-center gap-2 pt-1">
+          {isReadyForGeneration && onRun && (
+            <button
+              type="button"
+              disabled={isRunning}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => onRun(node.id)}
+              className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-violet-700 text-xs font-medium text-white transition hover:bg-violet-800 disabled:cursor-wait disabled:bg-violet-400"
+            >
+              {isRunning ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+              {isRunning ? '分析中…' : execution ? '重新分析' : '執行分析'}
+            </button>
+          )}
           <button
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => onEdit(node.id)}
-            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            className={`flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 ${isReadyForGeneration ? 'size-8' : 'flex-1'}`}
+            aria-label="編輯成果設定"
           >
             <Pencil className="size-3.5" />
-            {isConfigured ? '編輯設定' : '設定成果'}
+            {!isReadyForGeneration && (isConfigured ? '編輯設定' : '設定成果')}
           </button>
           <button
             type="button"

@@ -14,6 +14,9 @@ import { ResultCard } from './components/ResultCard';
 import { ResultInspector } from './components/ResultInspector';
 import { AssistantCard } from './components/AssistantCard';
 import { PolicyRadarPanel } from './components/PolicyRadarPanel';
+import { buildChartArtifactView } from '../chart-artifact.js';
+import { buildAnalysisRequest } from './analysis-integration';
+import { listDataSources, runAnalysis } from './api-client';
 import { createChartDraftActions, getChartDraftActions, PRESENTATION_UNAVAILABLE_MESSAGE, usesRawSourceInputs } from './result-policy';
 import {
   cloneWorkspaceNode,
@@ -24,12 +27,14 @@ import {
 } from './workspace-state';
 import type {
   AuthUser,
+  AnalysisExecution,
   CanvasNode,
   Notebook,
   PolicyRadarCounts,
   PolicyRadarState,
   PolicyRadarStateByNotebook,
   ResultConfig,
+  RegistryDataSource,
   SourceConfig,
 } from './types';
 
@@ -62,8 +67,7 @@ function cardWouldOverlap(x: number, y: number, type: CanvasNode['type'], node: 
 
 function isSourceReady(node: CanvasNode) {
   if (node.type !== 'source' || !node.source?.enabled) return false;
-  if (node.source.kind === 'file') return Boolean(node.source.file?.name);
-  if (node.source.kind === 'api') return Boolean(node.source.apiUrl?.trim());
+  if (node.source.kind === 'registry') return Boolean(node.source.registrySourceId);
   return false;
 }
 
@@ -168,6 +172,10 @@ export default function App() {
   const [isRightOpen, setIsRightOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [dirtyInspectorNodeId, setDirtyInspectorNodeId] = useState<string | null>(null);
+  const [registrySources, setRegistrySources] = useState<RegistryDataSource[]>([]);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [registryError, setRegistryError] = useState<string>();
+  const [analysisByNode, setAnalysisByNode] = useState<Record<string, AnalysisExecution>>({});
 
   // Canvas State
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -191,6 +199,22 @@ export default function App() {
   };
 
   useEffect(() => () => clearAllPolicyRadarRunTimers(), []);
+
+  useEffect(() => {
+    if (screen !== 'workspace' || registrySources.length > 0 || registryLoading) return;
+    setRegistryLoading(true);
+    setRegistryError(undefined);
+    listDataSources()
+      .then(sources => {
+        setRegistrySources(sources);
+      })
+      .catch(error => {
+        setRegistryError(error instanceof Error ? error.message : '無法載入 YouthLM 資料來源');
+      })
+      .finally(() => {
+        setRegistryLoading(false);
+      });
+  }, [registrySources.length, screen]);
 
   // Pointer Handlers
   const handleCanvasPointerDown = (e: React.PointerEvent) => {
@@ -341,6 +365,7 @@ export default function App() {
     setActiveNotebookId(null);
     setSelectedNodeId(null);
     setDirtyInspectorNodeId(null);
+    setAnalysisByNode({});
     setScreen('notebooks');
   };
 
@@ -351,6 +376,7 @@ export default function App() {
     setActiveNotebookId(null);
     setSelectedNodeId(null);
     setDirtyInspectorNodeId(null);
+    setAnalysisByNode({});
     setScreen('auth');
   };
 
@@ -784,11 +810,19 @@ export default function App() {
 
   const handleSaveSource = (source: SourceConfig) => {
     if (!selectedSource) return;
+    const sourceNodeId = selectedSource.id;
     setNodes(current => current.map(node =>
-      node.id === selectedSource.id
+      node.id === sourceNodeId
         ? { ...node, source: updateSourceConfig(node.source, source) }
         : node,
     ));
+    setAnalysisByNode(current => {
+      const next = { ...current };
+      nodes
+        .filter(node => node.result?.sourceNodeIds.includes(sourceNodeId))
+        .forEach(node => delete next[node.id]);
+      return next;
+    });
     setDirtyInspectorNodeId(null);
     setNotebooks(current => current.map(notebook =>
       notebook.id === activeNotebookId ? { ...notebook, updatedAt: '剛剛' } : notebook,
@@ -797,15 +831,70 @@ export default function App() {
 
   const handleSaveResult = (result: ResultConfig) => {
     if (!selectedResult || result.kind !== 'chart') return;
+    const resultNodeId = selectedResult.id;
     setNodes(current => current.map(node =>
-      node.id === selectedResult.id
+      node.id === resultNodeId
         ? { ...node, result: { ...result, sourceNodeIds: [...result.sourceNodeIds] } }
         : node,
     ));
+    setAnalysisByNode(current => {
+      const next = { ...current };
+      delete next[resultNodeId];
+      return next;
+    });
     setDirtyInspectorNodeId(null);
     setNotebooks(current => current.map(notebook =>
       notebook.id === activeNotebookId ? { ...notebook, updatedAt: '剛剛' } : notebook,
     ));
+  };
+
+  const handleRunAnalysis = async (resultNodeId: string) => {
+    const resultNode = nodes.find(node => node.id === resultNodeId);
+    if (!activeNotebookId || !resultNode?.result) return;
+
+    setAnalysisByNode(current => ({
+      ...current,
+      [resultNodeId]: { state: 'running' },
+    }));
+    setSelectedNodeId(resultNodeId);
+    setIsRightOpen(true);
+
+    try {
+      const request = buildAnalysisRequest({
+        projectId: activeNotebookId,
+        moduleId: resultNodeId,
+        result: resultNode.result,
+        sourceNodes,
+      });
+      const response = await runAnalysis(request);
+      const view = buildChartArtifactView(response.payload, {
+        httpStatus: response.httpStatus,
+      });
+      setAnalysisByNode(current => ({
+        ...current,
+        [resultNodeId]: {
+          state: view.kind === 'error' ? 'failed' : 'ready',
+          view,
+        },
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'YouthLM API 無法完成分析';
+      const view = buildChartArtifactView(
+        {
+          contract_version: '0.1.0',
+          error: {
+            code: 'frontend_integration_error',
+            message,
+            retriable: true,
+          },
+        },
+        { httpStatus: 0 },
+      );
+      setAnalysisByNode(current => ({
+        ...current,
+        [resultNodeId]: { state: 'failed', view },
+      }));
+    }
   };
 
   const handleAssistantSubmit = (id: string, prompt: string) => {
@@ -940,6 +1029,13 @@ export default function App() {
     }
 
     setNodes(current => removeSourceNode(current, id));
+    setAnalysisByNode(current => {
+      const next = { ...current };
+      nodes
+        .filter(node => node.result?.sourceNodeIds.includes(id))
+        .forEach(node => delete next[node.id]);
+      return next;
+    });
     if (selectedNodeId === id) {
       setSelectedNodeId(null);
       setDirtyInspectorNodeId(null);
@@ -961,6 +1057,11 @@ export default function App() {
     }
 
     setNodes(current => current.filter(node => node.id !== id));
+    setAnalysisByNode(current => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
     if (selectedNodeId === id) {
       setSelectedNodeId(null);
       setDirtyInspectorNodeId(null);
@@ -1186,6 +1287,8 @@ export default function App() {
                   return sourceNode ? isSourceReady(sourceNode) : false;
                 })
               )}
+              execution={analysisByNode[node.id]}
+              onRun={handleRunAnalysis}
               onSelect={handleSelectNode}
               onEdit={handleSelectNode}
               onDelete={handleDeleteResult}
@@ -1561,7 +1664,7 @@ export default function App() {
               </button>
 
               <p className="px-1 pt-2 text-[11px] leading-5 text-muted-foreground">
-                目前可保存來源、成果與小幫手操作草稿；資料解析、AI 生成及檔案輸出仍等待後端串接。
+                已安裝資料集可連接成果卡並執行真實分析；小幫手、檔案上傳與政策雷達仍為操作草稿。
               </p>
             </div>
           </div>
@@ -1580,6 +1683,9 @@ export default function App() {
             <div className="h-full w-[364px]">
               <SourceInspector
                 node={selectedSource}
+                registrySources={registrySources}
+                registryLoading={registryLoading}
+                registryError={registryError}
                 onSave={handleSaveSource}
                 onDirtyChange={dirty => setDirtyInspectorNodeId(dirty ? selectedSource.id : null)}
                 onClose={closeInspector}
@@ -1590,7 +1696,16 @@ export default function App() {
               <ResultInspector
                 node={selectedResult}
                 sourceNodes={sourceNodes}
+                execution={analysisByNode[selectedResult.id]}
                 onSave={handleSaveResult}
+                onRun={selectedResult.result?.kind === 'chart'
+                    && selectedResult.result.sourceNodeIds.length > 0
+                    && selectedResult.result.sourceNodeIds.every(sourceNodeId => {
+                      const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
+                      return sourceNode ? isSourceReady(sourceNode) : false;
+                    })
+                    ? () => handleRunAnalysis(selectedResult.id)
+                    : undefined}
                 onDirtyChange={dirty => setDirtyInspectorNodeId(dirty ? selectedResult.id : null)}
                 onClose={closeInspector}
               />
