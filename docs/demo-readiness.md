@@ -46,8 +46,9 @@ demo review.
 
 ## Activity-day switch to Bedrock
 
-After fresh organizer credentials have been saved to `youthlm-workshop`, run one
-command:
+The organizer environment opens on 2026-09-12 at 08:00 and closes on 2026-09-13
+at 13:00 (Asia/Taipei). After fresh organizer credentials have been saved to
+`youthlm-workshop`, run one command:
 
 ```powershell
 .\scripts\event-day-preflight.ps1 `
@@ -62,8 +63,10 @@ checks AWS identity before starting the API and fails visibly if credentials,
 region, account, model access, Agent tool calling, or artifact generation is not
 ready. There is no automatic fallback.
 
-If Bedrock is unavailable and event rules allow Gemini, open a clean PowerShell,
-copy the Gemini key, and run the default Gemini command again.
+The final-round rules do not allow Gemini as a substitute. If Bedrock is
+unavailable, keep the failure visible and repair the issued credentials, region,
+model access, or request path. The complete non-secret event sequence is in
+[`final-environment-runbook.md`](final-environment-runbook.md).
 
 ## Reading the result
 

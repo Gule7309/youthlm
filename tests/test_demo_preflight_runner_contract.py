@@ -43,6 +43,9 @@ class DemoPreflightRunnerContractTests(unittest.TestCase):
         self.assertIn('Provider = "bedrock"', script)
         self.assertIn("run-demo-preflight.ps1", script)
         self.assertNotIn("spikes.provider_smoke", script)
+        self.assertIn("Gemini fallback is not permitted", script)
+        self.assertIn("2026-09-12 08:00", script)
+        self.assertIn("2026-09-13 13:00", script)
 
 
 if __name__ == "__main__":
