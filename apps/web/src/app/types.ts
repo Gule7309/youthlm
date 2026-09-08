@@ -84,10 +84,45 @@ export type AnalysisWarningView = {
   message: string;
 };
 
+export type AnalysisPlanStepView = {
+  step_id: string;
+  description: string;
+  status: 'completed' | 'skipped';
+};
+
+export type AnalysisDatasetVersionView = {
+  dataset_version_id: string;
+  source_id: string;
+  retrieved_at: string;
+  source_updated_at?: string;
+  source_sha256: string;
+  license?: string;
+};
+
+export type AnalysisProvenanceView = {
+  source_id: string;
+  dataset_version_id: string;
+  query_tool: string;
+  query_parameters: SourceFilters;
+};
+
+export type AnalysisSourceView = {
+  source_id: string;
+  title: string;
+  agency?: string;
+  source_url?: string;
+  dataset_version_id: string;
+  datasetVersion: AnalysisDatasetVersionView | null;
+  provenance: AnalysisProvenanceView[];
+};
+
 export type ChartArtifactView = {
   kind: 'chart' | 'table' | 'blocked' | 'error';
   status?: 'completed' | 'partial' | 'blocked';
   title?: string;
+  question?: string;
+  analysisPlan?: AnalysisPlanStepView[];
+  filters?: SourceFilters;
   summary?: string;
   warnings?: AnalysisWarningView[];
   chartOption?: Record<string, unknown> | null;
@@ -95,11 +130,7 @@ export type ChartArtifactView = {
     columns: Array<{ name: string; label: string; unit?: string }>;
     records: Array<Record<string, unknown>>;
   };
-  sources?: Array<{
-    source_id: string;
-    title: string;
-    agency: string;
-  }>;
+  sources?: AnalysisSourceView[];
   httpStatus?: number;
   code?: string;
   message?: string;
