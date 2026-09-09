@@ -281,21 +281,12 @@ try {
     Write-Host "Web: $webUrl"
     Write-Host "API docs: $apiUrl/docs"
     Write-Host "Session logs and artifacts: $runRoot"
-    Write-Host "Press Ctrl+C once to stop both servers."
 
     if (-not $NoBrowser) {
         Start-Process $webUrl
     }
 
-    while ($true) {
-        if ($apiProcess.HasExited) {
-            throw "YouthLM API stopped unexpectedly. See $apiStderr"
-        }
-        if ($webProcess.HasExited) {
-            throw "YouthLM web stopped unexpectedly. See $webStderr"
-        }
-        Start-Sleep -Seconds 1
-    }
+    $null = Read-Host "Press Enter to stop both servers"
 }
 finally {
     Stop-DemoProcess $webProcess "YouthLM web"
