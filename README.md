@@ -74,7 +74,8 @@ For the interactive browser demo, copy a fresh Gemini key and run:
 ```
 
 This validates the key and selected model before starting the API and Vite UI,
-opens `http://127.0.0.1:5173`, and stops both servers when you press `Ctrl+C`.
+opens `http://127.0.0.1:5173`, and stops both servers when you press Enter in the
+runner's PowerShell window.
 For the organizer-issued final-round AWS environment and the mandatory Bedrock
 switch, follow [`docs/final-environment-runbook.md`](docs/final-environment-runbook.md).
 
