@@ -21,7 +21,7 @@ PowerShell process with the clipboard value, clears the clipboard, and checks
 that `gemini-3.1-flash-lite` exists and supports `generateContent`. It then runs
 the backend and frontend quality gates, starts the API on port `8000`, starts
 Vite on port `5173`, waits for both services, and opens the browser. Press
-`Ctrl+C` once to stop both processes.
+Press Enter in the runner's PowerShell window to stop both processes cleanly.
 
 Each session receives isolated SQLite, artifact, and log paths under
 `var/demo-session/`. To restart after closing PowerShell, copy the key again and
