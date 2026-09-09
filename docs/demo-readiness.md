@@ -7,6 +7,47 @@ module context, and editable Presentation Artifact work together.
 The preflight does not modify Contract v0 and does not inspect or store frontend
 canvas state.
 
+## Interactive full-stack demo
+
+For the browser demo, copy a fresh Gemini API key to the Windows clipboard and
+run this command from the repository root:
+
+```powershell
+.\scripts\run-local-demo.ps1
+```
+
+The runner deliberately replaces any stale `GEMINI_API_KEY` in the current
+PowerShell process with the clipboard value, clears the clipboard, and checks
+that `gemini-3.1-flash-lite` exists and supports `generateContent`. It then runs
+the backend and frontend quality gates, starts the API on port `8000`, starts
+Vite on port `5173`, waits for both services, and opens the browser. Press Enter
+in the runner's PowerShell window to stop both processes cleanly.
+
+Each session receives isolated SQLite, artifact, and log paths under
+`var/demo-session/`. To restart after closing PowerShell, copy the key again and
+run the same command. For a quick restart after the full checks have already
+passed:
+
+```powershell
+.\scripts\run-local-demo.ps1 -SkipQualityChecks
+```
+
+Use `-UseExistingGeminiKey` only when the key in the same PowerShell process was
+already verified and has not been revoked. The safe default is always a freshly
+copied key. Use `-NoBrowser` when the browser should not open automatically.
+
+Before presenting, use meaningful artifact inputs rather than single-letter test
+values:
+
+- Chart name: `新北市25–29歲男性失業率趨勢`
+- Analysis request: `比較2022至2024年的變化，指出趨勢，且不要超出資料範圍。`
+- Presentation name: `青年失業率政策簡報`
+- Presentation instructions: `整理成政策會議用簡報，保留資料限制、來源與警告。`
+
+Downloading the PPTX proves the HTTP and artifact path. Open the downloaded file
+once and confirm that its chart, table, summary, source, warnings, and editable
+slide elements are present before treating the presentation gate as complete.
+
 ## Daily development with Gemini
 
 Copy a valid Gemini API key to the Windows clipboard, open PowerShell in the

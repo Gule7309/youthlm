@@ -67,6 +67,15 @@ and run:
 
 It starts a temporary API, proves Source-to-Chart and stored upstream context,
 generates and validates an editable PPTX, then always stops the temporary server.
+For the interactive browser demo, copy a fresh Gemini key and run:
+
+```powershell
+.\scripts\run-local-demo.ps1
+```
+
+This validates the key and selected model before starting the API and Vite UI,
+opens `http://127.0.0.1:5173`, and stops both servers when you press Enter in the
+runner's PowerShell window.
 For the organizer-issued final-round AWS environment and the mandatory Bedrock
 switch, follow [`docs/final-environment-runbook.md`](docs/final-environment-runbook.md).
 
@@ -144,10 +153,12 @@ npm run dev
 ```
 
 Use `npm run check` to run strict TypeScript checking, build the UI, and execute
-all 31 frontend tests, including the adapter's six fixture-based tests, stopping
-on the first failure. Each gate
+all frontend tests, including the fixture-based Chart and Presentation Artifact
+tests, stopping on the first failure. Each gate
 can also run separately with `npm run typecheck`, `npm run build`, or `npm test`.
-The UI is still a frontend mock, not a live API integration.
+Source-to-Chart and Chart-to-Presentation use the live Contract v0 API. Login,
+whole-notebook persistence, uploads, Assistant analysis, and Policy Radar remain
+frontend prototypes.
 
 After an Analysis module is stored, `POST /v1/presentations` can generate an
 editable `.pptx` without another model call. The deterministic generator uses
