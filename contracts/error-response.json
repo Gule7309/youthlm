@@ -25,6 +25,7 @@
           "type": "string",
           "enum": [
             "validation_error",
+            "context_not_found",
             "module_not_found",
             "provider_unavailable",
             "provider_timeout",

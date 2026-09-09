@@ -45,3 +45,9 @@ ready `PresentationResult`. The response's project-scoped `download_url` serves
 the editable PPTX. Configure generated-file storage with
 `YOUTHLM_ARTIFACT_DIR` (default `var/artifacts`). Blocked or cross-project source
 modules never reach the generator.
+
+`POST /v1/assistant` accepts explicit Source, Analysis, and Presentation
+references. It resolves them by backend identity before invoking the same
+Research Agent. Analysis and Presentation lookups always include `project_id`;
+cross-project or missing references return `context_not_found` without calling
+the model.

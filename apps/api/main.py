@@ -20,6 +20,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
+from assistant_service import AssistantContextNotFoundError, AssistantService
 from contract_adapter import (
     ContractMappingError,
     build_agent_prompt,
@@ -29,6 +30,8 @@ from contract_models import (
     CONTRACT_VERSION,
     AnalysisRequest,
     AnalysisResult,
+    AssistantRequest,
+    AssistantResult,
     ErrorDetail,
     ErrorResponse,
     PresentationRequest,
@@ -42,6 +45,10 @@ from module_store import (
 from presentation_generator import (
     PptxPresentationGenerator,
     PresentationGenerationError,
+)
+from presentation_result_store import (
+    PresentationResultStoreError,
+    SQLitePresentationResultStore,
 )
 from presentation_service import (
     PPTX_MEDIA_TYPE,
@@ -89,12 +96,14 @@ def build_default_presentation_service(
     module_store: ModuleStore,
 ) -> PresentationService:
     """Compose deterministic PPTX generation over local project storage."""
+    database_path = os.getenv("YOUTHLM_SQLITE_PATH", "var/youthlm.sqlite3")
     return PresentationService(
         module_store=module_store,
         generator=PptxPresentationGenerator(),
         artifact_store=LocalPresentationArtifactStore(
             os.getenv("YOUTHLM_ARTIFACT_DIR", "var/artifacts")
         ),
+        result_store=SQLitePresentationResultStore(database_path),
     )
 
 
@@ -158,6 +167,10 @@ def create_app(
         request: Request,
         error: RequestValidationError,
     ) -> JSONResponse:
+        validation_message = {
+            "/v1/assistant": "Assistant request validation failed",
+            "/v1/presentations": "Presentation request validation failed",
+        }.get(request.url.path, "Analysis request validation failed")
         errors = [
             {
                 "location": ".".join(str(part) for part in item["loc"]),
@@ -169,11 +182,7 @@ def create_app(
         return _error_response(
             422,
             code="validation_error",
-            message=(
-                "Presentation request validation failed"
-                if request.url.path == "/v1/presentations"
-                else "Analysis request validation failed"
-            ),
+            message=validation_message,
             retriable=False,
             details={"errors": errors},
         )
@@ -185,6 +194,67 @@ def create_app(
     @application.get("/v1/data-sources", response_model=DataSourceCatalog)
     def data_sources() -> DataSourceCatalog:
         return build_default_data_source_catalog()
+
+    @application.post(
+        "/v1/assistant",
+        response_model=AssistantResult,
+        response_model_exclude_none=True,
+    )
+    def assistant(request: AssistantRequest) -> AssistantResult | JSONResponse:
+        service = AssistantService(
+            agent_factory=resolve_agent,
+            source_registry=source_registry,
+            module_store=active_module_store,
+            presentation_service=active_presentation_service,
+        )
+        try:
+            return service.run(request)
+        except AssistantContextNotFoundError as error:
+            return _error_response(
+                404,
+                code="context_not_found",
+                message="One or more Assistant context references are unavailable",
+                retriable=False,
+                details={"missing_references": error.missing_references},
+            )
+        except ProviderConfigurationError:
+            return _error_response(
+                503,
+                code="provider_unavailable",
+                message="Model provider is not configured",
+                retriable=False,
+            )
+        except AgentMaxStepsError:
+            return _error_response(
+                502,
+                code="max_steps_exceeded",
+                message="Assistant could not complete the request in time",
+                retriable=True,
+            )
+        except AgentProtocolError:
+            logger.exception("Agent returned an invalid Assistant response")
+            return _error_response(
+                502,
+                code="agent_protocol_error",
+                message="Agent returned an invalid Assistant response",
+                retriable=False,
+            )
+        except (ModuleStoreError, PresentationResultStoreError):
+            logger.exception("Assistant context storage failed")
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Assistant context storage failed",
+                retriable=True,
+            )
+        except RuntimeError:
+            logger.exception("Model provider request failed during Assistant request")
+            return _error_response(
+                502,
+                code="provider_unavailable",
+                message="Model provider request failed",
+                retriable=True,
+            )
 
     @application.post(
         "/v1/analysis",
@@ -331,7 +401,7 @@ def create_app(
                 message="Presentation generation failed",
                 retriable=True,
             )
-        except PresentationArtifactStoreError:
+        except (PresentationArtifactStoreError, PresentationResultStoreError):
             logger.exception("Presentation artifact storage failed")
             return _error_response(
                 500,

@@ -9,6 +9,8 @@ from pydantic import ValidationError
 from contract_models import (
     AnalysisRequest,
     AnalysisResult,
+    AssistantRequest,
+    AssistantResult,
     ModuleContext,
     PresentationRequest,
     PresentationResult,
@@ -18,6 +20,26 @@ REPOSITORY_ROOT = Path(__file__).parents[3]
 
 
 class ContractModelTests(unittest.TestCase):
+    def test_accepts_canonical_assistant_request_and_result(self) -> None:
+        request_payload = json.loads(
+            (
+                REPOSITORY_ROOT / "contracts/examples/assistant-request.json"
+            ).read_text(encoding="utf-8")
+        )
+        result_payload = json.loads(
+            (
+                REPOSITORY_ROOT / "contracts/examples/assistant-result.json"
+            ).read_text(encoding="utf-8")
+        )
+
+        request = AssistantRequest.model_validate(request_payload)
+        result = AssistantResult.model_validate(result_payload)
+
+        self.assertEqual(request.assistant_id, "assistant_1")
+        self.assertEqual(len(request.context_references), 3)
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(len(result.resolved_references), 3)
+
     def test_accepts_canonical_analysis_request(self) -> None:
         payload = json.loads(
             (REPOSITORY_ROOT / "contracts/examples/analysis-request.json").read_text(
