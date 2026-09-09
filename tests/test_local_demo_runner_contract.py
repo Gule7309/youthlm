@@ -38,6 +38,8 @@ class LocalDemoRunnerContractTests(unittest.TestCase):
     def test_waits_for_both_services_and_cleans_up_both_processes(self) -> None:
         self.assertIn('Wait-HttpReady "YouthLM API"', self.script)
         self.assertIn('Wait-HttpReady "YouthLM web"', self.script)
+        self.assertIn('"node_modules\\vite\\bin\\vite.js"', self.script)
+        self.assertIn("-FilePath $nodeExecutable", self.script)
         self.assertIn('Stop-DemoProcess $webProcess "YouthLM web"', self.script)
         self.assertIn('Stop-DemoProcess $apiProcess "YouthLM API"', self.script)
         self.assertIn("finally {", self.script)
