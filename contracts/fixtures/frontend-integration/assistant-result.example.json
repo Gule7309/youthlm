@@ -1,0 +1,26 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_1",
+  "assistant_id": "assistant_1",
+  "status": "completed",
+  "answer": "這份分析與簡報只涵蓋25至29歲男性，不能代表完整18至35歲青年；資料為年度統計，最新年度為2024年。",
+  "model_steps": 1,
+  "resolved_references": [
+    {
+      "kind": "source",
+      "reference_id": "ntpc_unemployment_by_age_sex",
+      "title": "失業率－年齡別"
+    },
+    {
+      "kind": "analysis",
+      "reference_id": "analysis_1",
+      "title": "新北市青年失業率趨勢"
+    },
+    {
+      "kind": "presentation",
+      "reference_id": "presentation_1",
+      "title": "板橋區青年人口趨勢"
+    }
+  ],
+  "tool_executions": []
+}

@@ -1,0 +1,26 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_1",
+  "assistant_id": "assistant_1",
+  "message": "比較這份分析與簡報內容，哪些限制需要提醒決策者？",
+  "context_references": [
+    {
+      "kind": "source",
+      "reference_id": "ntpc_unemployment_by_age_sex",
+      "filters": {
+        "age_groups": ["25-29"],
+        "sexes": ["male"],
+        "start_year": 2022,
+        "end_year": 2024
+      }
+    },
+    {
+      "kind": "analysis",
+      "reference_id": "analysis_1"
+    },
+    {
+      "kind": "presentation",
+      "reference_id": "presentation_1"
+    }
+  ]
+}

@@ -15,6 +15,8 @@ does not contain model or dataset business logic.
   with a ready `PresentationResult`.
 - `GET /v1/projects/{project_id}/presentations/{presentation_id}/download`
   downloads the generated editable PPTX within the same project boundary.
+- `POST /v1/assistant` resolves explicit Source, Analysis, and Presentation
+  references inside one project before invoking the same Research Agent.
 
 Local browser clients on ports `3000` and `5173` are allowed by the default CORS
 policy. Deployed frontend origins must be passed explicitly when composing the app;

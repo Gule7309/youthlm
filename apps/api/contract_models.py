@@ -380,6 +380,89 @@ class PresentationResult(BaseModel):
         return value
 
 
+class AssistantContextReference(BaseModel):
+    """One explicit @ reference resolved within the current project."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["source", "analysis", "presentation"]
+    reference_id: Identifier
+    filters: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def restrict_filters_to_sources(self) -> Self:
+        if self.kind != "source" and self.filters:
+            raise ValueError("filters are supported only for source references")
+        return self
+
+
+class AssistantRequest(BaseModel):
+    """Ask the Research Agent using explicit project artifact references."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["0.1.0"]
+    project_id: Identifier
+    assistant_id: Identifier
+    message: str = Field(min_length=1, max_length=2_000)
+    context_references: list[AssistantContextReference]
+
+    @field_validator("message")
+    @classmethod
+    def normalize_message(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("message must not be blank")
+        return normalized
+
+    @field_validator("context_references")
+    @classmethod
+    def require_unique_context_references(
+        cls,
+        value: list[AssistantContextReference],
+    ) -> list[AssistantContextReference]:
+        keys = [(reference.kind, reference.reference_id) for reference in value]
+        if len(keys) != len(set(keys)):
+            raise ValueError("context references must be unique")
+        return value
+
+
+class AssistantResolvedReference(BaseModel):
+    """Safe public summary of one context reference used by the Assistant."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["source", "analysis", "presentation"]
+    reference_id: Identifier
+    title: str = Field(min_length=1, max_length=200)
+
+
+class AssistantToolExecution(BaseModel):
+    """Compact public trace of one allow-listed tool execution."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    call_id: Identifier
+    name: Identifier
+    arguments: dict[str, Any]
+    status: Literal["completed", "failed"]
+
+
+class AssistantResult(BaseModel):
+    """Natural-language answer grounded in resolved project context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["0.1.0"]
+    project_id: Identifier
+    assistant_id: Identifier
+    status: Literal["completed"]
+    answer: str = Field(min_length=1)
+    model_steps: int = Field(gt=0)
+    resolved_references: list[AssistantResolvedReference]
+    tool_executions: list[AssistantToolExecution]
+
+
 class ErrorDetail(BaseModel):
     """Stable public error payload."""
 
@@ -387,6 +470,7 @@ class ErrorDetail(BaseModel):
 
     code: Literal[
         "validation_error",
+        "context_not_found",
         "module_not_found",
         "provider_unavailable",
         "provider_timeout",

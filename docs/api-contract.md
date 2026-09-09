@@ -40,6 +40,8 @@ state never cross this boundary.
 | `ErrorResponse` | version, error code, message, retriable flag | details |
 | `PresentationRequest` | version, project ID, source module IDs, title, output format | audience, language, template ID, instructions |
 | `PresentationResult` | identity, source module IDs, ready status, file metadata, digest, download URL, creation time, warnings | none in v0 |
+| `AssistantRequest` | version, project/assistant IDs, message, explicit context references | reference filters |
+| `AssistantResult` | identity, completed status, answer, model steps, resolved references, tool trace | none in v0 |
 
 Arrays that may have no values remain required and are returned as `[]`. Objects
 that may have no values remain required and are returned as `{}`. This prevents
@@ -76,6 +78,15 @@ decision are documented in
 [`frontend-integration-contract.md`](frontend-integration-contract.md).
 The implemented storage lifecycle and project-isolation rules are documented in
 [`module-context-storage.md`](module-context-storage.md).
+
+## Assistant boundary
+
+`POST /v1/assistant` accepts explicit Source, Analysis, and Presentation IDs.
+Backend resolution happens before the model call and remains scoped to
+`project_id`. Missing references return `context_not_found`; they are never
+silently omitted. The endpoint reuses the Research Agent and deterministic tools
+without changing AnalysisResult. See
+[`assistant-contract.md`](assistant-contract.md).
 
 ## Presentation Artifact boundary
 

@@ -40,6 +40,7 @@ The first HTTP boundary is now available:
 - `GET /health`
 - `GET /v1/data-sources`
 - `POST /v1/analysis`
+- `POST /v1/assistant`
 - `POST /v1/presentations`
 - `GET /v1/projects/{project_id}/presentations/{presentation_id}/download`
 

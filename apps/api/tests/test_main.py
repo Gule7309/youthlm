@@ -30,6 +30,7 @@ class ApiEntrypointTests(unittest.TestCase):
         self.assertIn("/health", paths)
         self.assertIn("/v1/data-sources", paths)
         self.assertIn("/v1/analysis", paths)
+        self.assertIn("/v1/assistant", paths)
         self.assertIn("/v1/presentations", paths)
         self.assertIn(
             "/v1/projects/{project_id}/presentations/{presentation_id}/download",
@@ -49,6 +50,22 @@ class ApiEntrypointTests(unittest.TestCase):
         self.assertEqual(
             response_schema,
             {"$ref": "#/components/schemas/AnalysisResult"},
+        )
+
+        assistant_operation = paths["/v1/assistant"]["post"]
+        assistant_request_schema = assistant_operation["requestBody"]["content"][
+            "application/json"
+        ]["schema"]
+        assistant_response_schema = assistant_operation["responses"]["200"][
+            "content"
+        ]["application/json"]["schema"]
+        self.assertEqual(
+            assistant_request_schema,
+            {"$ref": "#/components/schemas/AssistantRequest"},
+        )
+        self.assertEqual(
+            assistant_response_schema,
+            {"$ref": "#/components/schemas/AssistantResult"},
         )
 
         presentation_operation = paths["/v1/presentations"]["post"]
