@@ -172,7 +172,7 @@ function Stop-DemoProcess {
 
 $gitExecutable = Require-Command "git"
 $null = Require-Command "uv"
-$null = Require-Command "node"
+$nodeExecutable = Require-Command "node"
 $npmExecutable = Require-Command "npm.cmd"
 
 Push-Location $repoRoot
@@ -255,10 +255,14 @@ try {
 
     $webStdout = Join-Path $logRoot "web.stdout.log"
     $webStderr = Join-Path $logRoot "web.stderr.log"
+    $viteCli = Join-Path $webRoot "node_modules\vite\bin\vite.js"
+    if (-not (Test-Path $viteCli)) {
+        throw "Vite CLI was not found after frontend dependency installation."
+    }
     $webProcess = Start-Process `
-        -FilePath $npmExecutable `
+        -FilePath $nodeExecutable `
         -ArgumentList @(
-            "run", "dev", "--",
+            $viteCli,
             "--host", "127.0.0.1",
             "--port", $webPort.ToString(),
             "--strictPort"
