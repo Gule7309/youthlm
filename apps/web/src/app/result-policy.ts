@@ -1,7 +1,7 @@
 import type { AssistantDraftAction, ResultConfig } from './types';
 
 export const PRESENTATION_UNAVAILABLE_MESSAGE =
-  '簡報功能尚未提供。簡報需使用已完成或部分完成的分析成果，不直接使用原始來源；目前的圖表設定草稿也不算分析成果。';
+  '簡報需使用已完成或部分完成的分析成果；小幫手目前只會建立圖表草稿，請在成果卡中選擇「洞察簡報」。';
 
 export function usesRawSourceInputs(result: ResultConfig | undefined) {
   return result?.kind !== 'presentation';

@@ -18,6 +18,7 @@ const {
   updateSourceConfig,
   cloneWorkspaceNode,
   duplicateWorkspaceNodes,
+  removeResultNode,
   removeSourceNode,
   getPolicyRadarWorkspaceSignature,
 } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
@@ -86,6 +87,19 @@ function workspaceFixture() {
           sourceNodeIds: ["source-node-a", "source-node-b"],
           prompt: "比較人口趨勢",
         }],
+      },
+    },
+    {
+      id: "presentation-node",
+      type: "result",
+      x: 1200,
+      y: 20,
+      result: {
+        kind: "presentation",
+        name: "人口政策簡報",
+        sourceNodeIds: [],
+        sourceModuleIds: ["result-node"],
+        prompt: "保留資料限制與來源",
       },
     },
   ];
@@ -199,7 +213,7 @@ test("saving an installed registry source preserves its explicit identity and fi
   assert.notEqual(updated.filters, filters);
 });
 
-test("workspace cloning independently copies source-node links, messages, and drafts", () => {
+test("workspace cloning independently copies source, analysis, messages, and drafts", () => {
   const original = workspaceFixture();
   const before = structuredClone(original);
   const clones = original.map(cloneWorkspaceNode);
@@ -217,6 +231,7 @@ test("workspace cloning independently copies source-node links, messages, and dr
   clones[2].result.sourceNodeIds.pop();
   clones[3].assistant.messages[0].content = "副本對話";
   clones[3].assistant.draftActions[0].sourceNodeIds.pop();
+  clones[4].result.sourceModuleIds.pop();
   assert.deepEqual(original, before);
   assert.equal(Object.hasOwn(clones[2].result, "sourceIds"), false);
   assert.equal(Object.hasOwn(clones[3].assistant.draftActions[0], "sourceIds"), false);
@@ -235,6 +250,7 @@ test("duplicating a notebook remaps only canvas links and drops dangling referen
   assert.ok(duplicateIds.every(id => !originalIds.has(id)));
   assert.deepEqual(duplicate[2].result.sourceNodeIds, duplicateIds.slice(0, 2));
   assert.deepEqual(duplicate[3].assistant.draftActions[0].sourceNodeIds, duplicateIds.slice(0, 2));
+  assert.deepEqual(duplicate[4].result.sourceModuleIds, [duplicateIds[2]]);
   assert.notEqual(duplicate[3].assistant.messages[0].id, original[3].assistant.messages[0].id);
   assert.notEqual(duplicate[3].assistant.draftActions[0].id, original[3].assistant.draftActions[0].id);
   for (const index of [0, 1]) {
@@ -244,6 +260,7 @@ test("duplicating a notebook remaps only canvas links and drops dangling referen
   duplicate[0].source.filters.nested.values[2].label = "副本資料";
   duplicate[2].result.sourceNodeIds.pop();
   duplicate[3].assistant.draftActions[0].sourceNodeIds.pop();
+  duplicate[4].result.sourceModuleIds.pop();
   assert.deepEqual(original, before);
   assert.equal(duplicate[1].source.filters.nested.values[2].label, "原始值");
 });
@@ -253,12 +270,25 @@ test("deleting one canvas source leaves its same-registry sibling and links inta
   const before = structuredClone(original);
   const remaining = removeSourceNode(original, "source-node-a");
 
-  assert.deepEqual(remaining.map(node => node.id), ["source-node-b", "result-node", "assistant-node"]);
+  assert.deepEqual(
+    remaining.map(node => node.id),
+    ["source-node-b", "result-node", "assistant-node", "presentation-node"],
+  );
   assert.equal(remaining[0].source.registrySourceId, REGISTRY_SOURCE_ID);
   assert.deepEqual(remaining[1].result.sourceNodeIds, ["source-node-b"]);
   assert.deepEqual(remaining[2].assistant.draftActions[0].sourceNodeIds, ["source-node-b"]);
   assert.deepEqual(original, before);
   assert.deepEqual(removeSourceNode(original, REGISTRY_SOURCE_ID), original);
+});
+
+test("deleting an analysis result also removes presentation dependencies", () => {
+  const original = workspaceFixture();
+  const before = structuredClone(original);
+  const remaining = removeResultNode(original, "result-node");
+
+  assert.equal(remaining.some(node => node.id === "result-node"), false);
+  assert.deepEqual(remaining.find(node => node.id === "presentation-node").result.sourceModuleIds, []);
+  assert.deepEqual(original, before);
 });
 
 test("radar signature tracks registry binding and nested filter changes", () => {
@@ -275,6 +305,10 @@ test("radar signature tracks registry binding and nested filter changes", () => 
   const changedLinks = original.map(cloneWorkspaceNode);
   changedLinks[2].result.sourceNodeIds.pop();
   assert.notEqual(getPolicyRadarWorkspaceSignature(changedLinks), baseline);
+
+  const changedModuleLinks = original.map(cloneWorkspaceNode);
+  changedModuleLinks[4].result.sourceModuleIds.pop();
+  assert.notEqual(getPolicyRadarWorkspaceSignature(changedModuleLinks), baseline);
 });
 
 test("radar signature ignores canvas coordinates, node ordering, and assistant-only edits", () => {
