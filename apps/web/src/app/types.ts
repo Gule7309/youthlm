@@ -82,6 +82,7 @@ export type AnalysisWarningView = {
   type: string;
   severity: string;
   message: string;
+  affected_source_ids?: string[];
 };
 
 export type AnalysisPlanStepView = {
@@ -142,12 +143,53 @@ export type AnalysisExecution = {
   view?: ChartArtifactView;
 };
 
+export type PresentationRequestPayload = {
+  contract_version: '0.1.0';
+  project_id: string;
+  source_module_ids: string[];
+  title: string;
+  language: 'zh-TW';
+  template_id: 'youthlm_default';
+  output_format: 'pptx';
+  instructions?: string;
+};
+
+export type PresentationArtifactView =
+  | {
+    kind: 'ready';
+    projectId: string;
+    presentationId: string;
+    sourceModuleIds: string[];
+    title: string;
+    fileName: string;
+    fileSizeBytes: number;
+    artifactSha256: string;
+    downloadUrl: string;
+    createdAt: string;
+    warnings: AnalysisWarningView[];
+  }
+  | {
+    kind: 'error';
+    httpStatus: number;
+    code: string;
+    message: string;
+    retriable: boolean;
+    details: Record<string, unknown>;
+  };
+
+export type PresentationExecution = {
+  state: 'running' | 'ready' | 'failed';
+  view?: PresentationArtifactView;
+};
+
 export type ResultKind = 'chart' | 'presentation' | null;
 
 export type ResultConfig = {
   kind: ResultKind;
   name: string;
   sourceNodeIds: string[]; // Canvas links only; never send as registry source IDs.
+  // Presentation-only Canvas links. Result node IDs equal stored backend module IDs.
+  sourceModuleIds?: string[];
   prompt: string;
 };
 

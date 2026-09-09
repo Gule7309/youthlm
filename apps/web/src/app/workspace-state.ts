@@ -51,7 +51,13 @@ export function cloneWorkspaceNode(node: CanvasNode): CanvasNode {
     ...node,
     source: node.source ? cloneSourceConfig(node.source) : undefined,
     result: node.result
-      ? { ...node.result, sourceNodeIds: [...node.result.sourceNodeIds] }
+      ? {
+        ...node.result,
+        sourceNodeIds: [...node.result.sourceNodeIds],
+        ...(node.result.sourceModuleIds
+          ? { sourceModuleIds: [...node.result.sourceModuleIds] }
+          : {}),
+      }
       : undefined,
     assistant: node.assistant
       ? {
@@ -84,6 +90,13 @@ export function duplicateWorkspaceNodes(nodes: CanvasNode[]): CanvasNode[] {
           sourceNodeIds: clone.result.sourceNodeIds
             .map(sourceNodeId => idMap.get(sourceNodeId))
             .filter((sourceNodeId): sourceNodeId is string => Boolean(sourceNodeId)),
+          ...(clone.result.sourceModuleIds
+            ? {
+              sourceModuleIds: clone.result.sourceModuleIds
+                .map(sourceModuleId => idMap.get(sourceModuleId))
+                .filter((sourceModuleId): sourceModuleId is string => Boolean(sourceModuleId)),
+            }
+            : {}),
         }
         : undefined,
       assistant: clone.assistant
@@ -104,6 +117,23 @@ export function duplicateWorkspaceNodes(nodes: CanvasNode[]): CanvasNode[] {
         : undefined,
     };
   });
+}
+
+export function removeResultNode(nodes: CanvasNode[], resultNodeId: string): CanvasNode[] {
+  return nodes
+    .filter(node => node.id !== resultNodeId)
+    .map(node => {
+      if (node.type !== 'result' || !node.result?.sourceModuleIds) return node;
+      return {
+        ...node,
+        result: {
+          ...node.result,
+          sourceModuleIds: node.result.sourceModuleIds.filter(
+            sourceModuleId => sourceModuleId !== resultNodeId,
+          ),
+        },
+      };
+    });
 }
 
 export function removeSourceNode(nodes: CanvasNode[], sourceNodeId: string): CanvasNode[] {
@@ -161,6 +191,7 @@ export function getPolicyRadarWorkspaceSignature(workspace: CanvasNode[]) {
         kind: node.result?.kind ?? null,
         name: node.result?.name ?? '',
         sourceNodeIds: [...(node.result?.sourceNodeIds ?? [])].sort(),
+        sourceModuleIds: [...(node.result?.sourceModuleIds ?? [])].sort(),
         prompt: node.result?.prompt ?? '',
       };
     });

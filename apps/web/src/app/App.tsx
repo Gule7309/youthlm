@@ -16,12 +16,17 @@ import { AssistantCard } from './components/AssistantCard';
 import { PolicyRadarPanel } from './components/PolicyRadarPanel';
 import { buildChartArtifactView } from '../chart-artifact.js';
 import { buildAnalysisRequest } from './analysis-integration';
-import { listDataSources, runAnalysis } from './api-client';
+import { createPresentation, listDataSources, runAnalysis } from './api-client';
+import {
+  buildPresentationArtifactView,
+  buildPresentationRequest,
+} from './presentation-integration';
 import { createChartDraftActions, getChartDraftActions, PRESENTATION_UNAVAILABLE_MESSAGE, usesRawSourceInputs } from './result-policy';
 import {
   cloneWorkspaceNode,
   duplicateWorkspaceNodes,
   getPolicyRadarWorkspaceSignature,
+  removeResultNode,
   removeSourceNode,
   updateSourceConfig,
 } from './workspace-state';
@@ -33,6 +38,7 @@ import type {
   PolicyRadarCounts,
   PolicyRadarState,
   PolicyRadarStateByNotebook,
+  PresentationExecution,
   ResultConfig,
   RegistryDataSource,
   SourceConfig,
@@ -69,6 +75,16 @@ function isSourceReady(node: CanvasNode) {
   if (node.type !== 'source' || !node.source?.enabled) return false;
   if (node.source.kind === 'registry') return Boolean(node.source.registrySourceId);
   return false;
+}
+
+function isAnalysisReady(execution: AnalysisExecution | undefined) {
+  return Boolean(
+    execution?.state === 'ready'
+    && execution.view
+    && execution.view.kind !== 'error'
+    && execution.view.kind !== 'blocked'
+    && (execution.view.status === 'completed' || execution.view.status === 'partial'),
+  );
 }
 
 function createPolicyRadarState(): PolicyRadarState {
@@ -176,6 +192,7 @@ export default function App() {
   const [registryLoading, setRegistryLoading] = useState(false);
   const [registryError, setRegistryError] = useState<string>();
   const [analysisByNode, setAnalysisByNode] = useState<Record<string, AnalysisExecution>>({});
+  const [presentationByNode, setPresentationByNode] = useState<Record<string, PresentationExecution>>({});
 
   // Canvas State
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -366,6 +383,7 @@ export default function App() {
     setSelectedNodeId(null);
     setDirtyInspectorNodeId(null);
     setAnalysisByNode({});
+    setPresentationByNode({});
     setScreen('notebooks');
   };
 
@@ -377,6 +395,7 @@ export default function App() {
     setSelectedNodeId(null);
     setDirtyInspectorNodeId(null);
     setAnalysisByNode({});
+    setPresentationByNode({});
     setScreen('auth');
   };
 
@@ -811,6 +830,9 @@ export default function App() {
   const handleSaveSource = (source: SourceConfig) => {
     if (!selectedSource) return;
     const sourceNodeId = selectedSource.id;
+    const affectedAnalysisIds = nodes
+      .filter(node => node.result?.kind === 'chart' && node.result.sourceNodeIds.includes(sourceNodeId))
+      .map(node => node.id);
     setNodes(current => current.map(node =>
       node.id === sourceNodeId
         ? { ...node, source: updateSourceConfig(node.source, source) }
@@ -818,8 +840,13 @@ export default function App() {
     ));
     setAnalysisByNode(current => {
       const next = { ...current };
+      affectedAnalysisIds.forEach(nodeId => delete next[nodeId]);
+      return next;
+    });
+    setPresentationByNode(current => {
+      const next = { ...current };
       nodes
-        .filter(node => node.result?.sourceNodeIds.includes(sourceNodeId))
+        .filter(node => node.result?.sourceModuleIds?.some(id => affectedAnalysisIds.includes(id)))
         .forEach(node => delete next[node.id]);
       return next;
     });
@@ -830,16 +857,31 @@ export default function App() {
   };
 
   const handleSaveResult = (result: ResultConfig) => {
-    if (!selectedResult || result.kind !== 'chart') return;
+    if (!selectedResult) return;
     const resultNodeId = selectedResult.id;
     setNodes(current => current.map(node =>
       node.id === resultNodeId
-        ? { ...node, result: { ...result, sourceNodeIds: [...result.sourceNodeIds] } }
+        ? {
+          ...node,
+          result: {
+            ...result,
+            sourceNodeIds: [...result.sourceNodeIds],
+            sourceModuleIds: result.sourceModuleIds ? [...result.sourceModuleIds] : undefined,
+          },
+        }
         : node,
     ));
     setAnalysisByNode(current => {
       const next = { ...current };
       delete next[resultNodeId];
+      return next;
+    });
+    setPresentationByNode(current => {
+      const next = { ...current };
+      delete next[resultNodeId];
+      nodes
+        .filter(node => node.result?.sourceModuleIds?.includes(resultNodeId))
+        .forEach(node => delete next[node.id]);
       return next;
     });
     setDirtyInspectorNodeId(null);
@@ -856,6 +898,13 @@ export default function App() {
       ...current,
       [resultNodeId]: { state: 'running' },
     }));
+    setPresentationByNode(current => {
+      const next = { ...current };
+      nodes
+        .filter(node => node.result?.sourceModuleIds?.includes(resultNodeId))
+        .forEach(node => delete next[node.id]);
+      return next;
+    });
     setSelectedNodeId(resultNodeId);
     setIsRightOpen(true);
 
@@ -893,6 +942,52 @@ export default function App() {
       setAnalysisByNode(current => ({
         ...current,
         [resultNodeId]: { state: 'failed', view },
+      }));
+    }
+  };
+
+  const handleRunPresentation = async (resultNodeId: string) => {
+    const resultNode = nodes.find(node => node.id === resultNodeId);
+    if (!activeNotebookId || resultNode?.result?.kind !== 'presentation') return;
+
+    setPresentationByNode(current => ({
+      ...current,
+      [resultNodeId]: { state: 'running' },
+    }));
+    setSelectedNodeId(resultNodeId);
+    setIsRightOpen(true);
+
+    try {
+      const request = buildPresentationRequest({
+        projectId: activeNotebookId,
+        result: resultNode.result,
+      });
+      const response = await createPresentation(request);
+      const view = buildPresentationArtifactView(response.payload, {
+        httpStatus: response.httpStatus,
+      });
+      setPresentationByNode(current => ({
+        ...current,
+        [resultNodeId]: {
+          state: view.kind === 'error' ? 'failed' : 'ready',
+          view,
+        },
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'YouthLM API 無法產生簡報';
+      setPresentationByNode(current => ({
+        ...current,
+        [resultNodeId]: {
+          state: 'failed',
+          view: {
+            kind: 'error',
+            httpStatus: 0,
+            code: 'frontend_integration_error',
+            message,
+            retriable: true,
+            details: {},
+          },
+        },
       }));
     }
   };
@@ -1021,6 +1116,9 @@ export default function App() {
       shouldDiscardOtherInspector = true;
     }
     const sourceName = nodes.find(node => node.id === id)?.source?.name || '這張來源';
+    const affectedAnalysisIds = nodes
+      .filter(node => node.result?.kind === 'chart' && node.result.sourceNodeIds.includes(id))
+      .map(node => node.id);
     if (!window.confirm(`確定要刪除「${sourceName}」嗎？已連結成果會移除此來源。`)) return;
 
     if (shouldDiscardOtherInspector) {
@@ -1031,8 +1129,13 @@ export default function App() {
     setNodes(current => removeSourceNode(current, id));
     setAnalysisByNode(current => {
       const next = { ...current };
+      affectedAnalysisIds.forEach(nodeId => delete next[nodeId]);
+      return next;
+    });
+    setPresentationByNode(current => {
+      const next = { ...current };
       nodes
-        .filter(node => node.result?.sourceNodeIds.includes(id))
+        .filter(node => node.result?.sourceModuleIds?.some(nodeId => affectedAnalysisIds.includes(nodeId)))
         .forEach(node => delete next[node.id]);
       return next;
     });
@@ -1056,10 +1159,18 @@ export default function App() {
       setDirtyInspectorNodeId(null);
     }
 
-    setNodes(current => current.filter(node => node.id !== id));
+    setNodes(current => removeResultNode(current, id));
     setAnalysisByNode(current => {
       const next = { ...current };
       delete next[id];
+      return next;
+    });
+    setPresentationByNode(current => {
+      const next = { ...current };
+      delete next[id];
+      nodes
+        .filter(node => node.result?.sourceModuleIds?.includes(id))
+        .forEach(node => delete next[node.id]);
       return next;
     });
     if (selectedNodeId === id) {
@@ -1122,6 +1233,7 @@ export default function App() {
       if (!sourceNode) return [];
       return [{
         id: `${sourceNode.id}-${resultNode.id}`,
+        kind: 'source' as const,
         start: {
           x: sourceNode.x + SOURCE_CARD_SIZE.width,
           y: sourceNode.y + SOURCE_CARD_SIZE.height / 2,
@@ -1133,6 +1245,25 @@ export default function App() {
       }];
     }),
   );
+  const presentationConnections = resultNodes
+    .filter(node => node.result?.kind === 'presentation')
+    .flatMap(presentationNode => (presentationNode.result?.sourceModuleIds ?? []).flatMap(sourceModuleId => {
+      const analysisNode = resultNodes.find(node => node.id === sourceModuleId && node.result?.kind === 'chart');
+      if (!analysisNode) return [];
+      return [{
+        id: `${analysisNode.id}-${presentationNode.id}`,
+        kind: 'analysis' as const,
+        start: {
+          x: analysisNode.x + RESULT_CARD_SIZE.width,
+          y: analysisNode.y + RESULT_CARD_SIZE.height / 2,
+        },
+        end: {
+          x: presentationNode.x,
+          y: presentationNode.y + RESULT_CARD_SIZE.height / 2,
+        },
+      }];
+    }));
+  const artifactConnections = [...resultConnections, ...presentationConnections];
 
   return (
     <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden font-sans relative">
@@ -1222,7 +1353,7 @@ export default function App() {
         >
           {/* Dynamic SVG Connections */}
           <svg className="absolute top-0 left-0 pointer-events-none z-0" style={{ overflow: 'visible' }}>
-            {resultConnections.map(connection => {
+            {artifactConnections.map(connection => {
               const controlDistance = Math.min(
                 140,
                 Math.max(60, Math.abs(connection.end.x - connection.start.x) * 0.35),
@@ -1235,14 +1366,24 @@ export default function App() {
                   <path
                     d={path}
                     fill="none"
-                    stroke="#7c3aed"
+                    stroke={connection.kind === 'analysis' ? '#059669' : '#7c3aed'}
                     strokeWidth="2.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     opacity="0.75"
                   />
-                  <circle cx={connection.start.x} cy={connection.start.y} r="4" fill="#2563eb" />
-                  <circle cx={connection.end.x} cy={connection.end.y} r="4" fill="#7c3aed" />
+                  <circle
+                    cx={connection.start.x}
+                    cy={connection.start.y}
+                    r="4"
+                    fill={connection.kind === 'analysis' ? '#7c3aed' : '#2563eb'}
+                  />
+                  <circle
+                    cx={connection.end.x}
+                    cy={connection.end.y}
+                    r="4"
+                    fill={connection.kind === 'analysis' ? '#059669' : '#7c3aed'}
+                  />
                 </g>
               );
             })}
@@ -1281,14 +1422,23 @@ export default function App() {
               node={node}
               selected={node.id === selectedNodeId}
               sourcesReady={Boolean(
-                node.result?.kind === 'chart' && node.result.sourceNodeIds.length
-                && node.result.sourceNodeIds.every(sourceNodeId => {
-                  const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
-                  return sourceNode ? isSourceReady(sourceNode) : false;
-                })
+                node.result?.kind === 'chart'
+                  ? node.result.sourceNodeIds.length
+                    && node.result.sourceNodeIds.every(sourceNodeId => {
+                      const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
+                      return sourceNode ? isSourceReady(sourceNode) : false;
+                    })
+                  : node.result?.kind === 'presentation'
+                    && node.result.sourceModuleIds?.length
+                    && node.result.sourceModuleIds.every(sourceModuleId => (
+                      isAnalysisReady(analysisByNode[sourceModuleId])
+                    ))
               )}
               execution={analysisByNode[node.id]}
-              onRun={handleRunAnalysis}
+              presentationExecution={presentationByNode[node.id]}
+              onRun={node.result?.kind === 'presentation'
+                ? handleRunPresentation
+                : handleRunAnalysis}
               onSelect={handleSelectNode}
               onEdit={handleSelectNode}
               onDelete={handleDeleteResult}
@@ -1640,7 +1790,7 @@ export default function App() {
                   </span>
                   <span>
                     <span className="block text-sm font-semibold text-violet-950">成果</span>
-                    <span className="mt-1 block text-[11px] leading-4 text-violet-800/80">連結來源設定圖表；簡報尚未提供</span>
+                    <span className="mt-1 block text-[11px] leading-4 text-violet-800/80">連結來源產生圖表，或從分析成果產生簡報</span>
                   </span>
                 </span>
               </button>
@@ -1664,7 +1814,7 @@ export default function App() {
               </button>
 
               <p className="px-1 pt-2 text-[11px] leading-5 text-muted-foreground">
-                已安裝資料集可連接成果卡並執行真實分析；小幫手、檔案上傳與政策雷達仍為操作草稿。
+                已安裝資料集可執行真實分析；完成後可再產生並下載簡報。小幫手、檔案上傳與政策雷達仍為操作草稿。
               </p>
             </div>
           </div>
@@ -1696,15 +1846,26 @@ export default function App() {
               <ResultInspector
                 node={selectedResult}
                 sourceNodes={sourceNodes}
+                analysisNodes={resultNodes.filter(node => (
+                  node.id !== selectedResult.id && node.result?.kind === 'chart'
+                ))}
+                analysisExecutions={analysisByNode}
                 execution={analysisByNode[selectedResult.id]}
+                presentationExecution={presentationByNode[selectedResult.id]}
                 onSave={handleSaveResult}
                 onRun={selectedResult.result?.kind === 'chart'
-                    && selectedResult.result.sourceNodeIds.length > 0
-                    && selectedResult.result.sourceNodeIds.every(sourceNodeId => {
-                      const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
-                      return sourceNode ? isSourceReady(sourceNode) : false;
-                    })
-                    ? () => handleRunAnalysis(selectedResult.id)
+                  && selectedResult.result.sourceNodeIds.length > 0
+                  && selectedResult.result.sourceNodeIds.every(sourceNodeId => {
+                    const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
+                    return sourceNode ? isSourceReady(sourceNode) : false;
+                  })
+                  ? () => handleRunAnalysis(selectedResult.id)
+                  : selectedResult.result?.kind === 'presentation'
+                    && selectedResult.result.sourceModuleIds?.length
+                    && selectedResult.result.sourceModuleIds.every(sourceModuleId => (
+                      isAnalysisReady(analysisByNode[sourceModuleId])
+                    ))
+                    ? () => handleRunPresentation(selectedResult.id)
                     : undefined}
                 onDirtyChange={dirty => setDirtyInspectorNodeId(dirty ? selectedResult.id : null)}
                 onClose={closeInspector}

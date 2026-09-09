@@ -1,4 +1,8 @@
-import type { AnalysisRequestPayload, RegistryDataSource } from './types';
+import type {
+  AnalysisRequestPayload,
+  PresentationRequestPayload,
+  RegistryDataSource,
+} from './types';
 
 type Fetcher = typeof fetch;
 
@@ -48,4 +52,27 @@ export async function runAnalysis(
     httpStatus: response.status,
     payload: await readJson(response),
   };
+}
+
+export async function createPresentation(
+  request: PresentationRequestPayload,
+  fetcher: Fetcher = fetch,
+  baseUrl = apiBaseUrl(),
+): Promise<AnalysisHttpResult> {
+  const response = await fetcher(`${baseUrl}/v1/presentations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return {
+    httpStatus: response.status,
+    payload: await readJson(response),
+  };
+}
+
+export function resolveApiUrl(path: string, baseUrl = apiBaseUrl()) {
+  if (!path.startsWith('/')) {
+    throw new Error('YouthLM artifact download URL must be relative');
+  }
+  return `${baseUrl}${path}`;
 }

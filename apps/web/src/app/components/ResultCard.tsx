@@ -9,14 +9,14 @@ import {
   Presentation,
   Trash2,
 } from 'lucide-react';
-import type { AnalysisExecution, CanvasNode } from '../types';
-import { PRESENTATION_UNAVAILABLE_MESSAGE } from '../result-policy';
+import type { AnalysisExecution, CanvasNode, PresentationExecution } from '../types';
 
 export type ResultCardProps = {
   node: CanvasNode;
   selected?: boolean;
   sourcesReady?: boolean;
   execution?: AnalysisExecution;
+  presentationExecution?: PresentationExecution;
   onRun?: (id: string) => void;
   onSelect: (id: string) => boolean | void;
   onEdit: (id: string) => void;
@@ -31,6 +31,7 @@ export function ResultCard({
   selected = false,
   sourcesReady = false,
   execution,
+  presentationExecution,
   onRun,
   onSelect,
   onEdit,
@@ -42,10 +43,18 @@ export function ResultCard({
   const config = node.result;
   const isPresentation = config?.kind === 'presentation';
   const isConfigured = Boolean(
-    config?.kind === 'chart' && config.name.trim() && config.sourceNodeIds.length > 0 && config.prompt.trim(),
+    config?.name.trim()
+    && (
+      config.kind === 'chart'
+        ? config.sourceNodeIds.length > 0 && config.prompt.trim()
+        : config.kind === 'presentation'
+          ? (config.sourceModuleIds?.length ?? 0) > 0
+          : false
+    ),
   );
   const isReadyForGeneration = isConfigured && sourcesReady;
-  const isRunning = execution?.state === 'running';
+  const activeExecution = isPresentation ? presentationExecution : execution;
+  const isRunning = activeExecution?.state === 'running';
   const ResultIcon = config?.kind === 'chart'
     ? BarChart3
     : config?.kind === 'presentation'
@@ -56,8 +65,11 @@ export function ResultCard({
     : config?.kind === 'presentation'
       ? '洞察簡報'
       : '尚未選擇成果類型';
-  const sourceCount = isPresentation ? 0 : config?.sourceNodeIds.length ?? 0;
-  const promptSummary = config?.prompt.trim() || '請先描述希望產生的內容與洞察方向';
+  const sourceCount = isPresentation
+    ? config?.sourceModuleIds?.length ?? 0
+    : config?.sourceNodeIds.length ?? 0;
+  const promptSummary = config?.prompt.trim()
+    || (isPresentation ? '使用預設政策簡報格式' : '請先描述希望產生的內容與洞察方向');
 
   return (
     <article
@@ -75,20 +87,24 @@ export function ResultCard({
     >
       <button
         type="button"
-        disabled={isPresentation || !onInputPointerDown}
+        disabled={!onInputPointerDown}
         onPointerDown={(event) => {
           event.stopPropagation();
-          if (!isPresentation) onInputPointerDown?.(event, node.id);
+          onInputPointerDown?.(event, node.id);
         }}
         className={`absolute -left-2.5 top-1/2 size-5 -translate-y-1/2 rounded-full border-[3px] border-white shadow-sm ${
-          !isPresentation && onInputPointerDown
+          onInputPointerDown
             ? 'cursor-crosshair bg-violet-600 hover:bg-violet-700'
             : sourceCount > 0
               ? 'cursor-default bg-violet-600'
               : 'cursor-not-allowed bg-slate-300'
         }`}
         aria-label="成果輸入連接點"
-        title={isPresentation ? PRESENTATION_UNAVAILABLE_MESSAGE : onInputPointerDown ? '拖曳以連接來源卡片' : sourceCount > 0 ? `已連接 ${sourceCount} 個來源` : '請在成果設定中選擇來源'}
+        title={onInputPointerDown
+          ? isPresentation ? '拖曳以連接分析成果' : '拖曳以連接來源卡片'
+          : sourceCount > 0
+            ? `已連接 ${sourceCount} 個${isPresentation ? '分析成果' : '來源'}`
+            : `請在成果設定中選擇${isPresentation ? '分析成果' : '來源'}`}
       />
 
       <div
@@ -140,18 +156,18 @@ export function ResultCard({
           }`}
         >
           <span className={`size-1.5 rounded-full ${isReadyForGeneration ? 'bg-violet-500' : 'bg-amber-500'}`} />
-          {isPresentation ? '簡報功能尚未提供' : isRunning
-            ? 'YouthLM Agent 分析中'
-            : execution?.view?.kind === 'error'
-              ? '分析失敗，可重試'
-              : execution?.view?.status === 'blocked'
+          {isRunning
+            ? isPresentation ? '正在產生簡報' : 'YouthLM Agent 分析中'
+            : activeExecution?.view?.kind === 'error'
+              ? isPresentation ? '簡報產生失敗，可重試' : '分析失敗，可重試'
+              : !isPresentation && execution?.view?.status === 'blocked'
                 ? '資料限制阻擋分析'
-                : execution?.state === 'ready'
-                  ? '分析結果已產生'
+                : activeExecution?.state === 'ready'
+                  ? isPresentation ? '可下載 PPTX' : '分析結果已產生'
                   : isReadyForGeneration
-                    ? '可執行真實分析'
+                    ? isPresentation ? '可產生真實簡報' : '可執行真實分析'
             : isConfigured
-              ? '設定已儲存，來源尚待設定'
+              ? isPresentation ? '設定已儲存，分析尚未完成' : '設定已儲存，來源尚待設定'
               : '尚未設定'}
         </span>
 
@@ -165,7 +181,11 @@ export function ResultCard({
               className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-violet-700 text-xs font-medium text-white transition hover:bg-violet-800 disabled:cursor-wait disabled:bg-violet-400"
             >
               {isRunning ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-              {isRunning ? '分析中…' : execution ? '重新分析' : '執行分析'}
+              {isRunning
+                ? isPresentation ? '產生中…' : '分析中…'
+                : activeExecution
+                  ? isPresentation ? '重新產生' : '重新分析'
+                  : isPresentation ? '產生簡報' : '執行分析'}
             </button>
           )}
           <button
