@@ -10,8 +10,9 @@ results, or provider boundary.
 | --- | --- | --- | --- | --- | --- |
 | Source Node | Source Registry discovers and inspects shared sources; deterministic tools accept source-specific filters. | `AnalysisRequest` previously described only a question and prior module results. Project-uploaded source registration is still TBD. | Add optional `source_selections` containing `source_id` and source-specific `filters`; validate shared IDs and enforce the selection at the Agent/tool boundary. | No. Existing requests remain valid. | P0 |
 | Chart Artifact | `POST /v1/analysis` returns Contract-valid `AnalysisResult` with records, visualization, summary, warnings, sources, versions, and provenance. | Executable frontend fixtures were missing. | Publish exact success, blocked, and error fixtures and prove the Source-to-Chart route with an HTTP integration test. | No. | P0 |
-| Presentation Artifact | Analysis data and provenance can be used as future inputs. | A presentation is a generated artifact, not an analytical result; output format and lifecycle are TBD. | Defer and later design a separate output-generation contract. Do not add presentation fields to `AnalysisResult`. | TBD when designed. | P1 |
-| Assistant Node | The Research Agent already provides the natural-language analysis entry and can retrieve selected project/module context. | A distinct chat lifecycle is TBD. | Reuse application services. Do not add `AssistantRequest` or `AssistantResult` until the Chart golden path is integrated. | No change now. | P1 |
+| Presentation Artifact | Stored Analysis data and provenance produce a deterministic editable PPTX. | None for synchronous v0 generation. | Send project-scoped module IDs to `POST /v1/presentations`; display warnings and download metadata. | No. Additive boundary. | P1 complete |
+| Report Artifact | Stored Analysis data, limitations, sources, versions, and provenance produce a deterministic editable DOCX. | None for synchronous v0 generation. | Send project-scoped module IDs to `POST /v1/reports`; display warnings and download metadata. | No. Additive boundary. | P1 complete |
+| Assistant Node | The Research Agent resolves explicit Source, Analysis, and Presentation references and returns a compact tool trace. | Conversation persistence and Canvas mutation tools remain deferred. | Send only user-selected backend identities to `POST /v1/assistant`; never infer context from coordinates or labels. | No. Additive boundary. | P1 complete |
 | Connected upstream module | `ModuleContext` and `upstream_module_ids` are defined; local SQLite now persists validated results. | Remote/multi-machine persistence is not implemented. | Resolve by `(project_id, module_id)` and inject structured context into the existing Agent. | No public contract change. | P0 complete |
 | Project-uploaded source | Source IDs and project IDs already exist as opaque identifiers. | Source Registry currently supports only shared installed sources. Upload storage, registration, and ownership are TBD. | Reject unknown source IDs for now; design project-owned source registration separately. | TBD. | P1 |
 | Policy Radar | No dedicated backend contract is required by the first chart flow. | Product inputs, scoring semantics, and output contract are TBD. | Defer until Source-to-Chart and module persistence are stable. | TBD. | P2 |
@@ -90,8 +91,9 @@ Source selection
 → frontend Chart Artifact
 ```
 
-Presentation generation, Assistant-specific contracts, Policy Radar, automatic
-Canvas construction, and advanced PDF workflows are outside this path.
+Report, Presentation, and Assistant are separate additive paths built on the
+stored modules created by this golden path. Policy Radar, automatic Canvas
+construction, and advanced PDF workflows remain outside it.
 
 ## Frontend fixtures and HTTP behavior
 

@@ -106,6 +106,7 @@ first failure. It verifies, in order:
 4. A temporary live Contract v0 API using `BedrockConverseProvider`.
 5. Source-to-Chart analysis and project-scoped upstream module retrieval.
 6. Editable PPTX generation, download, file size, and SHA-256.
+7. Editable DOCX report generation, download, file size, and SHA-256.
 
 Only after it prints `YouthLM Bedrock event-day preflight passed` should you start
 the isolated AgentCore smoke app:

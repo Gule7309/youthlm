@@ -40,6 +40,8 @@ state never cross this boundary.
 | `ErrorResponse` | version, error code, message, retriable flag | details |
 | `PresentationRequest` | version, project ID, source module IDs, title, output format | audience, language, template ID, instructions |
 | `PresentationResult` | identity, source module IDs, ready status, file metadata, digest, download URL, creation time, warnings | none in v0 |
+| `ReportRequest` | version, project ID, source module IDs, title, output format | audience, language, template ID, instructions |
+| `ReportResult` | identity, source module IDs, ready status, DOCX metadata, digest, download URL, creation time, warnings | none in v0 |
 | `AssistantRequest` | version, project/assistant IDs, message, explicit context references | reference filters |
 | `AssistantResult` | identity, completed status, answer, model steps, resolved references, tool trace | none in v0 |
 
@@ -101,3 +103,11 @@ Only `project_id` and `source_module_ids` cross the boundary; complete upstream
 results are loaded by the backend and never copied into the request. See
 [`presentation-contract.md`](presentation-contract.md) for the exact lifecycle,
 ownership rule, and compatibility impact.
+
+## Report Artifact boundary
+
+`POST /v1/reports` follows a separate synchronous generated-output boundary. It
+loads completed or partial Analysis modules by project, generates an editable
+DOCX with `python-docx`, persists metadata, and returns a project-scoped download
+URL. It does not call the model again or copy frontend Canvas state into the
+request. See [`report-contract.md`](report-contract.md).

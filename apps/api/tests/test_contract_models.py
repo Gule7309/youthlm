@@ -14,6 +14,8 @@ from contract_models import (
     ModuleContext,
     PresentationRequest,
     PresentationResult,
+    ReportRequest,
+    ReportResult,
 )
 
 REPOSITORY_ROOT = Path(__file__).parents[3]
@@ -128,6 +130,40 @@ class ContractModelTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValidationError, "Extra inputs are not permitted"):
             PresentationRequest.model_validate(payload)
+
+    def test_accepts_canonical_report_request_and_result(self) -> None:
+        request_payload = json.loads(
+            (REPOSITORY_ROOT / "contracts/examples/report-request.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        result_payload = json.loads(
+            (REPOSITORY_ROOT / "contracts/examples/report-result.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        request = ReportRequest.model_validate(request_payload)
+        result = ReportResult.model_validate(result_payload)
+
+        self.assertEqual(request.output_format, "docx")
+        self.assertEqual(request.source_module_ids, ["analysis_1"])
+        self.assertEqual(result.report_id, "report_1")
+        self.assertEqual(result.status, "ready")
+
+    def test_report_requires_at_least_one_unique_source_module(self) -> None:
+        payload = json.loads(
+            (REPOSITORY_ROOT / "contracts/examples/report-request.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        payload["source_module_ids"] = []
+        with self.assertRaisesRegex(ValidationError, "at least 1 item"):
+            ReportRequest.model_validate(payload)
+
+        payload["source_module_ids"] = ["analysis_1", "analysis_1"]
+        with self.assertRaisesRegex(ValidationError, "must be unique"):
+            ReportRequest.model_validate(payload)
 
     def test_rejects_visualization_using_undeclared_column(self) -> None:
         payload = json.loads(

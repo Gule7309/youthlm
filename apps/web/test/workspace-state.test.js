@@ -79,7 +79,20 @@ function workspaceFixture() {
       y: 20,
       assistant: {
         name: "小幫手",
-        messages: [{ id: "message-1", role: "user", content: "分析資料", createdAt: "2026-09-06T00:00:00Z" }],
+        messages: [{
+          id: "message-1",
+          role: "assistant",
+          content: "分析資料",
+          createdAt: "2026-09-06T00:00:00Z",
+          resolvedReferences: [{ kind: "analysis", referenceId: "result-node", title: "人口趨勢" }],
+          toolExecutions: [{
+            callId: "call-1",
+            name: "inspect_source",
+            arguments: { source_id: REGISTRY_SOURCE_ID },
+            status: "completed",
+          }],
+        }],
+        contextNodeIds: ["source-node-a", "result-node", "missing-context-node"],
         draftActions: [{
           id: "draft-1",
           kind: "chart",
@@ -230,6 +243,9 @@ test("workspace cloning independently copies source, analysis, messages, and dra
   clones[0].source.filters.age_groups.push("25-29");
   clones[2].result.sourceNodeIds.pop();
   clones[3].assistant.messages[0].content = "副本對話";
+  clones[3].assistant.messages[0].resolvedReferences[0].title = "副本成果";
+  clones[3].assistant.messages[0].toolExecutions[0].arguments.source_id = "other";
+  clones[3].assistant.contextNodeIds.pop();
   clones[3].assistant.draftActions[0].sourceNodeIds.pop();
   clones[4].result.sourceModuleIds.pop();
   assert.deepEqual(original, before);
@@ -250,6 +266,7 @@ test("duplicating a notebook remaps only canvas links and drops dangling referen
   assert.ok(duplicateIds.every(id => !originalIds.has(id)));
   assert.deepEqual(duplicate[2].result.sourceNodeIds, duplicateIds.slice(0, 2));
   assert.deepEqual(duplicate[3].assistant.draftActions[0].sourceNodeIds, duplicateIds.slice(0, 2));
+  assert.deepEqual(duplicate[3].assistant.contextNodeIds, [duplicateIds[0], duplicateIds[2]]);
   assert.deepEqual(duplicate[4].result.sourceModuleIds, [duplicateIds[2]]);
   assert.notEqual(duplicate[3].assistant.messages[0].id, original[3].assistant.messages[0].id);
   assert.notEqual(duplicate[3].assistant.draftActions[0].id, original[3].assistant.draftActions[0].id);
@@ -277,6 +294,7 @@ test("deleting one canvas source leaves its same-registry sibling and links inta
   assert.equal(remaining[0].source.registrySourceId, REGISTRY_SOURCE_ID);
   assert.deepEqual(remaining[1].result.sourceNodeIds, ["source-node-b"]);
   assert.deepEqual(remaining[2].assistant.draftActions[0].sourceNodeIds, ["source-node-b"]);
+  assert.deepEqual(remaining[2].assistant.contextNodeIds, ["result-node", "missing-context-node"]);
   assert.deepEqual(original, before);
   assert.deepEqual(removeSourceNode(original, REGISTRY_SOURCE_ID), original);
 });
@@ -288,6 +306,7 @@ test("deleting an analysis result also removes presentation dependencies", () =>
 
   assert.equal(remaining.some(node => node.id === "result-node"), false);
   assert.deepEqual(remaining.find(node => node.id === "presentation-node").result.sourceModuleIds, []);
+  assert.deepEqual(remaining.find(node => node.id === "assistant-node").assistant.contextNodeIds, ["source-node-a", "missing-context-node"]);
   assert.deepEqual(original, before);
 });
 

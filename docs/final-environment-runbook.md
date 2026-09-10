@@ -68,7 +68,8 @@ Do not start deployment until all of these pass in the issued environment:
 3. Source selection to deterministic query and chart-ready `AnalysisResult`.
 4. Project-scoped upstream Module Context retrieval.
 5. Editable PPTX generation and download.
-6. Local AgentCore `/invocations` smoke, if AgentCore is part of the submitted
+6. Editable DOCX report generation and download.
+7. Local AgentCore `/invocations` smoke, if AgentCore is part of the submitted
    deployment.
 
 ## Deadline discipline

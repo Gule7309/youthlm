@@ -36,6 +36,8 @@ from contract_models import (
     ErrorResponse,
     PresentationRequest,
     PresentationResult,
+    ReportRequest,
+    ReportResult,
 )
 from module_store import (
     ModuleStore,
@@ -60,6 +62,15 @@ from presentation_store import (
     LocalPresentationArtifactStore,
     PresentationArtifactStoreError,
 )
+from report_generator import DocxReportGenerator, ReportGenerationError
+from report_result_store import ReportResultStoreError, SQLiteReportResultStore
+from report_service import (
+    DOCX_MEDIA_TYPE,
+    ReportModulesBlockedError,
+    ReportModulesNotFoundError,
+    ReportService,
+)
+from report_store import LocalReportArtifactStore, ReportArtifactStoreError
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +118,19 @@ def build_default_presentation_service(
     )
 
 
+def build_default_report_service(module_store: ModuleStore) -> ReportService:
+    """Compose deterministic DOCX generation over local project storage."""
+    database_path = os.getenv("YOUTHLM_SQLITE_PATH", "var/youthlm.sqlite3")
+    return ReportService(
+        module_store=module_store,
+        generator=DocxReportGenerator(),
+        artifact_store=LocalReportArtifactStore(
+            os.getenv("YOUTHLM_ARTIFACT_DIR", "var/artifacts")
+        ),
+        result_store=SQLiteReportResultStore(database_path),
+    )
+
+
 def _error_response(
     status_code: int,
     *,
@@ -135,6 +159,7 @@ def create_app(
     *,
     module_store: ModuleStore | None = None,
     presentation_service: PresentationService | None = None,
+    report_service: ReportService | None = None,
     cors_origins: Sequence[str] = DEFAULT_CORS_ORIGINS,
 ) -> FastAPI:
     """Create Contract v0 API with injectable Agent and module storage."""
@@ -154,6 +179,9 @@ def create_app(
         presentation_service
         or build_default_presentation_service(active_module_store)
     )
+    active_report_service = (
+        report_service or build_default_report_service(active_module_store)
+    )
     source_registry = build_default_source_registry()
 
     def resolve_agent() -> AgentRunner:
@@ -170,6 +198,7 @@ def create_app(
         validation_message = {
             "/v1/assistant": "Assistant request validation failed",
             "/v1/presentations": "Presentation request validation failed",
+            "/v1/reports": "Report request validation failed",
         }.get(request.url.path, "Analysis request validation failed")
         errors = [
             {
@@ -444,6 +473,87 @@ def create_app(
         return FileResponse(
             artifact.path,
             media_type=PPTX_MEDIA_TYPE,
+            filename=artifact.file_name,
+        )
+
+    @application.post(
+        "/v1/reports",
+        response_model=ReportResult,
+        response_model_exclude_none=True,
+        status_code=201,
+    )
+    def create_report(request: ReportRequest) -> ReportResult | JSONResponse:
+        try:
+            return active_report_service.create(request)
+        except ReportModulesNotFoundError as error:
+            return _error_response(
+                404,
+                code="module_not_found",
+                message="One or more report source modules are not available",
+                retriable=False,
+                details={"missing_module_ids": error.module_ids},
+            )
+        except ReportModulesBlockedError as error:
+            return _error_response(
+                422,
+                code="dataset_error",
+                message="Blocked analysis modules cannot generate a report",
+                retriable=False,
+                details={"blocked_module_ids": error.module_ids},
+            )
+        except ModuleStoreError:
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Module context storage failed",
+                retriable=True,
+            )
+        except ReportGenerationError:
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Report generation failed",
+                retriable=True,
+            )
+        except (ReportArtifactStoreError, ReportResultStoreError):
+            logger.exception("Report artifact storage failed")
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Report artifact storage failed",
+                retriable=True,
+            )
+
+    @application.get(
+        "/v1/projects/{project_id}/reports/{report_id}/download",
+        response_class=FileResponse,
+        response_model=None,
+    )
+    def download_report(
+        project_id: str,
+        report_id: str,
+    ) -> FileResponse | JSONResponse:
+        try:
+            artifact = active_report_service.get_artifact(project_id, report_id)
+        except ReportArtifactStoreError:
+            logger.exception("Report artifact storage failed")
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Report artifact storage failed",
+                retriable=True,
+            )
+        if artifact is None:
+            return _error_response(
+                404,
+                code="module_not_found",
+                message="Report artifact is not available",
+                retriable=False,
+                details={"report_id": report_id},
+            )
+        return FileResponse(
+            artifact.path,
+            media_type=DOCX_MEDIA_TYPE,
             filename=artifact.file_name,
         )
 

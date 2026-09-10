@@ -2,7 +2,8 @@
 
 YouthLM has one executable acceptance path for the complete backend demo. It proves
 that the selected model provider, HTTP boundary, deterministic data tools, stored
-module context, and editable Presentation Artifact work together.
+module context, editable Presentation Artifact, and editable Report Artifact work
+together.
 
 The preflight does not modify Contract v0 and does not inspect or store frontend
 canvas state.
@@ -43,10 +44,12 @@ values:
 - Analysis request: `比較2022至2024年的變化，指出趨勢，且不要超出資料範圍。`
 - Presentation name: `青年失業率政策簡報`
 - Presentation instructions: `整理成政策會議用簡報，保留資料限制、來源與警告。`
+- Report name: `青年失業率議題研析報告`
+- Report instructions: `以政策研析格式整理，保留資料限制、來源與版本。`
 
-Downloading the PPTX proves the HTTP and artifact path. Open the downloaded file
-once and confirm that its chart, table, summary, source, warnings, and editable
-slide elements are present before treating the presentation gate as complete.
+Downloading the PPTX and DOCX proves both HTTP artifact paths. Open each file and
+confirm that the summary, table, source, warnings, and editable elements are
+present before treating the artifact gate as complete.
 
 ## Daily development with Gemini
 
@@ -79,6 +82,8 @@ The command stops at the first failure and checks:
 5. project-scoped retrieval of the stored result by an upstream module;
 6. Presentation generation from that exact stored module;
 7. PPTX download, file size, SHA-256, and package signature.
+8. Report generation from the same stored module.
+9. DOCX download, file size, SHA-256, and package signature.
 
 The temporary API always stops in a `finally` block. Every run uses a unique
 directory under `var/demo-preflight/` for SQLite, generated artifacts, logs, and
@@ -119,8 +124,8 @@ YouthLM <provider> demo is ready.
 Temporary YouthLM API stopped.
 ```
 
-The reported run directory contains the editable `.pptx` plus server logs. A
-failure leaves the same run directory in place so the exact API error can be
-reviewed without rerunning the demo blindly. Artifact keys are opaque 128-bit
-hash prefixes so both final and temporary paths remain below the common Windows
-260-character limit even when the repository is inside OneDrive.
+The reported run directory contains the editable `.pptx`, editable `.docx`, and
+server logs. A failure leaves the same run directory in place so the exact API
+error can be reviewed without rerunning the demo blindly. Artifact keys are
+opaque 128-bit hash prefixes so both final and temporary paths remain below the
+common Windows 260-character limit even when the repository is inside OneDrive.

@@ -43,6 +43,8 @@ The first HTTP boundary is now available:
 - `POST /v1/assistant`
 - `POST /v1/presentations`
 - `GET /v1/projects/{project_id}/presentations/{presentation_id}/download`
+- `POST /v1/reports`
+- `GET /v1/projects/{project_id}/reports/{report_id}/download`
 
 See [`docs/http-api.md`](docs/http-api.md) for the request and response workflow.
 
@@ -67,7 +69,8 @@ and run:
 ```
 
 It starts a temporary API, proves Source-to-Chart and stored upstream context,
-generates and validates an editable PPTX, then always stops the temporary server.
+generates and validates editable PPTX and DOCX artifacts, then always stops the
+temporary server.
 For the interactive browser demo, copy a fresh Gemini key and run:
 
 ```powershell
@@ -154,12 +157,12 @@ npm run dev
 ```
 
 Use `npm run check` to run strict TypeScript checking, build the UI, and execute
-all frontend tests, including the fixture-based Chart and Presentation Artifact
-tests, stopping on the first failure. Each gate
+all frontend tests, including the fixture-based Chart, Report, Presentation, and
+Assistant integration tests, stopping on the first failure. Each gate
 can also run separately with `npm run typecheck`, `npm run build`, or `npm test`.
-Source-to-Chart and Chart-to-Presentation use the live Contract v0 API. Login,
-whole-notebook persistence, uploads, Assistant analysis, and Policy Radar remain
-frontend prototypes.
+Source-to-Chart, Chart-to-Report, Chart-to-Presentation, and explicit-context
+Assistant requests use the live Contract v0 API. Login, whole-notebook
+persistence, uploads, and Policy Radar remain frontend prototypes.
 
 After an Analysis module is stored, `POST /v1/presentations` can generate an
 editable `.pptx` without another model call. The deterministic generator uses
@@ -178,6 +181,17 @@ documented in [`apps/web/README.md`](apps/web/README.md) and
 [`docs/frontend-chart-artifact.md`](docs/frontend-chart-artifact.md). They map
 Contract v0 results to explicit chart, table, blocked, and error view states
 without putting ECharts options or Canvas UI state into the backend contract.
+
+After the Analysis smoke has stored its canonical module, the same module can
+produce an editable, traceable DOCX without a second model call:
+
+```powershell
+uv run python -m spikes.report_api_smoke
+```
+
+The report includes structured summaries and tables plus the source, version,
+warning, and provenance records from each selected Analysis module. See
+[`docs/report-contract.md`](docs/report-contract.md).
 
 To run the real population Agent path instead of the unemployment Golden Path:
 
