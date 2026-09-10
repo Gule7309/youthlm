@@ -1,0 +1,11 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_1",
+  "source_module_ids": ["analysis_1"],
+  "title": "板橋區青年人口議題研析報告",
+  "audience": "新北市青年政策決策者",
+  "language": "zh-TW",
+  "template_id": "youthlm_default",
+  "output_format": "docx",
+  "instructions": "以政策研析格式整理，保留資料限制、來源與版本。"
+}

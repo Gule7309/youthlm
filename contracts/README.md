@@ -19,6 +19,8 @@ may depend on that example before the runtime API is contract-compliant.
 | `common.json` | Define shared identifiers, data, warnings, sources, versions, provenance, and visualization types. |
 | `presentation-request.json` | Request an editable deck from stored project modules. |
 | `presentation-result.json` | Return ready PPTX metadata and a download location. |
+| `report-request.json` | Request an editable policy report from stored project modules. |
+| `report-result.json` | Return ready DOCX metadata and a download location. |
 | `assistant-request.json` | Ask with explicit Source, Analysis, or Presentation references. |
 | `assistant-result.json` | Return a grounded answer, resolved references, and compact tool trace. |
 
@@ -118,10 +120,9 @@ Presentation Artifact is a separate generated-output boundary. Its v0 schemas,
 synchronous MVP lifecycle, project isolation, and compatibility impact are
 documented in [`docs/presentation-contract.md`](../docs/presentation-contract.md).
 
-Assistant is also a separate boundary. It receives explicit reference IDs rather
-than parsing Canvas labels or positions. Existing Analysis and Presentation
-contracts are unchanged; see
-[`docs/assistant-contract.md`](../docs/assistant-contract.md).
+Report Artifact follows the same project-scoped, synchronous generated-output
+pattern while returning an editable DOCX. See
+[`docs/report-contract.md`](../docs/report-contract.md).
 
 Assistant is also a separate boundary. It receives explicit reference IDs rather
 than parsing Canvas labels or positions. Existing Analysis and Presentation

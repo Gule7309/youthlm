@@ -1,16 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AlertCircle,
   BarChart3,
   Bot,
+  Database,
   FilePlus2,
   GripHorizontal,
+  LoaderCircle,
+  Presentation,
+  RotateCcw,
   Send,
   Sparkles,
   Trash2,
   UserRound,
 } from 'lucide-react';
-import type { CanvasNode } from '../types';
-import { getChartDraftActions, PRESENTATION_UNAVAILABLE_MESSAGE } from '../result-policy';
+import type {
+  AssistantContextKind,
+  AssistantContextOption,
+  AssistantExecution,
+  CanvasNode,
+} from '../types';
+import { getChartDraftActions } from '../result-policy';
 
 export type AssistantCardProps = {
   node: CanvasNode;
@@ -19,14 +29,25 @@ export type AssistantCardProps = {
   onDelete: (id: string) => void;
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>, id: string) => void;
   onSubmit: (id: string, prompt: string) => void;
+  contextOptions: AssistantContextOption[];
+  execution?: AssistantExecution;
+  hasUnavailableContext?: boolean;
+  onToggleContext: (assistantId: string, canvasNodeId: string) => void;
+  onRetry?: (id: string) => void;
   onExecuteDraft?: (id: string) => void;
 };
 
 const SUGGESTED_PROMPTS = [
-  '依目前來源建立洞察圖表草稿',
-  '規劃教育程度與起薪的圖表分析需求',
-  '整理政策會議用的圖表操作草稿',
+  '這份分析有哪些資料限制？',
+  '比較我引用的成果並整理政策重點',
+  '根據目前來源，還缺少哪些資料？',
 ];
+
+const CONTEXT_LABELS: Record<AssistantContextKind, string> = {
+  source: '來源',
+  analysis: '分析',
+  presentation: '簡報',
+};
 
 export function AssistantCard({
   node,
@@ -35,6 +56,11 @@ export function AssistantCard({
   onDelete,
   onPointerDown,
   onSubmit,
+  contextOptions,
+  execution,
+  hasUnavailableContext = false,
+  onToggleContext,
+  onRetry,
   onExecuteDraft,
 }: AssistantCardProps) {
   const [prompt, setPrompt] = useState('');
@@ -42,6 +68,9 @@ export function AssistantCard({
   const config = node.assistant;
   const messages = config?.messages ?? [];
   const draftActions = getChartDraftActions(config?.draftActions ?? []);
+  const selectedContextNodeIds = config?.contextNodeIds ?? [];
+  const isRunning = execution?.state === 'running';
+  const errorView = execution?.view?.kind === 'error' ? execution.view : undefined;
 
   useEffect(() => {
     const conversation = conversationRef.current;
@@ -51,7 +80,7 @@ export function AssistantCard({
 
   const submitPrompt = () => {
     const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt) return;
+    if (!trimmedPrompt || isRunning || hasUnavailableContext) return;
 
     onSubmit(node.id, trimmedPrompt);
     setPrompt('');
@@ -87,7 +116,7 @@ export function AssistantCard({
             <div className="flex items-center gap-2">
               <p className="text-[11px] font-medium text-emerald-700">小幫手</p>
               <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-500">
-                前端示意
+                AI 已串接
               </span>
             </div>
             <h3 className="truncate text-sm font-semibold text-slate-950">
@@ -117,12 +146,63 @@ export function AssistantCard({
         className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-3 py-3"
         aria-live="polite"
       >
+        <section className="mb-3 rounded-lg border border-slate-200 bg-white p-2.5" aria-label="小幫手引用脈絡">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold text-slate-700">引用筆記本證據</p>
+            <span className="text-[9px] text-slate-400">
+              已選 {selectedContextNodeIds.length}
+            </span>
+          </div>
+          {contextOptions.length > 0 ? (
+            <div className="mt-2 flex max-h-16 flex-wrap gap-1 overflow-y-auto">
+              {contextOptions.map(option => {
+                const checked = selectedContextNodeIds.includes(option.canvasNodeId);
+                const ContextIcon = option.kind === 'source'
+                  ? Database
+                  : option.kind === 'analysis'
+                    ? BarChart3
+                    : Presentation;
+                return (
+                  <button
+                    key={`${option.kind}:${option.canvasNodeId}`}
+                    type="button"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onToggleContext(node.id, option.canvasNodeId);
+                    }}
+                    className={`flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[9px] transition ${
+                      checked
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                        : 'border-slate-200 bg-white text-slate-500 hover:border-emerald-200'
+                    }`}
+                    aria-pressed={checked}
+                    title={`${CONTEXT_LABELS[option.kind]}｜${option.title}`}
+                  >
+                    <ContextIcon className="size-3 shrink-0" />
+                    <span className="max-w-36 truncate">{option.title}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[9px] leading-3 text-slate-400">
+              完成來源設定或分析後，即可在這裡明確引用。
+            </p>
+          )}
+          {hasUnavailableContext && (
+            <p className="mt-1.5 text-[9px] leading-3 text-amber-700">
+              已選引用正在更新；完成後才能送出。
+            </p>
+          )}
+        </section>
+
         {messages.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-3 text-center">
             <Sparkles className="mx-auto size-4 text-emerald-600" />
             <p className="mt-2 text-xs font-medium text-slate-700">可以先描述你想完成的工作</p>
             <p className="mt-1 text-[10px] leading-4 text-slate-500">
-              目前不會分析資料；真正的 AI 回覆需等待後端串接。
+              可直接提問，或先選取來源、分析與簡報作為可追溯脈絡。
             </p>
           </div>
         ) : (
@@ -152,9 +232,19 @@ export function AssistantCard({
                     }`}
                   >
                     <p className="whitespace-pre-wrap break-words">
-                      <span className="sr-only">{isUser ? '使用者' : '小幫手前端示意'}：</span>
+                      <span className="sr-only">{isUser ? '使用者' : '小幫手'}：</span>
                       {message.content}
                     </p>
+                    {!isUser && ((message.resolvedReferences?.length ?? 0) > 0 || (message.toolExecutions?.length ?? 0) > 0) && (
+                      <div className="mt-2 border-t border-slate-100 pt-1.5 text-[9px] text-slate-400">
+                        {(message.resolvedReferences?.length ?? 0) > 0 && (
+                          <p>已引用 {message.resolvedReferences?.length} 項證據</p>
+                        )}
+                        {(message.toolExecutions?.length ?? 0) > 0 && (
+                          <p>工具執行 {message.toolExecutions?.length} 次</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -211,7 +301,34 @@ export function AssistantCard({
       </div>
 
       <div className="rounded-b-xl border-t border-slate-100 bg-white p-3">
-        <p className="mb-2 text-[10px] leading-4 text-amber-800">{PRESENTATION_UNAVAILABLE_MESSAGE}</p>
+        {isRunning && (
+          <p className="mb-2 flex items-center gap-1.5 text-[10px] text-emerald-700" role="status">
+            <LoaderCircle className="size-3 animate-spin" />
+            YouthLM Agent 正在查詢與整理證據…
+          </p>
+        )}
+        {errorView && (
+          <div className="mb-2 flex items-start justify-between gap-2 rounded-md bg-red-50 px-2 py-1.5 text-[10px] text-red-700" role="alert">
+            <span className="flex min-w-0 items-start gap-1">
+              <AlertCircle className="mt-0.5 size-3 shrink-0" />
+              <span>{errorView.message}</span>
+            </span>
+            {errorView.retriable && onRetry && (
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRetry(node.id);
+                }}
+                className="flex shrink-0 items-center gap-1 font-medium hover:text-red-900"
+              >
+                <RotateCcw className="size-3" />
+                重試
+              </button>
+            )}
+          </div>
+        )}
         {messages.length === 0 && (
           <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5" aria-label="建議提問">
             {SUGGESTED_PROMPTS.map((suggestion) => (
@@ -251,7 +368,7 @@ export function AssistantCard({
           />
           <button
             type="button"
-            disabled={!prompt.trim()}
+            disabled={!prompt.trim() || isRunning || hasUnavailableContext}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
@@ -259,13 +376,13 @@ export function AssistantCard({
             }}
             className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-700 text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             aria-label="送出工作"
-            title="送出前端操作示意；真正 AI 等待後端"
+            title="送出給 YouthLM Agent"
           >
             <Send className="size-4" />
           </button>
         </div>
         <p className="mt-1.5 text-[9px] text-slate-400">
-          Enter 送出，Shift + Enter 換行 · AI 與資料分析尚未串接
+          Enter 送出，Shift + Enter 換行 · 僅傳送明確選取的引用
         </p>
       </div>
     </article>

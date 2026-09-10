@@ -380,6 +380,70 @@ class PresentationResult(BaseModel):
         return value
 
 
+class ReportRequest(BaseModel):
+    """Request an editable research report from stored analysis modules."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["0.1.0"]
+    project_id: Identifier
+    source_module_ids: list[Identifier] = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=200)
+    audience: str | None = Field(default=None, min_length=1, max_length=200)
+    language: str = Field(default="zh-TW", min_length=2, max_length=35)
+    template_id: Identifier | None = None
+    output_format: Literal["docx"]
+    instructions: str | None = Field(default=None, min_length=1, max_length=2_000)
+
+    @field_validator("source_module_ids")
+    @classmethod
+    def require_unique_report_source_modules(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("source_module_ids must be unique")
+        return value
+
+    @field_validator("title")
+    @classmethod
+    def normalize_report_title(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("title must not be blank")
+        return normalized
+
+
+class ReportResult(BaseModel):
+    """Ready editable report returned by the synchronous v0 boundary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["0.1.0"]
+    project_id: Identifier
+    report_id: Identifier
+    source_module_ids: list[Identifier] = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=200)
+    status: Literal["ready"]
+    output_format: Literal["docx"]
+    media_type: Literal[
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ]
+    file_name: str = Field(pattern=r"^[^/\\]+\.docx$")
+    file_size_bytes: int = Field(gt=0)
+    artifact_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    download_url: str = Field(min_length=1)
+    created_at: datetime
+    warnings: list[Warning]
+
+    @field_validator("source_module_ids")
+    @classmethod
+    def require_unique_report_result_source_modules(
+        cls,
+        value: list[str],
+    ) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("source_module_ids must be unique")
+        return value
+
+
 class AssistantContextReference(BaseModel):
     """One explicit @ reference resolved within the current project."""
 

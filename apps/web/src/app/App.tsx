@@ -16,11 +16,23 @@ import { AssistantCard } from './components/AssistantCard';
 import { PolicyRadarPanel } from './components/PolicyRadarPanel';
 import { buildChartArtifactView } from '../chart-artifact.js';
 import { buildAnalysisRequest } from './analysis-integration';
-import { createPresentation, listDataSources, runAnalysis } from './api-client';
+import {
+  buildAssistantContextOptions,
+  buildAssistantRequest,
+  buildAssistantResultView,
+} from './assistant-integration';
+import {
+  createPresentation,
+  createReport,
+  listDataSources,
+  runAnalysis,
+  runAssistant,
+} from './api-client';
 import {
   buildPresentationArtifactView,
   buildPresentationRequest,
 } from './presentation-integration';
+import { buildReportArtifactView, buildReportRequest } from './report-integration';
 import { createChartDraftActions, getChartDraftActions, PRESENTATION_UNAVAILABLE_MESSAGE, usesRawSourceInputs } from './result-policy';
 import {
   cloneWorkspaceNode,
@@ -33,12 +45,14 @@ import {
 import type {
   AuthUser,
   AnalysisExecution,
+  AssistantExecution,
   CanvasNode,
   Notebook,
   PolicyRadarCounts,
   PolicyRadarState,
   PolicyRadarStateByNotebook,
   PresentationExecution,
+  ReportExecution,
   ResultConfig,
   RegistryDataSource,
   SourceConfig,
@@ -153,6 +167,7 @@ const DEMO_NODES: CanvasNode[] = [
       name: '政策資料小幫手',
       messages: [],
       draftActions: [],
+      contextNodeIds: [],
     },
   },
 ];
@@ -193,6 +208,8 @@ export default function App() {
   const [registryError, setRegistryError] = useState<string>();
   const [analysisByNode, setAnalysisByNode] = useState<Record<string, AnalysisExecution>>({});
   const [presentationByNode, setPresentationByNode] = useState<Record<string, PresentationExecution>>({});
+  const [reportByNode, setReportByNode] = useState<Record<string, ReportExecution>>({});
+  const [assistantByNode, setAssistantByNode] = useState<Record<string, AssistantExecution>>({});
 
   // Canvas State
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -384,6 +401,8 @@ export default function App() {
     setDirtyInspectorNodeId(null);
     setAnalysisByNode({});
     setPresentationByNode({});
+    setReportByNode({});
+    setAssistantByNode({});
     setScreen('notebooks');
   };
 
@@ -396,6 +415,8 @@ export default function App() {
     setDirtyInspectorNodeId(null);
     setAnalysisByNode({});
     setPresentationByNode({});
+    setReportByNode({});
+    setAssistantByNode({});
     setScreen('auth');
   };
 
@@ -520,15 +541,26 @@ export default function App() {
   const resultNodes = nodes.filter(node => node.type === 'result');
   const assistantNodes = nodes.filter(node => node.type === 'assistant');
   const currentSourceNodeIds = new Set(sourceNodes.map(node => node.id));
+  const currentAnalysisNodeIds = new Set(
+    resultNodes.filter(node => node.result?.kind === 'chart').map(node => node.id),
+  );
   const policyRadarCounts: PolicyRadarCounts = {
     sourceCount: sourceNodes.length,
     readySourceCount: sourceNodes.filter(isSourceReady).length,
     resultCount: resultNodes.length,
-    configuredResultCount: resultNodes.filter(node => Boolean(
-      node.result?.kind === 'chart'
-      && node.result.sourceNodeIds.length > 0
-      && node.result.sourceNodeIds.every(sourceNodeId => currentSourceNodeIds.has(sourceNodeId)),
-    )).length,
+    configuredResultCount: resultNodes.filter(node => {
+      if (node.result?.kind === 'chart') {
+        return node.result.sourceNodeIds.length > 0
+          && node.result.sourceNodeIds.every(sourceNodeId => currentSourceNodeIds.has(sourceNodeId));
+      }
+      if (node.result?.kind === 'report' || node.result?.kind === 'presentation') {
+        return Boolean(
+          node.result.sourceModuleIds?.length
+          && node.result.sourceModuleIds.every(moduleId => currentAnalysisNodeIds.has(moduleId)),
+        );
+      }
+      return false;
+    }).length,
   };
   const policyRadarWorkspaceSignature = getPolicyRadarWorkspaceSignature(nodes);
   const activePolicyRadarState = activeNotebookId
@@ -757,6 +789,7 @@ export default function App() {
         name: assistantName,
         messages: [],
         draftActions: [],
+        contextNodeIds: [],
       },
     };
 
@@ -850,6 +883,13 @@ export default function App() {
         .forEach(node => delete next[node.id]);
       return next;
     });
+    setReportByNode(current => {
+      const next = { ...current };
+      nodes
+        .filter(node => node.result?.sourceModuleIds?.some(id => affectedAnalysisIds.includes(id)))
+        .forEach(node => delete next[node.id]);
+      return next;
+    });
     setDirtyInspectorNodeId(null);
     setNotebooks(current => current.map(notebook =>
       notebook.id === activeNotebookId ? { ...notebook, updatedAt: '剛剛' } : notebook,
@@ -884,6 +924,14 @@ export default function App() {
         .forEach(node => delete next[node.id]);
       return next;
     });
+    setReportByNode(current => {
+      const next = { ...current };
+      delete next[resultNodeId];
+      nodes
+        .filter(node => node.result?.sourceModuleIds?.includes(resultNodeId))
+        .forEach(node => delete next[node.id]);
+      return next;
+    });
     setDirtyInspectorNodeId(null);
     setNotebooks(current => current.map(notebook =>
       notebook.id === activeNotebookId ? { ...notebook, updatedAt: '剛剛' } : notebook,
@@ -899,6 +947,13 @@ export default function App() {
       [resultNodeId]: { state: 'running' },
     }));
     setPresentationByNode(current => {
+      const next = { ...current };
+      nodes
+        .filter(node => node.result?.sourceModuleIds?.includes(resultNodeId))
+        .forEach(node => delete next[node.id]);
+      return next;
+    });
+    setReportByNode(current => {
       const next = { ...current };
       nodes
         .filter(node => node.result?.sourceModuleIds?.includes(resultNodeId))
@@ -992,24 +1047,78 @@ export default function App() {
     }
   };
 
-  const handleAssistantSubmit = (id: string, prompt: string) => {
-    const submittedAt = Date.now();
-    setNodes(current => {
-      const sourceNodeIds = current
-        .filter(node => node.type === 'source')
-        .map(node => node.id);
-      const response = sourceNodeIds.length > 0
-        ? `需求已記錄，並依目前 ${sourceNodeIds.length} 張來源準備 1 項洞察圖表設定草稿。這是固定的前端操作示意，不是 AI 分析，也沒有統計結果。${PRESENTATION_UNAVAILABLE_MESSAGE}`
-        : `需求已記錄，目前沒有來源卡片，因此沒有建立圖表草稿。請先新增來源後再送出；AI 與資料分析尚未串接。${PRESENTATION_UNAVAILABLE_MESSAGE}`;
+  const handleRunReport = async (resultNodeId: string) => {
+    const resultNode = nodes.find(node => node.id === resultNodeId);
+    if (!activeNotebookId || resultNode?.result?.kind !== 'report') return;
 
-      return current.map(node => {
-        if (node.id !== id || node.type !== 'assistant' || !node.assistant) return node;
-        return {
-          ...node,
-          assistant: {
-            ...node.assistant,
-            lastPrompt: prompt,
-            messages: [
+    setReportByNode(current => ({
+      ...current,
+      [resultNodeId]: { state: 'running' },
+    }));
+    setSelectedNodeId(resultNodeId);
+    setIsRightOpen(true);
+
+    try {
+      const request = buildReportRequest({
+        projectId: activeNotebookId,
+        result: resultNode.result,
+      });
+      const response = await createReport(request);
+      const view = buildReportArtifactView(response.payload, {
+        httpStatus: response.httpStatus,
+      });
+      setReportByNode(current => ({
+        ...current,
+        [resultNodeId]: {
+          state: view.kind === 'error' ? 'failed' : 'ready',
+          view,
+        },
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'YouthLM API 無法產生研析報告';
+      setReportByNode(current => ({
+        ...current,
+        [resultNodeId]: {
+          state: 'failed',
+          view: {
+            kind: 'error',
+            httpStatus: 0,
+            code: 'frontend_integration_error',
+            message,
+            retriable: true,
+            details: {},
+          },
+        },
+      }));
+    }
+  };
+
+  const executeAssistantRequest = async (
+    id: string,
+    prompt: string,
+    { appendUserMessage = true }: { appendUserMessage?: boolean } = {},
+  ) => {
+    if (!activeNotebookId) return;
+    const assistantNode = nodes.find(
+      node => node.id === id && node.type === 'assistant',
+    );
+    if (!assistantNode?.assistant) return;
+
+    const submittedAt = Date.now();
+    const contextOptions = buildAssistantContextOptions({
+      nodes,
+      analysisExecutions: analysisByNode,
+      presentationExecutions: presentationByNode,
+    });
+    setNodes(current => current.map(node => {
+      if (node.id !== id || node.type !== 'assistant' || !node.assistant) return node;
+      return {
+        ...node,
+        assistant: {
+          ...node.assistant,
+          lastPrompt: prompt,
+          messages: appendUserMessage
+            ? [
               ...node.assistant.messages,
               {
                 id: `${id}-user-${submittedAt}`,
@@ -1017,21 +1126,107 @@ export default function App() {
                 content: prompt,
                 createdAt: new Date(submittedAt).toISOString(),
               },
+            ]
+            : node.assistant.messages,
+        },
+      };
+    }));
+    setAssistantByNode(current => ({
+      ...current,
+      [id]: { state: 'running' },
+    }));
+
+    try {
+      const request = buildAssistantRequest({
+        projectId: activeNotebookId,
+        assistantId: id,
+        message: prompt,
+        selectedContextNodeIds: assistantNode.assistant.contextNodeIds ?? [],
+        contextOptions,
+      });
+      const response = await runAssistant(request);
+      const view = buildAssistantResultView(response.payload, {
+        httpStatus: response.httpStatus,
+      });
+      if (view.kind === 'error') {
+        setAssistantByNode(current => ({
+          ...current,
+          [id]: { state: 'failed', view },
+        }));
+        return;
+      }
+
+      const answeredAt = Date.now();
+      setNodes(current => current.map(node => {
+        if (node.id !== id || node.type !== 'assistant' || !node.assistant) return node;
+        return {
+          ...node,
+          assistant: {
+            ...node.assistant,
+            messages: [
+              ...node.assistant.messages,
               {
-                id: `${id}-notice-${submittedAt}`,
+                id: `${id}-assistant-${answeredAt}`,
                 role: 'assistant',
-                content: response,
-                createdAt: new Date(submittedAt).toISOString(),
+                content: view.answer,
+                createdAt: new Date(answeredAt).toISOString(),
+                resolvedReferences: view.resolvedReferences,
+                toolExecutions: view.toolExecutions,
               },
             ],
-            draftActions: createChartDraftActions(`${id}-draft-chart-${submittedAt}`, prompt, sourceNodeIds),
           },
         };
-      });
-    });
-    setNotebooks(current => current.map(notebook =>
-      notebook.id === activeNotebookId ? { ...notebook, updatedAt: '剛剛' } : notebook,
-    ));
+      }));
+      setAssistantByNode(current => ({
+        ...current,
+        [id]: { state: 'ready', view },
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'YouthLM API 無法完成小幫手請求';
+      setAssistantByNode(current => ({
+        ...current,
+        [id]: {
+          state: 'failed',
+          view: {
+            kind: 'error',
+            httpStatus: 0,
+            code: 'frontend_integration_error',
+            message,
+            retriable: true,
+            details: {},
+          },
+        },
+      }));
+    } finally {
+      setNotebooks(current => current.map(notebook =>
+        notebook.id === activeNotebookId ? { ...notebook, updatedAt: '剛剛' } : notebook,
+      ));
+    }
+  };
+
+  const handleAssistantSubmit = (id: string, prompt: string) => {
+    void executeAssistantRequest(id, prompt);
+  };
+
+  const handleAssistantRetry = (id: string) => {
+    const prompt = nodes.find(node => node.id === id)?.assistant?.lastPrompt;
+    if (prompt) void executeAssistantRequest(id, prompt, { appendUserMessage: false });
+  };
+
+  const handleAssistantToggleContext = (assistantId: string, contextNodeId: string) => {
+    setNodes(current => current.map(node => {
+      if (node.id !== assistantId || node.type !== 'assistant' || !node.assistant) return node;
+      const contextNodeIds = node.assistant.contextNodeIds ?? [];
+      return {
+        ...node,
+        assistant: {
+          ...node.assistant,
+          contextNodeIds: contextNodeIds.includes(contextNodeId)
+            ? contextNodeIds.filter(id => id !== contextNodeId)
+            : [...contextNodeIds, contextNodeId],
+        },
+      };
+    }));
   };
 
   const handleAssistantExecuteDraft = (id: string) => {
@@ -1139,6 +1334,13 @@ export default function App() {
         .forEach(node => delete next[node.id]);
       return next;
     });
+    setReportByNode(current => {
+      const next = { ...current };
+      nodes
+        .filter(node => node.result?.sourceModuleIds?.some(nodeId => affectedAnalysisIds.includes(nodeId)))
+        .forEach(node => delete next[node.id]);
+      return next;
+    });
     if (selectedNodeId === id) {
       setSelectedNodeId(null);
       setDirtyInspectorNodeId(null);
@@ -1173,6 +1375,14 @@ export default function App() {
         .forEach(node => delete next[node.id]);
       return next;
     });
+    setReportByNode(current => {
+      const next = { ...current };
+      delete next[id];
+      nodes
+        .filter(node => node.result?.sourceModuleIds?.includes(id))
+        .forEach(node => delete next[node.id]);
+      return next;
+    });
     if (selectedNodeId === id) {
       setSelectedNodeId(null);
       setDirtyInspectorNodeId(null);
@@ -1194,6 +1404,11 @@ export default function App() {
     }
 
     setNodes(current => current.filter(node => node.id !== id));
+    setAssistantByNode(current => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
     if (selectedNodeId === id) {
       setSelectedNodeId(null);
       setDirtyInspectorNodeId(null);
@@ -1245,25 +1460,25 @@ export default function App() {
       }];
     }),
   );
-  const presentationConnections = resultNodes
-    .filter(node => node.result?.kind === 'presentation')
-    .flatMap(presentationNode => (presentationNode.result?.sourceModuleIds ?? []).flatMap(sourceModuleId => {
+  const generatedArtifactConnections = resultNodes
+    .filter(node => node.result?.kind === 'presentation' || node.result?.kind === 'report')
+    .flatMap(artifactNode => (artifactNode.result?.sourceModuleIds ?? []).flatMap(sourceModuleId => {
       const analysisNode = resultNodes.find(node => node.id === sourceModuleId && node.result?.kind === 'chart');
       if (!analysisNode) return [];
       return [{
-        id: `${analysisNode.id}-${presentationNode.id}`,
+        id: `${analysisNode.id}-${artifactNode.id}`,
         kind: 'analysis' as const,
         start: {
           x: analysisNode.x + RESULT_CARD_SIZE.width,
           y: analysisNode.y + RESULT_CARD_SIZE.height / 2,
         },
         end: {
-          x: presentationNode.x,
-          y: presentationNode.y + RESULT_CARD_SIZE.height / 2,
+          x: artifactNode.x,
+          y: artifactNode.y + RESULT_CARD_SIZE.height / 2,
         },
       }];
     }));
-  const artifactConnections = [...resultConnections, ...presentationConnections];
+  const artifactConnections = [...resultConnections, ...generatedArtifactConnections];
 
   return (
     <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden font-sans relative">
@@ -1428,7 +1643,7 @@ export default function App() {
                       const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
                       return sourceNode ? isSourceReady(sourceNode) : false;
                     })
-                  : node.result?.kind === 'presentation'
+                  : (node.result?.kind === 'presentation' || node.result?.kind === 'report')
                     && node.result.sourceModuleIds?.length
                     && node.result.sourceModuleIds.every(sourceModuleId => (
                       isAnalysisReady(analysisByNode[sourceModuleId])
@@ -1436,9 +1651,12 @@ export default function App() {
               )}
               execution={analysisByNode[node.id]}
               presentationExecution={presentationByNode[node.id]}
+              reportExecution={reportByNode[node.id]}
               onRun={node.result?.kind === 'presentation'
                 ? handleRunPresentation
-                : handleRunAnalysis}
+                : node.result?.kind === 'report'
+                  ? handleRunReport
+                  : handleRunAnalysis}
               onSelect={handleSelectNode}
               onEdit={handleSelectNode}
               onDelete={handleDeleteResult}
@@ -1449,6 +1667,17 @@ export default function App() {
           {assistantNodes.map(node => {
             const sourceNodeIdSet = new Set(sourceNodes.map(source => source.id));
             const chartDraftActions = getChartDraftActions(node.assistant?.draftActions ?? []);
+            const contextOptions = buildAssistantContextOptions({
+              nodes,
+              analysisExecutions: analysisByNode,
+              presentationExecutions: presentationByNode,
+            });
+            const availableContextNodeIds = new Set(
+              contextOptions.map(option => option.canvasNodeId),
+            );
+            const hasUnavailableContext = (node.assistant?.contextNodeIds ?? []).some(
+              contextNodeId => !availableContextNodeIds.has(contextNodeId),
+            );
             const canExecuteDraft = Boolean(
               chartDraftActions.length
               && chartDraftActions.every(action =>
@@ -1465,6 +1694,11 @@ export default function App() {
                 onDelete={handleDeleteAssistant}
                 onPointerDown={handleNodePointerDown}
                 onSubmit={handleAssistantSubmit}
+                contextOptions={contextOptions}
+                execution={assistantByNode[node.id]}
+                hasUnavailableContext={hasUnavailableContext}
+                onToggleContext={handleAssistantToggleContext}
+                onRetry={handleAssistantRetry}
                 onExecuteDraft={canExecuteDraft ? handleAssistantExecuteDraft : undefined}
               />
             );
@@ -1852,6 +2086,7 @@ export default function App() {
                 analysisExecutions={analysisByNode}
                 execution={analysisByNode[selectedResult.id]}
                 presentationExecution={presentationByNode[selectedResult.id]}
+                reportExecution={reportByNode[selectedResult.id]}
                 onSave={handleSaveResult}
                 onRun={selectedResult.result?.kind === 'chart'
                   && selectedResult.result.sourceNodeIds.length > 0
@@ -1860,12 +2095,15 @@ export default function App() {
                     return sourceNode ? isSourceReady(sourceNode) : false;
                   })
                   ? () => handleRunAnalysis(selectedResult.id)
-                  : selectedResult.result?.kind === 'presentation'
+                  : (selectedResult.result?.kind === 'presentation'
+                      || selectedResult.result?.kind === 'report')
                     && selectedResult.result.sourceModuleIds?.length
                     && selectedResult.result.sourceModuleIds.every(sourceModuleId => (
                       isAnalysisReady(analysisByNode[sourceModuleId])
                     ))
-                    ? () => handleRunPresentation(selectedResult.id)
+                    ? selectedResult.result.kind === 'presentation'
+                      ? () => handleRunPresentation(selectedResult.id)
+                      : () => handleRunReport(selectedResult.id)
                     : undefined}
                 onDirtyChange={dirty => setDirtyInspectorNodeId(dirty ? selectedResult.id : null)}
                 onClose={closeInspector}
@@ -1884,7 +2122,7 @@ export default function App() {
                   <MessageSquare className="mx-auto size-5 text-emerald-700" />
                   <p className="mt-3 text-xs font-medium">直接在卡片內輸入需求</p>
                   <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">
-                    已送出的文字與操作草稿會保留在目前筆記本；真正 AI 與資料分析仍等待後端串接。
+                    選取來源或成果作為明確上下文後，小幫手會呼叫真正的 Assistant API，並顯示解析後參照與工具執行紀錄。
                   </p>
                 </div>
                 <div className="mt-auto rounded-lg bg-muted/30 p-3 text-[11px] leading-5 text-muted-foreground">

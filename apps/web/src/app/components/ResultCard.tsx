@@ -2,6 +2,7 @@ import React from 'react';
 import {
   BarChart3,
   FileOutput,
+  FileText,
   GripHorizontal,
   LoaderCircle,
   Pencil,
@@ -9,7 +10,12 @@ import {
   Presentation,
   Trash2,
 } from 'lucide-react';
-import type { AnalysisExecution, CanvasNode, PresentationExecution } from '../types';
+import type {
+  AnalysisExecution,
+  CanvasNode,
+  PresentationExecution,
+  ReportExecution,
+} from '../types';
 
 export type ResultCardProps = {
   node: CanvasNode;
@@ -17,6 +23,7 @@ export type ResultCardProps = {
   sourcesReady?: boolean;
   execution?: AnalysisExecution;
   presentationExecution?: PresentationExecution;
+  reportExecution?: ReportExecution;
   onRun?: (id: string) => void;
   onSelect: (id: string) => boolean | void;
   onEdit: (id: string) => void;
@@ -32,6 +39,7 @@ export function ResultCard({
   sourcesReady = false,
   execution,
   presentationExecution,
+  reportExecution,
   onRun,
   onSelect,
   onEdit,
@@ -42,34 +50,46 @@ export function ResultCard({
 }: ResultCardProps) {
   const config = node.result;
   const isPresentation = config?.kind === 'presentation';
+  const isReport = config?.kind === 'report';
+  const usesAnalysisModules = isPresentation || isReport;
   const isConfigured = Boolean(
     config?.name.trim()
     && (
       config.kind === 'chart'
         ? config.sourceNodeIds.length > 0 && config.prompt.trim()
-        : config.kind === 'presentation'
+        : usesAnalysisModules
           ? (config.sourceModuleIds?.length ?? 0) > 0
           : false
     ),
   );
   const isReadyForGeneration = isConfigured && sourcesReady;
-  const activeExecution = isPresentation ? presentationExecution : execution;
+  const activeExecution = isPresentation
+    ? presentationExecution
+    : isReport
+      ? reportExecution
+      : execution;
   const isRunning = activeExecution?.state === 'running';
   const ResultIcon = config?.kind === 'chart'
     ? BarChart3
+    : config?.kind === 'report'
+      ? FileText
     : config?.kind === 'presentation'
       ? Presentation
       : FileOutput;
   const resultType = config?.kind === 'chart'
     ? '洞察圖表'
+    : config?.kind === 'report'
+      ? '議題研析報告'
     : config?.kind === 'presentation'
       ? '洞察簡報'
       : '尚未選擇成果類型';
-  const sourceCount = isPresentation
+  const sourceCount = usesAnalysisModules
     ? config?.sourceModuleIds?.length ?? 0
     : config?.sourceNodeIds.length ?? 0;
   const promptSummary = config?.prompt.trim()
-    || (isPresentation ? '使用預設政策簡報格式' : '請先描述希望產生的內容與洞察方向');
+    || (usesAnalysisModules
+      ? isReport ? '使用預設政策研析報告格式' : '使用預設政策簡報格式'
+      : '請先描述希望產生的內容與洞察方向');
 
   return (
     <article
@@ -101,10 +121,10 @@ export function ResultCard({
         }`}
         aria-label="成果輸入連接點"
         title={onInputPointerDown
-          ? isPresentation ? '拖曳以連接分析成果' : '拖曳以連接來源卡片'
+          ? usesAnalysisModules ? '拖曳以連接分析成果' : '拖曳以連接來源卡片'
           : sourceCount > 0
-            ? `已連接 ${sourceCount} 個${isPresentation ? '分析成果' : '來源'}`
-            : `請在成果設定中選擇${isPresentation ? '分析成果' : '來源'}`}
+            ? `已連接 ${sourceCount} 個${usesAnalysisModules ? '分析成果' : '來源'}`
+            : `請在成果設定中選擇${usesAnalysisModules ? '分析成果' : '來源'}`}
       />
 
       <div
@@ -136,7 +156,7 @@ export function ResultCard({
             <div className="flex items-center justify-between gap-2">
               <p className="truncate text-xs font-medium text-slate-700">{resultType}</p>
               <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">
-                {isPresentation ? '需分析成果' : `${sourceCount} 個來源`}
+                {usesAnalysisModules ? '需分析成果' : `${sourceCount} 個來源`}
               </span>
             </div>
             <p
@@ -157,17 +177,17 @@ export function ResultCard({
         >
           <span className={`size-1.5 rounded-full ${isReadyForGeneration ? 'bg-violet-500' : 'bg-amber-500'}`} />
           {isRunning
-            ? isPresentation ? '正在產生簡報' : 'YouthLM Agent 分析中'
+            ? isPresentation ? '正在產生簡報' : isReport ? '正在產生研析報告' : 'YouthLM Agent 分析中'
             : activeExecution?.view?.kind === 'error'
-              ? isPresentation ? '簡報產生失敗，可重試' : '分析失敗，可重試'
-              : !isPresentation && execution?.view?.status === 'blocked'
+              ? isPresentation ? '簡報產生失敗，可重試' : isReport ? '報告產生失敗，可重試' : '分析失敗，可重試'
+              : !usesAnalysisModules && execution?.view?.status === 'blocked'
                 ? '資料限制阻擋分析'
                 : activeExecution?.state === 'ready'
-                  ? isPresentation ? '可下載 PPTX' : '分析結果已產生'
+                  ? isPresentation ? '可下載 PPTX' : isReport ? '可下載 DOCX' : '分析結果已產生'
                   : isReadyForGeneration
-                    ? isPresentation ? '可產生真實簡報' : '可執行真實分析'
+                    ? isPresentation ? '可產生真實簡報' : isReport ? '可產生研析報告' : '可執行真實分析'
             : isConfigured
-              ? isPresentation ? '設定已儲存，分析尚未完成' : '設定已儲存，來源尚待設定'
+              ? usesAnalysisModules ? '設定已儲存，分析尚未完成' : '設定已儲存，來源尚待設定'
               : '尚未設定'}
         </span>
 
@@ -182,10 +202,10 @@ export function ResultCard({
             >
               {isRunning ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
               {isRunning
-                ? isPresentation ? '產生中…' : '分析中…'
+                ? isPresentation ? '產生中…' : isReport ? '產生中…' : '分析中…'
                 : activeExecution
-                  ? isPresentation ? '重新產生' : '重新分析'
-                  : isPresentation ? '產生簡報' : '執行分析'}
+                  ? usesAnalysisModules ? '重新產生' : '重新分析'
+                  : isPresentation ? '產生簡報' : isReport ? '產生報告' : '執行分析'}
             </button>
           )}
           <button

@@ -33,8 +33,9 @@ test('old mixed drafts cannot execute presentation actions', () => {
   assert.equal(original.length, 2);
 });
 
-test('legacy presentation cards do not consume raw-source connections', () => {
+test('only chart cards consume raw-source connections', () => {
   assert.equal(usesRawSourceInputs({ kind: 'presentation', sourceNodeIds: ['source-node'] }), false);
+  assert.equal(usesRawSourceInputs({ kind: 'report', sourceNodeIds: ['source-node'] }), false);
   assert.equal(usesRawSourceInputs({ kind: 'chart', sourceNodeIds: ['source-node'] }), true);
-  assert.equal(usesRawSourceInputs({ kind: null, sourceNodeIds: [] }), true);
+  assert.equal(usesRawSourceInputs({ kind: null, sourceNodeIds: [] }), false);
 });

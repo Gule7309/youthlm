@@ -1,6 +1,8 @@
 import type {
   AnalysisRequestPayload,
+  AssistantRequestPayload,
   PresentationRequestPayload,
+  ReportRequestPayload,
   RegistryDataSource,
 } from './types';
 
@@ -54,12 +56,44 @@ export async function runAnalysis(
   };
 }
 
+export async function runAssistant(
+  request: AssistantRequestPayload,
+  fetcher: Fetcher = fetch,
+  baseUrl = apiBaseUrl(),
+): Promise<AnalysisHttpResult> {
+  const response = await fetcher(`${baseUrl}/v1/assistant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return {
+    httpStatus: response.status,
+    payload: await readJson(response),
+  };
+}
+
 export async function createPresentation(
   request: PresentationRequestPayload,
   fetcher: Fetcher = fetch,
   baseUrl = apiBaseUrl(),
 ): Promise<AnalysisHttpResult> {
   const response = await fetcher(`${baseUrl}/v1/presentations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return {
+    httpStatus: response.status,
+    payload: await readJson(response),
+  };
+}
+
+export async function createReport(
+  request: ReportRequestPayload,
+  fetcher: Fetcher = fetch,
+  baseUrl = apiBaseUrl(),
+): Promise<AnalysisHttpResult> {
+  const response = await fetcher(`${baseUrl}/v1/reports`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),

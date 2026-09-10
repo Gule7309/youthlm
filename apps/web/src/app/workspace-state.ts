@@ -62,11 +62,21 @@ export function cloneWorkspaceNode(node: CanvasNode): CanvasNode {
     assistant: node.assistant
       ? {
         ...node.assistant,
-        messages: node.assistant.messages.map(message => ({ ...message })),
+        messages: node.assistant.messages.map(message => ({
+          ...message,
+          resolvedReferences: message.resolvedReferences?.map(reference => ({
+            ...reference,
+          })),
+          toolExecutions: message.toolExecutions?.map(execution => ({
+            ...execution,
+            arguments: structuredClone(execution.arguments),
+          })),
+        })),
         draftActions: node.assistant.draftActions.map(action => ({
           ...action,
           sourceNodeIds: [...action.sourceNodeIds],
         })),
+        contextNodeIds: [...(node.assistant.contextNodeIds ?? [])],
       }
       : undefined,
   };
@@ -102,6 +112,9 @@ export function duplicateWorkspaceNodes(nodes: CanvasNode[]): CanvasNode[] {
       assistant: clone.assistant
         ? {
           ...clone.assistant,
+          contextNodeIds: (clone.assistant.contextNodeIds ?? [])
+            .map(contextNodeId => idMap.get(contextNodeId))
+            .filter((contextNodeId): contextNodeId is string => Boolean(contextNodeId)),
           messages: clone.assistant.messages.map((message, index) => ({
             ...message,
             id: `${duplicateNodeId}-message-${index + 1}`,
@@ -123,6 +136,17 @@ export function removeResultNode(nodes: CanvasNode[], resultNodeId: string): Can
   return nodes
     .filter(node => node.id !== resultNodeId)
     .map(node => {
+      if (node.type === 'assistant' && node.assistant) {
+        return {
+          ...node,
+          assistant: {
+            ...node.assistant,
+            contextNodeIds: (node.assistant.contextNodeIds ?? []).filter(
+              contextNodeId => contextNodeId !== resultNodeId,
+            ),
+          },
+        };
+      }
       if (node.type !== 'result' || !node.result?.sourceModuleIds) return node;
       return {
         ...node,
@@ -154,6 +178,9 @@ export function removeSourceNode(nodes: CanvasNode[], sourceNodeId: string): Can
           ...node,
           assistant: {
             ...node.assistant,
+            contextNodeIds: (node.assistant.contextNodeIds ?? []).filter(
+              contextNodeId => contextNodeId !== sourceNodeId,
+            ),
             draftActions: node.assistant.draftActions.map(action => ({
               ...action,
               sourceNodeIds: action.sourceNodeIds.filter(id => id !== sourceNodeId),
