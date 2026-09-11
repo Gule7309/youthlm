@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Share, Database, FileText, Plus, Settings2, Sparkles,
-  MessageSquare, GripHorizontal, ChevronLeft,
+  Share, Database, FileText, Sparkles,
+  MessageSquare, ChevronLeft,
+  CircleHelp,
   PanelLeftClose, PanelLeftOpen,
   PanelRightClose, PanelRightOpen,
 } from 'lucide-react';
@@ -11,8 +12,10 @@ import { SourceCard } from './components/SourceCard';
 import { SourceInspector } from './components/SourceInspector';
 import { ResultCard } from './components/ResultCard';
 import { ResultInspector } from './components/ResultInspector';
-import { AssistantCard } from './components/AssistantCard';
+import { AssistantSidebar } from './components/AssistantSidebar';
 import { PolicyRadarPanel } from './components/PolicyRadarPanel';
+import { WorkspaceTour } from './components/WorkspaceTour';
+import { TextSizeControl } from './components/TextSizeControl';
 import { buildChartArtifactView } from '../chart-artifact.js';
 import { buildAnalysisRequest } from './analysis-integration';
 import { createPresentation, runAnalysis } from './api-client';
@@ -23,7 +26,8 @@ import {
   buildPresentationArtifactView,
   buildPresentationRequest,
 } from './presentation-integration';
-import { createChartDraftActions, getChartDraftActions, PRESENTATION_UNAVAILABLE_MESSAGE, usesRawSourceInputs } from './result-policy';
+import { createChartDraftActions, createGuidedChartResult, getChartDraftActions, usesRawSourceInputs } from './result-policy';
+import { readTextSizePreference, writeTextSizePreference, type TextSize } from './text-size';
 import {
   CONNECTION_COLORS,
   CONNECTION_DROP_MARGIN_PX,
@@ -54,6 +58,7 @@ import {
 import type {
   AuthUser,
   AnalysisExecution,
+  AssistantConfig,
   CanvasNode,
   Notebook,
   PolicyRadarState,
@@ -67,7 +72,7 @@ type AppScreen = 'auth' | 'notebooks' | 'workspace';
 
 const CARD_DRAG_TYPE = 'application/x-youthlm-card';
 const ASSISTANT_CARD_SIZE = { width: 340, height: 430 };
-type AddableCardType = 'source' | 'result' | 'assistant';
+type AddableCardType = 'source' | 'result';
 type ConnectionDraft = {
   fromNodeId: string;
   pointerId: number;
@@ -123,6 +128,38 @@ function getUniqueName(baseName: string, existingNames: Set<string>) {
   return name;
 }
 
+function createSidebarAssistantNode(): CanvasNode {
+  return {
+    id: `assistant-sidebar-${crypto.randomUUID()}`,
+    type: 'assistant',
+    x: 0,
+    y: 0,
+    assistant: {
+      name: 'YouthLM AI 小幫手',
+      messages: [],
+      draftActions: [],
+    },
+  };
+}
+
+function prepareWorkspaceForSidebarAssistant(workspace: CanvasNode[]): CanvasNode[] {
+  const cloned = workspace.map(cloneWorkspaceNode);
+  const assistants = cloned.filter(node => node.type === 'assistant' && node.assistant);
+  if (assistants.length === 0) return [...cloned, createSidebarAssistantNode()];
+
+  const primary = assistants[0];
+  const mergedAssistant: AssistantConfig = {
+    name: 'YouthLM AI 小幫手',
+    messages: assistants.flatMap(node => node.assistant?.messages ?? []),
+    draftActions: assistants.flatMap(node => node.assistant?.draftActions ?? []),
+    lastPrompt: [...assistants].reverse().find(node => node.assistant?.lastPrompt)?.assistant?.lastPrompt,
+  };
+  return [
+    ...cloned.filter(node => node.type !== 'assistant'),
+    { ...primary, x: 0, y: 0, assistant: mergedAssistant },
+  ];
+}
+
 const INITIAL_WORKSPACES: Record<string, CanvasNode[]> = {};
 const INITIAL_POLICY_RADAR_STATES: PolicyRadarStateByNotebook = {};
 const INITIAL_NOTEBOOKS: Notebook[] = [];
@@ -147,6 +184,11 @@ export default function App() {
   const [draftNotice, setDraftNotice] = useState('');
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [connectionNotice, setConnectionNotice] = useState('');
+  const [workspaceTourSeen, setWorkspaceTourSeen] = useState(false);
+  const [isWorkspaceTourOpen, setIsWorkspaceTourOpen] = useState(false);
+  const [textSize, setTextSize] = useState<TextSize>(() => readTextSizePreference(
+    typeof window === 'undefined' ? null : window.localStorage,
+  ));
 
   // Canvas State
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -160,6 +202,7 @@ export default function App() {
   const completeCanvasConnectionRef = useRef<(fromNodeId: string, toNodeId: string) => void>(() => {});
   const policyRadarRunTimersRef = useRef(new Map<string, number>());
   const inspectorContentRef = useRef<HTMLDivElement>(null);
+  const firstNotebookTourIdRef = useRef<string | null>(null);
 
   // Nodes State
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
@@ -217,9 +260,18 @@ export default function App() {
   useEffect(() => () => clearAllPolicyRadarRunTimers(), []);
 
   useEffect(() => {
+    document.documentElement.dataset.textSize = textSize;
+    try {
+      writeTextSizePreference(window.localStorage, textSize);
+    } catch {
+      // The setting still applies for this session when browser storage is unavailable.
+    }
+  }, [textSize]);
+
+  useEffect(() => {
     if (!currentUser || !draftWritable) return;
     try {
-      writeDraft(window.localStorage, currentUser.email, { version: 1, notebooks,
+      writeDraft(window.localStorage, currentUser.email, { version: 1, workspaceTourSeen, notebooks,
         workspaces: screen === 'workspace' && activeNotebookId ? { ...workspaceNodes, [activeNotebookId]: nodes } : workspaceNodes,
         radar: policyRadarByNotebook });
       setDraftNotice('本機草稿已保存 · 非雲端備份；重新整理後分析／簡報需重跑');
@@ -228,7 +280,7 @@ export default function App() {
       setDraftSaveFailed(true);
       setDraftNotice('本機保存失敗，請勿關閉頁面；可能是瀏覽器限制、空間不足或草稿過大。');
     }
-  }, [currentUser, draftWritable, notebooks, workspaceNodes, nodes, activeNotebookId, screen, policyRadarByNotebook]);
+  }, [currentUser, draftWritable, workspaceTourSeen, notebooks, workspaceNodes, nodes, activeNotebookId, screen, policyRadarByNotebook]);
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -246,7 +298,8 @@ export default function App() {
   // Pointer Handlers
   const handleCanvasPointerDown = (e: React.PointerEvent) => {
     if (connectionDraftRef.current) return;
-    if (isRightOpen) {
+    const activeInspectorNode = nodes.find(node => node.id === selectedNodeId);
+    if (isRightOpen && (activeInspectorNode?.type === 'source' || activeInspectorNode?.type === 'result')) {
       setIsRightOpen(false);
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     }
@@ -310,8 +363,9 @@ export default function App() {
     if (screen !== 'workspace' || !activeNotebookId) return;
     setWorkspaceNodes(current => ({ ...current, [activeNotebookId]: nodes }));
     setNotebooks(current => current.map(notebook => {
-      if (notebook.id !== activeNotebookId || notebook.cardCount === nodes.length) return notebook;
-      return { ...notebook, cardCount: nodes.length, updatedAt: '剛剛' };
+      const visibleCardCount = nodes.filter(node => node.type !== 'assistant').length;
+      if (notebook.id !== activeNotebookId || notebook.cardCount === visibleCardCount) return notebook;
+      return { ...notebook, cardCount: visibleCardCount, updatedAt: '剛剛' };
     }));
   }, [activeNotebookId, nodes, screen]);
 
@@ -320,9 +374,9 @@ export default function App() {
     const activeSelectedNode = nodes.find(node => node.id === selectedNodeId);
     const leftInset = isLeftOpen ? 312 : 82;
     const hasInspector = activeSelectedNode?.type === 'source' || activeSelectedNode?.type === 'result';
-    const rightInset = isRightOpen ? (activeSelectedNode?.type === 'result' ? 696 : hasInspector ? 436 : 336) : 82;
+    const rightInset = isRightOpen ? (activeSelectedNode?.type === 'result' ? 696 : hasInspector ? 436 : 416) : 82;
     const transform = getFitCanvasTransform(
-      nodes.map(node => ({ ...node, ...NODE_SIZES[node.type] })),
+      nodes.filter(node => node.type !== 'assistant').map(node => ({ ...node, ...NODE_SIZES[node.type] })),
       window.innerWidth,
       window.innerHeight,
       leftInset,
@@ -469,9 +523,13 @@ export default function App() {
     setDirtyInspectorNodeId(null);
     setAnalysisByNode({});
     setPresentationByNode({});
+    setWorkspaceTourSeen(false);
+    setIsWorkspaceTourOpen(false);
+    firstNotebookTourIdRef.current = null;
     try {
       const draft = readDraft(window.localStorage, user.email);
       if (draft) {
+        setWorkspaceTourSeen(draft.workspaceTourSeen === true);
         setNotebooks(draft.notebooks);
         setWorkspaceNodes(draft.workspaces);
         setPolicyRadarByNotebook(draft.radar);
@@ -496,11 +554,15 @@ export default function App() {
     setDirtyInspectorNodeId(null);
     setAnalysisByNode({});
     setPresentationByNode({});
+    setWorkspaceTourSeen(false);
+    setIsWorkspaceTourOpen(false);
+    firstNotebookTourIdRef.current = null;
     setScreen('auth');
   };
 
   const handleCreateNotebook = (name: string, description: string) =>
     new Promise<Notebook>(resolve => {
+      const shouldStartTour = notebooks.length === 0 && !workspaceTourSeen;
       window.setTimeout(() => {
         const notebook: Notebook = {
           id: `notebook-${crypto.randomUUID()}`,
@@ -510,28 +572,35 @@ export default function App() {
           cardCount: 0,
         };
         setNotebooks(current => [notebook, ...current]);
-        setWorkspaceNodes(current => ({ ...current, [notebook.id]: [] }));
+        setWorkspaceNodes(current => ({ ...current, [notebook.id]: [createSidebarAssistantNode()] }));
         setPolicyRadarByNotebook(current => ({
           ...current,
           [notebook.id]: createPolicyRadarState(),
         }));
+        if (shouldStartTour) firstNotebookTourIdRef.current = notebook.id;
         resolve(notebook);
       }, 650);
     });
 
   const handleOpenNotebook = (notebook: Notebook) => {
+    const isFreshFirstNotebook = firstNotebookTourIdRef.current === notebook.id;
+    const shouldStartTour = !workspaceTourSeen && (
+      isFreshFirstNotebook
+      || (notebooks.length === 1 && notebooks[0]?.id === notebook.id)
+    );
     setPolicyRadarByNotebook(current => ({
       ...current,
       [notebook.id]: preparePolicyRadarStateForOpen(current[notebook.id]),
     }));
     setActiveNotebookId(notebook.id);
-    setNodes((workspaceNodes[notebook.id] ?? []).map(cloneWorkspaceNode));
+    setNodes(prepareWorkspaceForSidebarAssistant(workspaceNodes[notebook.id] ?? []));
     setPan({ x: 0, y: 0 });
     setZoom(1);
     setIsLeftOpen(false);
     setIsRightOpen(false);
     setSelectedNodeId(null);
     setDirtyInspectorNodeId(null);
+    setIsWorkspaceTourOpen(shouldStartTour);
     setScreen('workspace');
     setFitViewRequest(value => value + 1);
   };
@@ -593,6 +662,12 @@ export default function App() {
     }
   };
 
+  const dismissWorkspaceTour = () => {
+    setWorkspaceTourSeen(true);
+    setIsWorkspaceTourOpen(false);
+    firstNotebookTourIdRef.current = null;
+  };
+
   useEffect(() => {
     if (!isRightOpen || !activeNotebookId) return;
     setPolicyRadarByNotebook(current => {
@@ -606,7 +681,7 @@ export default function App() {
   }, [activeNotebookId, isRightOpen]);
 
   if (screen === 'auth') {
-    return <AuthScreen onAuthenticated={handleAuthenticated} />;
+    return <AuthScreen onAuthenticated={handleAuthenticated} textSize={textSize} onTextSizeChange={setTextSize} />;
   }
 
   if (screen === 'notebooks') {
@@ -621,6 +696,8 @@ export default function App() {
         onDuplicate={handleDuplicateNotebook}
         onDelete={handleDeleteNotebook}
         onLogout={handleLogout}
+        textSize={textSize}
+        onTextSizeChange={setTextSize}
       />
     );
   }
@@ -628,11 +705,24 @@ export default function App() {
   const selectedNode = nodes.find(node => node.id === selectedNodeId) ?? null;
   const selectedSource = selectedNode?.type === 'source' ? selectedNode : null;
   const selectedResult = selectedNode?.type === 'result' ? selectedNode : null;
-  const selectedAssistant = selectedNode?.type === 'assistant' ? selectedNode : null;
   const sourceNodes = nodes.filter(node => node.type === 'source');
   const resultNodes = nodes.filter(node => node.type === 'result');
   const assistantNodes = nodes.filter(node => node.type === 'assistant');
+  const assistantNode = assistantNodes[0] ?? null;
+  const canvasNodes = nodes.filter(node => node.type !== 'assistant');
+  const assistantDraftActions = getChartDraftActions(assistantNode?.assistant?.draftActions ?? []);
+  const sourceNodeIdSet = new Set(sourceNodes.map(source => source.id));
+  const canExecuteAssistantDraft = Boolean(
+    assistantDraftActions.length
+    && assistantDraftActions.every(action => action.sourceNodeIds.some(sourceNodeId => sourceNodeIdSet.has(sourceNodeId))),
+  );
+  const assistantContextLabels = [
+    ...sourceNodes.map(node => node.source?.name || '未命名來源'),
+    ...resultNodes.map(node => node.result?.name || '未命名成果'),
+  ];
   const policyRadarCounts = getPolicyRadarCounts(nodes);
+  const hasPolicyRadarContent = policyRadarCounts.readySourceCount > 0
+    || policyRadarCounts.configuredResultCount > 0;
   const policyRadarWorkspaceSignature = getPolicyRadarWorkspaceSignature(nodes);
   const activePolicyRadarState = activeNotebookId
     ? policyRadarByNotebook[activeNotebookId] ?? createPolicyRadarState()
@@ -755,7 +845,14 @@ export default function App() {
   const closeInspector = () => {
     setDirtyInspectorNodeId(null);
     setSelectedNodeId(null);
-    setIsRightOpen(false);
+    setIsRightOpen(true);
+  };
+
+  const handleOpenAssistantChat = () => {
+    if (!confirmDiscardInspectorChanges()) return;
+    setDirtyInspectorNodeId(null);
+    setSelectedNodeId(null);
+    setIsRightOpen(true);
   };
 
   const handleReturnToNotebooks = () => {
@@ -836,7 +933,7 @@ export default function App() {
     rightInsetOverride?: number,
   ) => {
     const candidateSize = NODE_SIZES[type];
-    const rightInset = rightInsetOverride ?? (type === 'assistant' ? 82 : type === 'result' ? 696 : 436);
+    const rightInset = rightInsetOverride ?? (type === 'result' ? 696 : 436);
     const visibleBounds = {
       left: ((isLeftOpen ? 308 : 76) - pan.x) / zoom,
       right: (window.innerWidth - rightInset - pan.x) / zoom,
@@ -849,7 +946,7 @@ export default function App() {
       for (let column = -12; column <= 12; column += 1) {
         const candidateX = x + column * 36;
         const candidateY = y + row * 36;
-        if (existingNodes.some(node => cardWouldOverlap(candidateX, candidateY, type, node))) continue;
+        if (existingNodes.some(node => node.type !== 'assistant' && cardWouldOverlap(candidateX, candidateY, type, node))) continue;
 
         const outsideDistance = (
           Math.max(0, visibleBounds.left - candidateX)
@@ -867,6 +964,21 @@ export default function App() {
     }
 
     return Number.isFinite(openPosition.score) ? openPosition : { x, y };
+  };
+
+  const findDownstreamCardPosition = (anchor: CanvasNode, type: AddableCardType) => {
+    const anchorSize = NODE_SIZES[anchor.type];
+    const targetSize = NODE_SIZES[type];
+    const x = anchor.x + anchorSize.width + 80;
+    const verticalStep = targetSize.height + 40;
+    const rowOffsets = [0, 1, -1, 2, -2, 3, -3];
+
+    for (const rowOffset of rowOffsets) {
+      const y = anchor.y + rowOffset * verticalStep;
+      if (!nodes.some(node => node.type !== 'assistant' && cardWouldOverlap(x, y, type, node))) return { x, y };
+    }
+
+    return findOpenCardPosition(x, anchor.y, type);
   };
 
   const addSourceNode = (x: number, y: number) => {
@@ -933,39 +1045,9 @@ export default function App() {
     return true;
   };
 
-  const addAssistantNode = (x: number, y: number) => {
-    if (!confirmDiscardInspectorChanges()) return false;
-
-    const existingNames = new Set(assistantNodes.map(node => node.assistant?.name.trim()).filter(Boolean));
-    let assistantName = '政策資料小幫手';
-    let assistantNameNumber = 2;
-    while (existingNames.has(assistantName)) {
-      assistantName = `政策資料小幫手 ${assistantNameNumber}`;
-      assistantNameNumber += 1;
-    }
-    const position = findOpenCardPosition(x, y, 'assistant');
-    const assistantNode: CanvasNode = {
-      id: `assistant-${Date.now()}-${assistantNodes.length + 1}-${Math.random().toString(36).slice(2, 6)}`,
-      type: 'assistant',
-      x: position.x,
-      y: position.y,
-      assistant: {
-        name: assistantName,
-        messages: [],
-        draftActions: [],
-      },
-    };
-
-    setNodes(current => [...current, assistantNode]);
-    setDirtyInspectorNodeId(null);
-    setSelectedNodeId(assistantNode.id);
-    setIsRightOpen(false);
-    return true;
-  };
-
   const handleAddCardFromClick = (type: AddableCardType) => {
     const leftEdge = isLeftOpen ? 312 : 82;
-    const rightEdge = type === 'assistant' || type === 'result' ? 82 : 436;
+    const rightEdge = type === 'result' ? 82 : 436;
     const visibleBounds = {
       left: (leftEdge - pan.x) / zoom,
       right: (window.innerWidth - rightEdge - pan.x) / zoom,
@@ -980,23 +1062,15 @@ export default function App() {
     );
     const x = type === 'source'
       ? visibleBounds.left + columnMargin
-      : type === 'result'
-        ? visibleBounds.right - RESULT_CARD_SIZE.width - columnMargin
-        : (visibleBounds.left + visibleBounds.right - ASSISTANT_CARD_SIZE.width) / 2
-          + assistantNodes.length * 36;
+      : visibleBounds.right - RESULT_CARD_SIZE.width - columnMargin;
     const y = type === 'source'
       ? visibleBounds.top + 140 + sourceNodes.length * (SOURCE_CARD_SIZE.height + 40)
-      : type === 'result'
-        ? (visibleBounds.top + visibleBounds.bottom - RESULT_CARD_SIZE.height) / 2
-          + resultNodes.length * 40
-        : (visibleBounds.top + visibleBounds.bottom - ASSISTANT_CARD_SIZE.height) / 2
-          + assistantNodes.length * 36;
+      : (visibleBounds.top + visibleBounds.bottom - RESULT_CARD_SIZE.height) / 2
+        + resultNodes.length * 40;
 
     const added = type === 'source'
       ? addSourceNode(x, y)
-      : type === 'result'
-        ? addResultNode(x, y, rightEdge)
-        : addAssistantNode(x, y);
+      : addResultNode(x, y, rightEdge);
     if (!added) return;
 
     if (type === 'result') {
@@ -1004,6 +1078,11 @@ export default function App() {
       setConnectionNotice('從來源或圖表右側端點拖到新成果左側端點；連接後會自動開啟設定。');
     }
     setFitViewRequest(value => value + 1);
+  };
+
+  const handleStartTourWithSource = () => {
+    dismissWorkspaceTour();
+    handleAddCardFromClick('source');
   };
 
   const handleCardDragStart = (
@@ -1022,15 +1101,14 @@ export default function App() {
   const handleCanvasDrop = (event: React.DragEvent<HTMLElement>) => {
     event.preventDefault();
     const cardType = event.dataTransfer.getData(CARD_DRAG_TYPE);
-    if (cardType !== 'source' && cardType !== 'result' && cardType !== 'assistant') return;
+    if (cardType !== 'source' && cardType !== 'result') return;
 
     const bounds = event.currentTarget.getBoundingClientRect();
     const cardSize = NODE_SIZES[cardType];
     const x = (event.clientX - bounds.left - pan.x) / zoom - cardSize.width / 2;
     const y = (event.clientY - bounds.top - pan.y) / zoom - cardSize.height / 2;
     if (cardType === 'source') addSourceNode(x, y);
-    else if (cardType === 'result') addResultNode(x, y);
-    else addAssistantNode(x, y);
+    else addResultNode(x, y);
   };
 
   const handleSaveSource = (source: SourceConfig) => {
@@ -1209,10 +1287,35 @@ export default function App() {
       ? { ...current, [id]: { ...current[id], state: 'failed', view } } : current);
   };
 
+  const handleCreateChartFromSource = (id: string) => {
+    const source = nodes.find(node => node.id === id && node.type === 'source');
+    if (!source || !isSourceReady(source) || !confirmDiscardInspectorChanges()) return;
+
+    const position = findDownstreamCardPosition(source, 'result');
+    const newId = `result-${crypto.randomUUID()}`;
+    const guidedResult = createGuidedChartResult(id, source.source?.name || '資料來源');
+    guidedResult.name = getUniqueName(
+      guidedResult.name,
+      new Set(resultNodes.map(node => node.result?.name || '')),
+    );
+    setNodes(current => [...current, {
+      id: newId,
+      type: 'result',
+      x: position.x,
+      y: position.y,
+      result: guidedResult,
+    }]);
+    setDirtyInspectorNodeId(null);
+    setSelectedNodeId(null);
+    setIsRightOpen(true);
+    setConnectionNotice('已建立並連接圖表；可直接執行，或用鉛筆調整分析問題。');
+    setFitViewRequest(value => value + 1);
+  };
+
   const handleCreatePresentationFromAnalysis = (id: string) => {
     if (!isAnalysisReady(analysisByNode[id]) || !confirmDiscardInspectorChanges()) return;
     const source = nodes.find(node => node.id === id)!;
-    const position = findOpenCardPosition(source.x + 350, source.y, 'result');
+    const position = findDownstreamCardPosition(source, 'result');
     const newId = `result-${crypto.randomUUID()}`;
     const name = getUniqueName(`${source.result?.name || '分析'}簡報`, new Set(resultNodes.map(node => node.result?.name || '')));
     setNodes(current => [...current, {
@@ -1221,8 +1324,9 @@ export default function App() {
         prompt: '保留資料限制、來源與警告，整理為政策會議使用的洞察簡報。' },
     }]);
     setDirtyInspectorNodeId(null);
-    setSelectedNodeId(newId);
+    setSelectedNodeId(null);
     setIsRightOpen(true);
+    setConnectionNotice('已建立並連接簡報；可直接產生，或用鉛筆調整內容指示。');
     setFitViewRequest(value => value + 1);
   };
 
@@ -1233,8 +1337,8 @@ export default function App() {
         .filter(node => node.type === 'source')
         .map(node => node.id);
       const response = sourceNodeIds.length > 0
-        ? `需求已記錄，並依目前 ${sourceNodeIds.length} 張來源分別準備 ${new Set(sourceNodeIds).size} 項單一來源圖表草稿。這是固定的前端操作示意，不是 AI 分析，也沒有統計結果。${PRESENTATION_UNAVAILABLE_MESSAGE}`
-        : `需求已記錄，目前沒有來源卡片，因此沒有建立圖表草稿。請先新增官方資料來源後再送出；小幫手目前僅建立操作草稿。${PRESENTATION_UNAVAILABLE_MESSAGE}`;
+        ? `需求已記錄，已依目前 ${sourceNodeIds.length} 張來源準備 ${new Set(sourceNodeIds).size} 項圖表草稿。確認後會建立到白板，但不會自動執行分析。`
+        : '需求已記錄，但目前畫布沒有來源。請先新增官方資料，再請我規劃圖表。';
 
       return current.map(node => {
         if (node.id !== id || node.type !== 'assistant' || !node.assistant) return node;
@@ -1291,12 +1395,18 @@ export default function App() {
         if (validSourceNodeIds.length === 0) return;
         validSourceNodeIds.forEach(sourceNodeId => linkedSourceNodeIds.add(sourceNodeId));
 
-        const position = findOpenCardPosition(
-          assistantNode.x + ASSISTANT_CARD_SIZE.width + 96,
-          assistantNode.y + index * (RESULT_CARD_SIZE.height + 36),
-          'result',
-          workingNodes,
-        );
+        const sourceAnchor = current.find(node => node.id === validSourceNodeIds[0]);
+        const preferredPosition = {
+          x: (sourceAnchor?.x ?? 80) + SOURCE_CARD_SIZE.width + 80,
+          y: (sourceAnchor?.y ?? 180) + index * (RESULT_CARD_SIZE.height + 36),
+        };
+        const position = workingNodes.some(node => (
+          node.type !== 'assistant'
+          && node.id !== sourceAnchor?.id
+          && cardWouldOverlap(preferredPosition.x, preferredPosition.y, 'result', node)
+        ))
+          ? findOpenCardPosition(preferredPosition.x, preferredPosition.y, 'result', workingNodes, 416)
+          : preferredPosition;
         const resultNode: CanvasNode = {
           id: `result-assistant-${executedAt}-${index + 1}-${Math.random().toString(36).slice(2, 6)}`,
           type: 'result',
@@ -1314,7 +1424,7 @@ export default function App() {
       });
 
       const notice = createdCount > 0
-        ? `已建立 ${createdCount} 張圖表草稿，並連結 ${linkedSourceNodeIds.size} 張來源。這些卡片只有前端設定；尚未產生圖表或分析結論。${PRESENTATION_UNAVAILABLE_MESSAGE}`
+        ? `已建立 ${createdCount} 張圖表草稿並連結 ${linkedSourceNodeIds.size} 張來源。請在圖表卡片執行分析後查看可信成果。`
         : '目前沒有可用的來源連結，因此沒有建立成果草稿。請重新選擇或新增來源後，再送出一次需求。';
 
       return workingNodes.map(node => {
@@ -1413,35 +1523,14 @@ export default function App() {
     }
   };
 
-  const handleDeleteAssistant = (id: string) => {
-    let shouldDiscardOtherInspector = false;
-    if (selectedNodeId !== id && dirtyInspectorNodeId) {
-      if (!confirmDiscardInspectorChanges()) return;
-      shouldDiscardOtherInspector = true;
-    }
-    const assistantName = nodes.find(node => node.id === id)?.assistant?.name || '這張小幫手';
-    if (!window.confirm(`確定要刪除「${assistantName}」嗎？已送出的對話與操作草稿會一併移除。`)) return;
-
-    if (shouldDiscardOtherInspector) {
-      setSelectedNodeId(null);
-      setDirtyInspectorNodeId(null);
-    }
-
-    setNodes(current => current.filter(node => node.id !== id));
-    if (selectedNodeId === id) {
-      setSelectedNodeId(null);
-      setDirtyInspectorNodeId(null);
-    }
-  };
-
   // Zoom and Fit Controls
   const handleZoomIn = () => setZoom(z => Math.min(1.5, z + 0.1));
   const handleZoomOut = () => setZoom(z => Math.max(0.3, z - 0.1));
   const handleFitView = () => {
     const leftInset = isLeftOpen ? 312 : 82;
-    const rightInset = isRightOpen ? (selectedResult ? 696 : selectedSource ? 436 : 336) : 82;
+    const rightInset = isRightOpen ? (selectedResult ? 696 : selectedSource ? 436 : 416) : 82;
     const transform = getFitCanvasTransform(
-      nodes.map(node => ({ ...node, ...NODE_SIZES[node.type] })),
+      canvasNodes.map(node => ({ ...node, ...NODE_SIZES[node.type] })),
       window.innerWidth,
       window.innerHeight,
       leftInset,
@@ -1527,22 +1616,34 @@ export default function App() {
             </div>
           </div>
 
-          {/* Policy Radar stays beside the notebook title, outside canvas transforms. */}
-          <div
-            className="pointer-events-auto max-w-full shrink-0"
-            onPointerDown={event => event.stopPropagation()}
-          >
-            <PolicyRadarPanel
-              counts={policyRadarCounts}
-              state={activePolicyRadarState}
-              isStale={isPolicyRadarStale}
-              onToggle={handleTogglePolicyRadar}
-              onRun={handleRunPolicyRadar}
-            />
-          </div>
+          {/* An empty notebook has nothing to scan, so the radar appears after the first canvas card. */}
+          {hasPolicyRadarContent && (
+            <div
+              className="pointer-events-auto max-w-full shrink-0"
+              onPointerDown={event => event.stopPropagation()}
+            >
+              <PolicyRadarPanel
+                counts={policyRadarCounts}
+                state={activePolicyRadarState}
+                isStale={isPolicyRadarStale}
+                onToggle={handleTogglePolicyRadar}
+                onRun={handleRunPolicyRadar}
+              />
+            </div>
+          )}
         </div>
 
         <div className="pointer-events-auto flex shrink-0 gap-2">
+          <TextSizeControl value={textSize} onChange={setTextSize} />
+          <button
+            type="button"
+            onClick={() => setIsWorkspaceTourOpen(true)}
+            className="flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-medium text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground"
+            aria-label="開啟操作教學"
+          >
+            <CircleHelp className="size-4" />
+            <span className="hidden sm:inline">操作教學</span>
+          </button>
           <button
             type="button"
             disabled
@@ -1583,7 +1684,7 @@ export default function App() {
 
         {/* Transformed Canvas Content Container */}
         <div
-          className={`absolute inset-0 pointer-events-none z-10 ${nodes.length === 0 ? 'hidden' : ''}`}
+          className={`absolute inset-0 pointer-events-none z-10 ${canvasNodes.length === 0 ? 'hidden' : ''}`}
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: '0 0'
@@ -1627,9 +1728,9 @@ export default function App() {
               node={node}
               selected={node.id === selectedNodeId}
               connected={resultNodes.some(resultNode => usesRawSourceInputs(resultNode.result) && resultNode.result?.sourceNodeIds.includes(node.id))}
-              onSelect={handleSelectNode}
               onEdit={handleSelectNode}
               onDelete={handleDeleteSource}
+              onCreateChart={isSourceReady(node) ? handleCreateChartFromSource : undefined}
               onPointerDown={handleNodePointerDown}
               onOutputPointerDown={handleConnectionPointerDown}
               outputConnecting={connectionDraft?.fromNodeId === node.id}
@@ -1668,7 +1769,9 @@ export default function App() {
                 onRun={node.result?.kind === 'presentation'
                   ? handleRunPresentation
                   : handleRunAnalysis}
-                onSelect={handleSelectNode}
+                onCreatePresentation={node.result?.kind === 'chart' && isAnalysisReady(analysisByNode[node.id])
+                  ? handleCreatePresentationFromAnalysis
+                  : undefined}
                 onEdit={handleSelectNode}
                 onDelete={handleDeleteResult}
                 onPointerDown={handleNodePointerDown}
@@ -1680,49 +1783,33 @@ export default function App() {
             );
           })}
 
-          {assistantNodes.map(node => {
-            const sourceNodeIdSet = new Set(sourceNodes.map(source => source.id));
-            const chartDraftActions = getChartDraftActions(node.assistant?.draftActions ?? []);
-            const canExecuteDraft = Boolean(
-              chartDraftActions.length
-              && chartDraftActions.every(action =>
-                action.sourceNodeIds.some(sourceNodeId => sourceNodeIdSet.has(sourceNodeId)),
-              ),
-            );
-
-            return (
-              <AssistantCard
-                key={node.id}
-                node={node}
-                selected={node.id === selectedNodeId}
-                onSelect={handleSelectNode}
-                onDelete={handleDeleteAssistant}
-                onPointerDown={handleNodePointerDown}
-                onSubmit={handleAssistantSubmit}
-                onExecuteDraft={canExecuteDraft ? handleAssistantExecuteDraft : undefined}
-              />
-            );
-          })}
-
         </div>
 
-        {nodes.length === 0 && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none px-6">
-            <div className="max-w-md rounded-2xl border border-dashed border-border bg-card/95 px-8 py-10 text-center shadow-sm">
+        {canvasNodes.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6">
+            <div className="pointer-events-auto max-w-md rounded-2xl border border-border/80 bg-card/95 px-8 py-8 text-center shadow-sm">
               <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                <Plus className="size-6" />
+                <Database className="size-6" />
               </div>
-              <h2 className="mt-4 text-lg font-semibold">這本筆記本目前是空的</h2>
+              <h2 className="mt-4 text-lg font-semibold">從一份可信資料開始</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                從左側新增「來源」、「成果」或「小幫手」，開始組合你的分析流程。
+                加入官方資料，開始建立來源 → 圖表 → 簡報流程。
               </p>
+              <button
+                type="button"
+                onClick={() => handleAddCardFromClick('source')}
+                className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-700 px-5 text-sm font-medium text-white transition hover:bg-blue-800"
+              >
+                <Database className="size-4" />
+                選擇官方資料
+              </button>
             </div>
           </div>
         )}
 
         {/* Zoom & Fit Controls */}
         <div className="absolute bottom-6 -translate-x-1/2 flex items-center gap-1 bg-card border border-border rounded-full shadow-sm p-1.5 z-40"
-          style={{ left: `calc(50% + ${((isLeftOpen ? 312 : 82) - (isRightOpen ? selectedResult ? 696 : selectedSource ? 436 : 336 : 82)) / 2}px)` }}>
+          style={{ left: `calc(50% + ${((isLeftOpen ? 312 : 82) - (isRightOpen ? selectedResult ? 696 : selectedSource ? 436 : 416 : 82)) / 2}px)` }}>
           <span className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-muted-foreground/80">
             Ctrl + 滾輪縮放
           </span>
@@ -1807,21 +1894,6 @@ export default function App() {
               </span>
             )}
           </button>
-          <button
-            type="button"
-            draggable
-            onDragStart={(event) => handleCardDragStart(event, 'assistant')}
-            onClick={() => handleAddCardFromClick('assistant')}
-            className="p-2 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition-colors relative group cursor-grab active:cursor-grabbing"
-            aria-label="新增小幫手卡片"
-          >
-            <MessageSquare className="size-5" />
-            {!isLeftOpen && (
-              <span className="absolute left-12 bg-foreground text-background text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                點擊新增，或拖入白板
-              </span>
-            )}
-          </button>
         </div>
 
         {/* Expanded Content */}
@@ -1871,26 +1943,8 @@ export default function App() {
                 </span>
               </button>
 
-              <button
-                type="button"
-                draggable
-                onDragStart={(event) => handleCardDragStart(event, 'assistant')}
-                onClick={() => handleAddCardFromClick('assistant')}
-                className="w-full rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-left transition-colors hover:border-emerald-300 hover:bg-emerald-50 cursor-grab active:cursor-grabbing"
-              >
-                <span className="flex items-start gap-3">
-                  <span className="flex size-9 flex-none items-center justify-center rounded-lg bg-emerald-600 text-white">
-                    <MessageSquare className="size-4" />
-                  </span>
-                  <span>
-                    <span className="block text-sm font-semibold text-emerald-950">小幫手</span>
-                    <span className="mt-1 block text-[11px] leading-4 text-emerald-800/80">輸入需求，規劃成果卡片草稿</span>
-                  </span>
-                </span>
-              </button>
-
               <p className="px-1 pt-2 text-[11px] leading-5 text-muted-foreground">
-                已安裝資料集可執行真實分析；完成後可再產生並下載簡報。小幫手、檔案上傳與政策雷達仍為操作草稿。
+                已安裝資料集可執行真實分析；AI 小幫手已移到右側聊天室，產生的草稿會直接加入白板。
               </p>
             </div>
           </div>
@@ -1900,7 +1954,7 @@ export default function App() {
       {/* Floating Right Panel - Selected Card Settings */}
       <div
         className={`absolute top-20 bottom-6 right-4 z-[60] flex bg-card border border-border shadow-sm rounded-xl transition-all duration-300 ease-in-out ${
-          isRightOpen ? (selectedResult ? 'w-[min(680px,calc(100vw-32px))]' : selectedSource ? 'w-[min(420px,calc(100vw-32px))]' : 'w-[320px]') : 'w-14'
+          isRightOpen ? (selectedResult ? 'w-[min(680px,calc(100vw-32px))]' : selectedSource ? 'w-[min(420px,calc(100vw-32px))]' : 'w-[min(400px,calc(100vw-32px))]') : 'w-14'
         }`}
       >
         {/* Expanded Content */}
@@ -1951,47 +2005,18 @@ export default function App() {
                 onClose={closeInspector}
               />
             </div>
-          ) : selectedAssistant ? (
-            <div className="w-[264px] h-full flex flex-col">
-              <div className="p-4 border-b border-border/50">
-                <h2 className="font-medium text-sm flex items-center gap-2">
-                  <MessageSquare className="size-4 text-emerald-700" />
-                  小幫手
-                </h2>
-              </div>
-              <div className="flex flex-1 flex-col p-4">
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-5 text-center">
-                  <MessageSquare className="mx-auto size-5 text-emerald-700" />
-                  <p className="mt-3 text-xs font-medium">直接在卡片內輸入需求</p>
-                  <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">
-                    已送出的文字與操作草稿會隨筆記本保存。小幫手對話目前是操作示意；請到圖表成果卡執行真正分析。
-                  </p>
-                </div>
-                <div className="mt-auto rounded-lg bg-muted/30 p-3 text-[11px] leading-5 text-muted-foreground">
-                  尚未送出的輸入文字只存在卡片內，切換筆記本時不會保存。
-                </div>
-              </div>
-            </div>
+          ) : assistantNode?.assistant ? (
+            <AssistantSidebar
+              config={assistantNode.assistant}
+              sourceCount={sourceNodes.length}
+              resultCount={resultNodes.length}
+              contextLabels={assistantContextLabels}
+              onSubmit={prompt => handleAssistantSubmit(assistantNode.id, prompt)}
+              onExecuteDraft={canExecuteAssistantDraft ? () => handleAssistantExecuteDraft(assistantNode.id) : undefined}
+            />
           ) : (
-            <div className="w-[264px] h-full flex flex-col">
-              <div className="p-4 border-b border-border/50">
-                <h2 className="font-medium text-sm flex items-center gap-2">
-                  <Settings2 className="size-4 text-primary" />
-                  卡片設定
-                </h2>
-              </div>
-              <div className="flex flex-1 flex-col p-4">
-                <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
-                  <Settings2 className="mx-auto size-5 text-muted-foreground" />
-                  <p className="mt-3 text-xs font-medium">尚未選取卡片</p>
-                  <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">
-                    新增或選取白板上的來源與成果，即可在這裡完成設定。
-                  </p>
-                </div>
-                <div className="mt-auto rounded-lg bg-muted/30 p-3 text-[11px] leading-5 text-muted-foreground">
-                  小幫手的對話與操作草稿直接在卡片內完成。
-                </div>
-              </div>
+            <div className="flex h-full items-center justify-center px-5 text-center text-xs text-muted-foreground">
+              正在準備筆記本小幫手…
             </div>
           )}
         </div>
@@ -2001,7 +2026,8 @@ export default function App() {
           <button
             onClick={() => setIsRightOpen(!isRightOpen)}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-            title={isRightOpen ? "收合卡片設定" : "開啟卡片設定"}
+            title={isRightOpen ? "收合右側面板" : "開啟 AI 小幫手"}
+            aria-label={isRightOpen ? "收合右側面板" : "開啟 AI 小幫手"}
           >
             {isRightOpen ? <PanelRightClose className="size-5" /> : <PanelRightOpen className="size-5" />}
           </button>
@@ -2010,30 +2036,27 @@ export default function App() {
 
           <button
             type="button"
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors relative group"
-            onClick={() => setIsRightOpen(true)}
+            className={`group relative rounded-lg p-2 transition-colors ${!selectedSource && !selectedResult && isRightOpen ? 'bg-emerald-50 text-emerald-700' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+            onClick={handleOpenAssistantChat}
+            aria-label="開啟 AI 小幫手聊天室"
+            title="AI 小幫手聊天室"
           >
-            {selectedSource
-              ? <Database className="size-5 text-blue-700" />
-              : selectedResult
-                ? <FileText className="size-5 text-violet-700" />
-                : selectedAssistant
-                  ? <MessageSquare className="size-5 text-emerald-700" />
-                  : <Settings2 className="size-5" />}
+            <MessageSquare className="size-5" />
             {!isRightOpen && (
               <span className="absolute right-12 bg-foreground text-background text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                {selectedSource
-                  ? '來源設定'
-                  : selectedResult
-                    ? '成果設定'
-                    : selectedAssistant
-                      ? '小幫手說明'
-                      : '卡片設定'}
+                AI 小幫手
               </span>
             )}
           </button>
         </div>
       </div>
+
+      {isWorkspaceTourOpen && (
+        <WorkspaceTour
+          onDismiss={dismissWorkspaceTour}
+          onStartWithSource={handleStartTourWithSource}
+        />
+      )}
 
     </div>
   );

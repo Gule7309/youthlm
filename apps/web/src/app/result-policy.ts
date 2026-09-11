@@ -11,6 +11,16 @@ export function getChartDraftActions(actions: AssistantDraftAction[]) {
   return actions.filter(action => action.kind === 'chart');
 }
 
+export function createGuidedChartResult(sourceNodeId: string, sourceName: string): ResultConfig {
+  const displayName = sourceName.trim() || '資料來源';
+  return {
+    kind: 'chart',
+    name: `${displayName}趨勢分析`,
+    sourceNodeIds: [sourceNodeId],
+    prompt: `整理「${displayName}」的主要變化與政策洞察，並清楚標示資料限制與來源。`,
+  };
+}
+
 export function createChartDraftActions(
   id: string,
   prompt: string,

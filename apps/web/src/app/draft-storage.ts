@@ -2,6 +2,7 @@ import type { CanvasNode, Notebook, PolicyRadarStateByNotebook } from './types';
 
 export type DraftSnapshot = {
   version: 1;
+  workspaceTourSeen?: boolean;
   notebooks: Notebook[];
   workspaces: Record<string, CanvasNode[]>;
   radar: PolicyRadarStateByNotebook;
@@ -56,7 +57,9 @@ function validNode(node: unknown): node is CanvasNode {
 export function parseDraft(raw: string): DraftSnapshot {
   if (raw.length > MAX_BYTES) throw new Error('本機草稿過大。');
   const data: unknown = JSON.parse(raw);
-  if (!record(data) || data.version !== 1 || !Array.isArray(data.notebooks) || data.notebooks.length > 200
+  if (!record(data) || data.version !== 1
+    || (data.workspaceTourSeen !== undefined && typeof data.workspaceTourSeen !== 'boolean')
+    || !Array.isArray(data.notebooks) || data.notebooks.length > 200
     || !record(data.workspaces) || !record(data.radar)) throw new Error('本機草稿版本或格式不相容。');
   const seen = new Set<string>();
   const notebooks: Notebook[] = [];
@@ -95,9 +98,18 @@ export function parseDraft(raw: string): DraftSnapshot {
       radarByNotebook[notebook.id] = radar as PolicyRadarStateByNotebook[string];
     }
     workspaces[notebook.id] = nodes;
-    notebooks.push({ ...(notebook as Notebook), cardCount: nodes.length });
+    notebooks.push({
+      ...(notebook as Notebook),
+      cardCount: nodes.filter(node => node.type !== 'assistant').length,
+    });
   }
-  return { version: 1, notebooks, workspaces, radar: radarByNotebook };
+  return {
+    version: 1,
+    workspaceTourSeen: data.workspaceTourSeen === true,
+    notebooks,
+    workspaces,
+    radar: radarByNotebook,
+  };
 }
 
 // An email is only a local draft selector, not an authentication/security boundary.
@@ -110,7 +122,13 @@ export function readDraft(storage: Pick<Storage, 'getItem'>, email: string): Dra
 }
 export function writeDraft(storage: Pick<Storage, 'setItem'>, email: string, draft: DraftSnapshot) {
   // Whitelist only notebook settings, never credentials or backend execution responses.
-  const raw = JSON.stringify({ version: 1, notebooks: draft.notebooks, workspaces: draft.workspaces, radar: draft.radar });
+  const raw = JSON.stringify({
+    version: 1,
+    workspaceTourSeen: draft.workspaceTourSeen === true,
+    notebooks: draft.notebooks,
+    workspaces: draft.workspaces,
+    radar: draft.radar,
+  });
   const sanitized = parseDraft(raw);
   storage.setItem(draftStorageKey(email), JSON.stringify(sanitized));
 }

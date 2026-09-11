@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  BarChart3,
   Database,
   FileSpreadsheet,
   Globe2,
@@ -10,16 +11,15 @@ import {
 } from 'lucide-react';
 import type { CanvasNode } from '../types';
 import { SOURCE_CARD_SIZE } from '../canvas-connections';
-import { isSourceConfigured } from '../workspace-state';
 
 type SourceCardProps = {
   node: CanvasNode;
   selected?: boolean;
   connected?: boolean;
-  onSelect: (id: string) => boolean | void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-  onPointerDown: (event: React.PointerEvent<HTMLDivElement>, id: string) => void;
+  onCreateChart?: (id: string) => void;
+  onPointerDown: (event: React.PointerEvent<HTMLButtonElement>, id: string) => void;
   onOutputPointerDown?: (event: React.PointerEvent<HTMLButtonElement>, id: string) => void;
   outputConnecting?: boolean;
 };
@@ -28,9 +28,9 @@ export function SourceCard({
   node,
   selected = false,
   connected = false,
-  onSelect,
   onEdit,
   onDelete,
+  onCreateChart,
   onPointerDown,
   onOutputPointerDown,
   outputConnecting = false,
@@ -69,19 +69,11 @@ export function SourceCard({
         selected ? 'z-20 border-blue-400 ring-4 ring-blue-100' : 'z-10 border-slate-200 hover:border-slate-300'
       }`}
       style={{ left: node.x, top: node.y, width: SOURCE_CARD_SIZE.width, height: SOURCE_CARD_SIZE.height }}
-      onPointerDown={(event) => {
-        event.stopPropagation();
-        onSelect(node.id);
-      }}
+      onPointerDown={(event) => event.stopPropagation()}
       aria-label={`來源卡片：${config?.name || '尚未命名'}`}
     >
       <div
-        className="flex cursor-grab touch-none items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 active:cursor-grabbing"
-        onPointerDown={(event) => {
-          event.stopPropagation();
-          if (onSelect(node.id) === false) return;
-          onPointerDown(event, node.id);
-        }}
+        className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3"
       >
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
@@ -94,7 +86,18 @@ export function SourceCard({
             </h3>
           </div>
         </div>
-        <GripHorizontal className="size-4 shrink-0 text-slate-300" aria-hidden="true" />
+        <button
+          type="button"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            onPointerDown(event, node.id);
+          }}
+          className="flex size-8 shrink-0 touch-none cursor-grab items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 active:cursor-grabbing"
+          aria-label={`拖移${config?.name || '來源'}卡片`}
+          title="按住拖移卡片"
+        >
+          <GripHorizontal className="size-4" aria-hidden="true" />
+        </button>
       </div>
 
       <div className="space-y-3 p-4">
@@ -130,14 +133,26 @@ export function SourceCard({
         </div>
 
         <div className="flex items-center gap-2 pt-1">
+          {onCreateChart && (
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => onCreateChart(node.id)}
+              className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-700 text-xs font-medium text-white transition hover:bg-blue-800"
+            >
+              <BarChart3 className="size-3.5" />
+              建立圖表
+            </button>
+          )}
           <button
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => onEdit(node.id)}
-            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            className={`flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 ${onCreateChart ? 'size-8' : 'flex-1'}`}
+            aria-label={onCreateChart ? '編輯來源設定' : undefined}
           >
             <Pencil className="size-3.5" />
-            {isConfigured ? '編輯設定' : '設定來源'}
+            {!onCreateChart && (isConfigured ? '編輯設定' : '設定來源')}
           </button>
           <button
             type="button"

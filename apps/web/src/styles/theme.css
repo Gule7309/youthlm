@@ -2,6 +2,7 @@
 
 :root {
   --font-size: 14px;
+  --font-scale: 1;
   --background: #F8FAFC;
   --foreground: #0F172A;
   --card: #FFFFFF;
@@ -39,6 +40,43 @@
   --sidebar-accent-foreground: #0F172A;
   --sidebar-border: #E2E8F0;
   --sidebar-ring: #94A3B8;
+}
+
+:root[data-text-size='small'] {
+  --font-size: 14px;
+  --font-scale: 1;
+}
+
+:root[data-text-size='medium'] {
+  --font-size: 15.5px;
+  --font-scale: 1.107;
+}
+
+:root[data-text-size='large'] {
+  --font-size: 17px;
+  --font-scale: 1.214;
+}
+
+:root[data-text-size='extra-large'] {
+  --font-size: 18.5px;
+  --font-scale: 1.321;
+}
+
+/* Tailwind's arbitrary pixel labels do not follow the root rem size automatically. */
+.text-\[8px\] {
+  font-size: calc(8px * var(--font-scale));
+}
+
+.text-\[9px\] {
+  font-size: calc(9px * var(--font-scale));
+}
+
+.text-\[10px\] {
+  font-size: calc(10px * var(--font-scale));
+}
+
+.text-\[11px\] {
+  font-size: calc(11px * var(--font-scale));
 }
 
 .dark {

@@ -25,7 +25,7 @@ export const CONNECTION_COLORS: Record<CanvasConnectionKind, string> = {
 // This margin is measured in screen pixels, so it does not shrink with canvas zoom.
 export const CONNECTION_DROP_MARGIN_PX = 22;
 export const SOURCE_CARD_SIZE = { width: 320, height: 216 } as const;
-export const RESULT_CARD_SIZE = { width: 320, height: 260 } as const;
+export const RESULT_CARD_SIZE = { width: 360, height: 360 } as const;
 
 export function getFitCanvasTransform(
   targetRects: CanvasRect[],
@@ -48,7 +48,7 @@ export function getFitCanvasTransform(
   const availableHeight = viewportHeight - topInset - bottomInset;
   const padding = 64;
   const zoom = Math.max(0.3, Math.min(
-    1.5,
+    1,
     Math.min(
       (availableWidth - padding * 2) / boxWidth,
       (availableHeight - padding * 2) / boxHeight,

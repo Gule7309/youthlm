@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadTs } from './load-ts.js';
 const { parseDraft, readDraft, writeDraft, draftStorageKey } = await loadTs('../src/app/draft-storage.ts');
-const draft = { version: 1, notebooks: [{ id: 'nb', name: '研究', description: '', updatedAt: '剛剛', cardCount: 1 }],
+const draft = { version: 1, workspaceTourSeen: true, notebooks: [{ id: 'nb', name: '研究', description: '', updatedAt: '剛剛', cardCount: 1 }],
   workspaces: { nb: [{ id: 's', type: 'source', x: 100, y: 100, source: { kind: 'registry', name: '人口', enabled: true, autoClean: false, registrySourceId: 'population', filters: { sexes: ['all'] } } }] },
   radar: { nb: { collapsed: true, running: true, activeRunId: 'previous' } } };
 test('local drafts round trip without credentials or execution state', () => {
@@ -11,14 +11,21 @@ test('local drafts round trip without credentials or execution state', () => {
   writeDraft(storage, ' A@example.test ', { ...draft, password: 'never-store', analysisByNode: { secret: 'response' } });
   const restored = readDraft(storage, 'a@example.test');
   assert.deepEqual(restored.workspaces, draft.workspaces);
+  assert.equal(restored.workspaceTourSeen, true);
   assert.deepEqual(restored.radar.nb, { collapsed: true, running: false });
   assert.equal(values.values().next().value.includes('never-store'), false);
   assert.equal(values.values().next().value.includes('analysisByNode'), false);
   assert.equal(readDraft(storage, 'b@example.test'), null);
   assert.equal(draftStorageKey(' A@example.test '), draftStorageKey('a@example.test'));
 });
+
+test('older drafts default the first-workspace tour preference safely', () => {
+  const legacyPreference = structuredClone(draft);
+  delete legacyPreference.workspaceTourSeen;
+  assert.equal(parseDraft(JSON.stringify(legacyPreference)).workspaceTourSeen, false);
+});
 test('malformed, unsupported and broken node drafts fail without overwriting storage', () => {
-  for (const value of ['invalid JSON', JSON.stringify({ ...draft, version: 99 }), JSON.stringify({ ...draft, workspaces: { nb: [{}] } }), JSON.stringify({ ...draft, notebooks: [...draft.notebooks, ...draft.notebooks] })]) {
+  for (const value of ['invalid JSON', JSON.stringify({ ...draft, version: 99 }), JSON.stringify({ ...draft, workspaceTourSeen: 'yes' }), JSON.stringify({ ...draft, workspaces: { nb: [{}] } }), JSON.stringify({ ...draft, notebooks: [...draft.notebooks, ...draft.notebooks] })]) {
     assert.throws(() => parseDraft(value));
   }
   const broken = structuredClone(draft); broken.workspaces.nb[0].source.filters = { nested: { constructor: 'bad' } };
@@ -32,7 +39,7 @@ test('browser storage and quota failures propagate to the visible UI warning', (
   assert.throws(() => writeDraft({ setItem() { throw new Error('quota'); } }, 'a', draft), /quota/);
 });
 
-test('legacy prototype nodes are removed while user cards and notebook counts are preserved', () => {
+test('legacy prototype nodes are removed and assistant history no longer counts as a canvas card', () => {
   const legacy = {
     version: 1,
     notebooks: [{ id: 'legacy', name: '既有研究', description: '使用者草稿', updatedAt: '昨天', cardCount: 5 }],
@@ -50,7 +57,7 @@ test('legacy prototype nodes are removed while user cards and notebook counts ar
 
   const migrated = parseDraft(JSON.stringify(legacy));
   assert.deepEqual(migrated.workspaces.legacy.map(node => node.type), ['source', 'result', 'assistant']);
-  assert.equal(migrated.notebooks[0].cardCount, 3);
+  assert.equal(migrated.notebooks[0].cardCount, 2);
   assert.equal(migrated.workspaces.legacy[0].source.name, '人口資料');
   assert.equal(migrated.workspaces.legacy[1].result.prompt, '比較趨勢');
   assert.equal(migrated.workspaces.legacy[2].assistant.messages[0].content, '保留這段對話');
@@ -60,5 +67,5 @@ test('legacy prototype nodes are removed while user cards and notebook counts ar
   writeDraft({ setItem: (key, value) => values.set(key, value) }, 'legacy@example.test', legacy);
   const saved = JSON.parse(values.get(draftStorageKey('legacy@example.test')));
   assert.deepEqual(saved.workspaces.legacy.map(node => node.type), ['source', 'result', 'assistant']);
-  assert.equal(saved.notebooks[0].cardCount, 3);
+  assert.equal(saved.notebooks[0].cardCount, 2);
 });

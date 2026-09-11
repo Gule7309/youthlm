@@ -111,16 +111,16 @@ test('client coordinates convert to world coordinates under pan and zoom', () =>
   );
   assert.equal(connectionHandleKey('node-a', 'output'), 'node-a:output');
   assert.deepEqual(connectionPortPoint({ ...source('s'), x: 10, y: 20 }, 'output'), { x: 330, y: 128 });
-  assert.deepEqual(connectionPortPoint({ ...result('r'), x: 400, y: 50 }, 'input'), { x: 400, y: 180 });
-  assert.deepEqual(connectionPortPoint({ ...result('r'), x: 400, y: 50 }, 'output'), { x: 720, y: 180 });
+  assert.deepEqual(connectionPortPoint({ ...result('r'), x: 400, y: 50 }, 'input'), { x: 400, y: 230 });
+  assert.deepEqual(connectionPortPoint({ ...result('r'), x: 400, y: 50 }, 'output'), { x: 760, y: 230 });
   assert.equal(connectionPortPoint(source('s'), 'input'), null);
 });
 
 test('fit transform brings restored negative and offscreen card positions into the usable canvas', () => {
   const rects = [
     { x: 100, y: 200, width: 320, height: 216 },
-    { x: 500, y: 200, width: 320, height: 260 },
-    { x: 900, y: -180, width: 320, height: 260 },
+    { x: 500, y: 200, width: 360, height: 360 },
+    { x: 900, y: -180, width: 360, height: 360 },
   ];
   const transform = getFitCanvasTransform(rects, 1280, 720, 82, 82);
   assert.ok(transform);
@@ -135,6 +135,17 @@ test('fit transform brings restored negative and offscreen card positions into t
   assert.ok(Math.max(...screenRects.map(rect => rect.right)) <= 1280 - 82);
   assert.ok(Math.min(...screenRects.map(rect => rect.top)) >= 80);
   assert.ok(Math.max(...screenRects.map(rect => rect.bottom)) <= 720 - 80);
+});
+
+test('fit transform never magnifies a small workflow beyond 100 percent', () => {
+  const transform = getFitCanvasTransform(
+    [{ x: 100, y: 100, width: 320, height: 216 }],
+    1280,
+    720,
+    82,
+    82,
+  );
+  assert.equal(transform?.zoom, 1);
 });
 
 test('connection targets keep a screen-space drop margin at low canvas zoom', () => {

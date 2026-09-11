@@ -22,7 +22,17 @@ type AnalysisResultPanelProps = {
   onRetry?: () => void;
 };
 
-function EChartsCanvas({ option }: { option: Record<string, unknown> }) {
+export function EChartsCanvas({
+  option,
+  className = 'h-80 w-full',
+  ariaLabel = 'YouthLM 分析圖表',
+  errorClassName = 'rounded bg-amber-50 p-3 text-xs text-amber-800',
+}: {
+  option: Record<string, unknown>;
+  className?: string;
+  ariaLabel?: string;
+  errorClassName?: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [chartError, setChartError] = useState(false);
 
@@ -59,8 +69,8 @@ function EChartsCanvas({ option }: { option: Record<string, unknown> }) {
   }, [option]);
 
   return <>
-    {chartError && <p role="alert" className="rounded bg-amber-50 p-3 text-xs text-amber-800">圖表暫時無法顯示，仍可使用下方資料表核對結果。</p>}
-    <div ref={containerRef} className={chartError ? 'hidden' : 'h-80 w-full'} role="img" aria-label="YouthLM 分析圖表" />
+    {chartError && <p role="alert" className={errorClassName}>圖表暫時無法顯示，仍可使用資料表核對結果。</p>}
+    <div ref={containerRef} className={chartError ? 'hidden' : className} role="img" aria-label={ariaLabel} />
   </>;
 }
 
