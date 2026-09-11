@@ -16,12 +16,12 @@ export function createChartDraftActions(
   prompt: string,
   sourceNodeIds: string[],
 ): AssistantDraftAction[] {
-  if (sourceNodeIds.length === 0) return [];
-  return [{
-    id,
+  const uniqueSourceNodeIds = [...new Set(sourceNodeIds)];
+  return uniqueSourceNodeIds.map((sourceNodeId, index) => ({
+    id: uniqueSourceNodeIds.length === 1 ? id : `${id}-${index + 1}`,
     kind: 'chart',
-    name: '政策洞察圖表',
-    sourceNodeIds: [...sourceNodeIds],
+    name: uniqueSourceNodeIds.length === 1 ? '政策洞察圖表' : `政策洞察圖表 ${index + 1}`,
+    sourceNodeIds: [sourceNodeId],
     prompt,
-  }];
+  }));
 }

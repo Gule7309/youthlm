@@ -72,13 +72,16 @@ The default model is `gemini-3.1-flash-lite`. To use another port or timeout:
 
 The command stops at the first failure and checks:
 
-1. all offline tests and Ruff;
-2. explicit Gemini or Bedrock provider selection;
-3. a temporary live FastAPI process and `/health`;
-4. Source selection to deterministic query and chart-ready `AnalysisResult`;
-5. project-scoped retrieval of the stored result by an upstream module;
-6. Presentation generation from that exact stored module;
-7. PPTX download, file size, SHA-256, and package signature.
+1. installed dataset hashes, schemas, coverage, and reconciliation rules;
+2. all root and API Python tests, Ruff, frontend typecheck, production build,
+   and frontend tests;
+3. explicit Gemini or Bedrock provider selection;
+4. a temporary live FastAPI process, `/health`, status-only `/ready`, and the
+   required two-source catalog;
+5. Source selection to deterministic query and chart-ready `AnalysisResult`;
+6. project-scoped retrieval of the stored result by an upstream module;
+7. Presentation generation from that exact stored module;
+8. PPTX download, file size, SHA-256, and package signature.
 
 The temporary API always stops in a `finally` block. Every run uses a unique
 directory under `var/demo-preflight/` for SQLite, generated artifacts, logs, and

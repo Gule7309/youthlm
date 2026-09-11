@@ -65,6 +65,9 @@ object of source-specific `filters`. It is distinct from
 `upstream_module_ids`, which identifies previously generated structured module
 results. A selected source must either produce a compatibility-blocked result or
 be queried with those exact filters. Neither field contains Canvas layout state.
+At the current runtime checkpoint, `source_selections` may contain at most one
+item: Contract v0 has no deterministic multi-dataset join result yet. Requests
+with more than one item receive `422 dataset_error` before model execution.
 
 Column names must be unique. Every record key and every visualization field must
 refer to a declared column. JSON Schema cannot enforce all cross-field references;

@@ -9,6 +9,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { CanvasNode } from '../types';
+import { SOURCE_CARD_SIZE } from '../canvas-connections';
+import { isSourceConfigured } from '../workspace-state';
 
 type SourceCardProps = {
   node: CanvasNode;
@@ -19,6 +21,7 @@ type SourceCardProps = {
   onDelete: (id: string) => void;
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>, id: string) => void;
   onOutputPointerDown?: (event: React.PointerEvent<HTMLButtonElement>, id: string) => void;
+  outputConnecting?: boolean;
 };
 
 export function SourceCard({
@@ -30,6 +33,7 @@ export function SourceCard({
   onDelete,
   onPointerDown,
   onOutputPointerDown,
+  outputConnecting = false,
 }: SourceCardProps) {
   const config = node.source;
   const isConfigured = Boolean(
@@ -51,7 +55,7 @@ export function SourceCard({
         ? '公開 API'
         : '尚未選擇來源';
   const sourceDetail = config?.kind === 'registry'
-    ? config.registrySourceId
+    ? config.filters ? `${config.filters.start_year}–${config.filters.end_year} 年 · 篩選條件已保存` : config.registrySourceId
     : config?.kind === 'file'
     ? config.file?.name
     : config?.kind === 'api'
@@ -60,10 +64,11 @@ export function SourceCard({
 
   return (
     <article
-      className={`pointer-events-auto absolute w-80 overflow-visible rounded-xl border bg-white shadow-lg transition-shadow ${
+      data-canvas-node-id={node.id}
+      className={`pointer-events-auto absolute overflow-visible rounded-xl border bg-white shadow-lg transition-shadow ${
         selected ? 'z-20 border-blue-400 ring-4 ring-blue-100' : 'z-10 border-slate-200 hover:border-slate-300'
       }`}
-      style={{ left: node.x, top: node.y }}
+      style={{ left: node.x, top: node.y, width: SOURCE_CARD_SIZE.width, height: SOURCE_CARD_SIZE.height }}
       onPointerDown={(event) => {
         event.stopPropagation();
         onSelect(node.id);
@@ -148,14 +153,16 @@ export function SourceCard({
 
       <button
         type="button"
+        data-connection-handle="output"
+        data-connection-node-id={node.id}
         disabled={!onOutputPointerDown}
         onPointerDown={(event) => {
           event.stopPropagation();
           onOutputPointerDown?.(event, node.id);
         }}
-        className={`absolute -right-2.5 top-1/2 size-5 -translate-y-1/2 rounded-full border-[3px] border-white shadow-sm ${
+        className={`absolute -right-2.5 top-1/2 size-5 -translate-y-1/2 rounded-full border-[3px] border-white shadow-sm transition ${
           onOutputPointerDown
-            ? 'cursor-crosshair bg-blue-600 hover:bg-blue-700'
+            ? `cursor-crosshair bg-blue-600 hover:bg-blue-700 ${outputConnecting ? 'scale-125 ring-4 ring-blue-200' : ''}`
             : connected
               ? 'cursor-default bg-blue-600'
               : 'cursor-not-allowed bg-slate-300'

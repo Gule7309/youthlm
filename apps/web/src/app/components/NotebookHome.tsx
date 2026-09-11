@@ -15,6 +15,7 @@ import type { Notebook } from '../types';
 
 type NotebookHomeProps = {
   displayName: string;
+  storageNotice?: string;
   notebooks: Notebook[];
   onCreate: (name: string, description: string) => Promise<Notebook>;
   onOpen: (notebook: Notebook) => void;
@@ -31,6 +32,7 @@ type EditorState = {
 
 export function NotebookHome({
   displayName,
+  storageNotice,
   notebooks,
   onCreate,
   onOpen,
@@ -106,6 +108,7 @@ export function NotebookHome({
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
+      {storageNotice && <div role="status" className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-xs text-amber-900">{storageNotice}。僅供此瀏覽器使用，預覽登入不提供帳號安全隔離。</div>}
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
           <div className="flex items-center gap-3">

@@ -265,7 +265,7 @@ export function AssistantCard({
           </button>
         </div>
         <p className="mt-1.5 text-[9px] text-slate-400">
-          Enter 送出，Shift + Enter 換行 · AI 與資料分析尚未串接
+          Enter 送出，Shift + Enter 換行 · 此處僅建立草稿，請到成果卡執行分析
         </p>
       </div>
     </article>

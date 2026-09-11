@@ -118,6 +118,37 @@ class PopulationDatasetQueryTests(unittest.TestCase):
                 }
             )
 
+    def test_rejects_known_unreliable_2013_district_cells(self) -> None:
+        with self.assertRaisesRegex(
+            PopulationDatasetQueryError,
+            "official 2013 5-9",
+        ):
+            query_population_dataset(
+                {
+                    "dataset_id": DATASET_ID,
+                    "geographies": ["樹林區", "板橋區"],
+                    "age_groups": ["5-9", "10-14"],
+                    "sexes": ["all"],
+                    "start_year": 2012,
+                    "end_year": 2014,
+                }
+            )
+
+    def test_allows_adjacent_population_cells_around_known_issue(self) -> None:
+        result = query_population_dataset(
+            {
+                "dataset_id": DATASET_ID,
+                "geographies": ["樹林區"],
+                "age_groups": ["10-14"],
+                "sexes": ["all"],
+                "start_year": 2013,
+                "end_year": 2013,
+            }
+        )
+
+        self.assertEqual(result["row_count"], 1)
+        self.assertEqual(result["rows"][0]["population_count"], 10725)
+
     def test_default_registry_executes_population_query(self) -> None:
         execution = build_default_tool_registry().execute(
             ModelToolCall(

@@ -21,8 +21,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["tests"]
+pythonpath = [".", "apps/api"]
+testpaths = ["tests", "apps/api/tests"]
 
 [tool.ruff]
 line-length = 100

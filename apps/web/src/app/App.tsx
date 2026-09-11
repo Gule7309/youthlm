@@ -3,8 +3,7 @@ import {
   Share, Database, FileText, Plus, Settings2, Sparkles,
   MessageSquare, GripHorizontal, ChevronLeft,
   PanelLeftClose, PanelLeftOpen,
-  PanelRightClose, PanelRightOpen, ArrowRight, SlidersHorizontal,
-  AlertTriangle, CheckCircle2
+  PanelRightClose, PanelRightOpen,
 } from 'lucide-react';
 import { AuthScreen } from './components/AuthScreen';
 import { NotebookHome } from './components/NotebookHome';
@@ -16,16 +15,38 @@ import { AssistantCard } from './components/AssistantCard';
 import { PolicyRadarPanel } from './components/PolicyRadarPanel';
 import { buildChartArtifactView } from '../chart-artifact.js';
 import { buildAnalysisRequest } from './analysis-integration';
-import { createPresentation, listDataSources, runAnalysis } from './api-client';
+import { createPresentation, runAnalysis } from './api-client';
+import { RequestGate, resultInputSignature } from './execution-state';
+import { readDraft, writeDraft } from './draft-storage';
+import { loadSourceCatalog, supportsSourceFilters, validateSourceFilters } from './source-catalog';
 import {
   buildPresentationArtifactView,
   buildPresentationRequest,
 } from './presentation-integration';
 import { createChartDraftActions, getChartDraftActions, PRESENTATION_UNAVAILABLE_MESSAGE, usesRawSourceInputs } from './result-policy';
 import {
+  CONNECTION_COLORS,
+  CONNECTION_DROP_MARGIN_PX,
+  RESULT_CARD_SIZE,
+  SOURCE_CARD_SIZE,
+  buildConnectionPath,
+  canvasPointFromClient,
+  connectCanvasNodes,
+  connectionKindBetween,
+  connectionPortPoint,
+  getFitCanvasTransform,
+  isPointNearRect,
+  outputConnectionKind,
+  type CanvasConnectionKind,
+  type CanvasPoint,
+} from './canvas-connections';
+import {
   cloneWorkspaceNode,
+  createPolicyRadarState,
   duplicateWorkspaceNodes,
+  getPolicyRadarCounts,
   getPolicyRadarWorkspaceSignature,
+  preparePolicyRadarStateForOpen,
   removeResultNode,
   removeSourceNode,
   updateSourceConfig,
@@ -35,22 +56,26 @@ import type {
   AnalysisExecution,
   CanvasNode,
   Notebook,
-  PolicyRadarCounts,
   PolicyRadarState,
   PolicyRadarStateByNotebook,
   PresentationExecution,
   ResultConfig,
-  RegistryDataSource,
   SourceConfig,
 } from './types';
 
 type AppScreen = 'auth' | 'notebooks' | 'workspace';
 
 const CARD_DRAG_TYPE = 'application/x-youthlm-card';
-const SOURCE_CARD_SIZE = { width: 320, height: 216 };
-const RESULT_CARD_SIZE = { width: 320, height: 260 };
 const ASSISTANT_CARD_SIZE = { width: 340, height: 430 };
 type AddableCardType = 'source' | 'result' | 'assistant';
+type ConnectionDraft = {
+  fromNodeId: string;
+  pointerId: number;
+  kind: CanvasConnectionKind;
+  start: CanvasPoint;
+  current: CanvasPoint;
+  hoveredTargetNodeId: string | null;
+};
 const NODE_SIZES: Record<CanvasNode['type'], { width: number; height: number }> = {
   source: SOURCE_CARD_SIZE,
   result: RESULT_CARD_SIZE,
@@ -87,10 +112,6 @@ function isAnalysisReady(execution: AnalysisExecution | undefined) {
   );
 }
 
-function createPolicyRadarState(): PolicyRadarState {
-  return { collapsed: false, running: false };
-}
-
 function getUniqueName(baseName: string, existingNames: Set<string>) {
   let name = baseName;
   let suffix = 2;
@@ -102,78 +123,9 @@ function getUniqueName(baseName: string, existingNames: Set<string>) {
   return name;
 }
 
-function getFitTransform(
-  targetNodes: CanvasNode[],
-  viewportWidth: number,
-  viewportHeight: number,
-  leftInset: number,
-  rightInset: number,
-) {
-  if (targetNodes.length === 0) return null;
-
-  const minX = Math.min(...targetNodes.map(node => node.x));
-  const minY = Math.min(...targetNodes.map(node => node.y));
-  const maxX = Math.max(...targetNodes.map(node => node.x + NODE_SIZES[node.type].width));
-  const maxY = Math.max(...targetNodes.map(node => node.y + NODE_SIZES[node.type].height));
-  const boxWidth = Math.max(1, maxX - minX);
-  const boxHeight = Math.max(1, maxY - minY);
-  const topInset = 80;
-  const bottomInset = 80;
-  const availableWidth = viewportWidth - leftInset - rightInset;
-  const availableHeight = viewportHeight - topInset - bottomInset;
-  const padding = 64;
-  const nextZoom = Math.max(0.3, Math.min(
-    1.5,
-    Math.min(
-      (availableWidth - padding * 2) / boxWidth,
-      (availableHeight - padding * 2) / boxHeight,
-    ),
-  ));
-  const centerX = minX + boxWidth / 2;
-  const centerY = minY + boxHeight / 2;
-
-  return {
-    zoom: nextZoom,
-    pan: {
-      x: leftInset + availableWidth / 2 - centerX * nextZoom,
-      y: topInset + availableHeight / 2 - centerY * nextZoom,
-    },
-  };
-}
-
-const DEMO_NODES: CanvasNode[] = [
-  { id: 'transform', type: 'transform', x: 100, y: 160 },
-  { id: 'analysis', type: 'analysis', x: 530, y: 160 },
-  {
-    id: 'assistant',
-    type: 'assistant',
-    x: 960,
-    y: 150,
-    assistant: {
-      name: '政策資料小幫手',
-      messages: [],
-      draftActions: [],
-    },
-  },
-];
-
-const INITIAL_WORKSPACES: Record<string, CanvasNode[]> = {
-  'youth-education-employment': DEMO_NODES.map(node => ({ ...node })),
-};
-
-const INITIAL_POLICY_RADAR_STATES: PolicyRadarStateByNotebook = {
-  'youth-education-employment': createPolicyRadarState(),
-};
-
-const INITIAL_NOTEBOOKS: Notebook[] = [
-  {
-    id: 'youth-education-employment',
-    name: '青年教育與就業研究',
-    description: '整理青年教育程度、職業訓練與就業資料，準備政策會議分析。',
-    updatedAt: '剛剛',
-    cardCount: 3,
-  },
-];
+const INITIAL_WORKSPACES: Record<string, CanvasNode[]> = {};
+const INITIAL_POLICY_RADAR_STATES: PolicyRadarStateByNotebook = {};
+const INITIAL_NOTEBOOKS: Notebook[] = [];
 
 export default function App() {
   const [screen, setScreen] = useState<AppScreen>('auth');
@@ -188,11 +140,13 @@ export default function App() {
   const [isRightOpen, setIsRightOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [dirtyInspectorNodeId, setDirtyInspectorNodeId] = useState<string | null>(null);
-  const [registrySources, setRegistrySources] = useState<RegistryDataSource[]>([]);
-  const [registryLoading, setRegistryLoading] = useState(false);
-  const [registryError, setRegistryError] = useState<string>();
   const [analysisByNode, setAnalysisByNode] = useState<Record<string, AnalysisExecution>>({});
   const [presentationByNode, setPresentationByNode] = useState<Record<string, PresentationExecution>>({});
+  const [draftWritable, setDraftWritable] = useState(false);
+  const [draftSaveFailed, setDraftSaveFailed] = useState(false);
+  const [draftNotice, setDraftNotice] = useState('');
+  const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
+  const [connectionNotice, setConnectionNotice] = useState('');
 
   // Canvas State
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -202,13 +156,58 @@ export default function App() {
   const canvasRef = useRef<HTMLElement | null>(null);
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
+  const connectionDraftRef = useRef<ConnectionDraft | null>(null);
+  const completeCanvasConnectionRef = useRef<(fromNodeId: string, toNodeId: string) => void>(() => {});
   const policyRadarRunTimersRef = useRef(new Map<string, number>());
+  const inspectorContentRef = useRef<HTMLDivElement>(null);
 
   // Nodes State
-  const [nodes, setNodes] = useState<CanvasNode[]>(DEMO_NODES);
-  const [fitAfterAssistantRequest, setFitAfterAssistantRequest] = useState(0);
+  const [nodes, setNodes] = useState<CanvasNode[]>([]);
+  const [fitViewRequest, setFitViewRequest] = useState(0);
   const [draggingNode, setDraggingNode] = useState<string | null>(null);
   const [nodeDragOffset, setNodeDragOffset] = useState({ x: 0, y: 0, nodeStartX: 0, nodeStartY: 0 });
+  const requestGate = useRef(new RequestGate());
+  const executionContext = useRef({ nodes, activeNotebookId, screen, analysisByNode });
+  executionContext.current = { nodes, activeNotebookId, screen, analysisByNode };
+
+  const updateConnectionDraft = (draft: ConnectionDraft | null) => {
+    connectionDraftRef.current = draft;
+    setConnectionDraft(draft);
+  };
+
+  const clientToCanvasPoint = (clientX: number, clientY: number) => {
+    const bounds = canvasRef.current?.getBoundingClientRect();
+    return canvasPointFromClient(
+      { x: clientX, y: clientY },
+      { x: bounds?.left ?? 0, y: bounds?.top ?? 0 },
+      panRef.current,
+      zoomRef.current,
+    );
+  };
+
+  useEffect(() => {
+    // Switching notebooks or signing out stops waiting, not the server's work.
+    requestGate.current.cancelAll();
+    updateConnectionDraft(null);
+    setConnectionNotice('');
+    setAnalysisByNode(current => Object.fromEntries(Object.entries(current).filter(([, value]) => value.state !== 'running')));
+    setPresentationByNode(current => Object.fromEntries(Object.entries(current).filter(([, value]) => value.state !== 'running')));
+    return () => requestGate.current.cancelAll();
+  }, [activeNotebookId, screen]);
+
+  useEffect(() => {
+    if (screen !== 'workspace' || !activeNotebookId) return;
+    function prune<T extends AnalysisExecution | PresentationExecution>(current: Record<string, T>): Record<string, T> {
+      const invalid = Object.keys(current).filter(id => current[id].projectId === activeNotebookId
+        && current[id].inputSignature !== resultInputSignature(id, nodes, analysisByNode));
+      if (!invalid.length) return current;
+      const next = { ...current };
+      invalid.forEach(id => { requestGate.current.cancel(id); delete next[id]; });
+      return next;
+    }
+    setAnalysisByNode(prune);
+    setPresentationByNode(prune);
+  }, [nodes, activeNotebookId, screen, analysisByNode]);
 
   const clearAllPolicyRadarRunTimers = () => {
     policyRadarRunTimersRef.current.forEach(timerId => window.clearTimeout(timerId));
@@ -218,23 +217,35 @@ export default function App() {
   useEffect(() => () => clearAllPolicyRadarRunTimers(), []);
 
   useEffect(() => {
-    if (screen !== 'workspace' || registrySources.length > 0 || registryLoading) return;
-    setRegistryLoading(true);
-    setRegistryError(undefined);
-    listDataSources()
-      .then(sources => {
-        setRegistrySources(sources);
-      })
-      .catch(error => {
-        setRegistryError(error instanceof Error ? error.message : '無法載入 YouthLM 資料來源');
-      })
-      .finally(() => {
-        setRegistryLoading(false);
-      });
-  }, [registrySources.length, screen]);
+    if (!currentUser || !draftWritable) return;
+    try {
+      writeDraft(window.localStorage, currentUser.email, { version: 1, notebooks,
+        workspaces: screen === 'workspace' && activeNotebookId ? { ...workspaceNodes, [activeNotebookId]: nodes } : workspaceNodes,
+        radar: policyRadarByNotebook });
+      setDraftNotice('本機草稿已保存 · 非雲端備份；重新整理後分析／簡報需重跑');
+      setDraftSaveFailed(false);
+    } catch {
+      setDraftSaveFailed(true);
+      setDraftNotice('本機保存失敗，請勿關閉頁面；可能是瀏覽器限制、空間不足或草稿過大。');
+    }
+  }, [currentUser, draftWritable, notebooks, workspaceNodes, nodes, activeNotebookId, screen, policyRadarByNotebook]);
+
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (dirtyInspectorNodeId || (currentUser && (!draftWritable || draftSaveFailed)) || Object.values(analysisByNode).some(item => item.state === 'running')
+        || Object.values(presentationByNode).some(item => item.state === 'running')) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [dirtyInspectorNodeId, analysisByNode, presentationByNode, currentUser, draftWritable, draftSaveFailed]);
+
 
   // Pointer Handlers
   const handleCanvasPointerDown = (e: React.PointerEvent) => {
+    if (connectionDraftRef.current) return;
     if (isRightOpen) {
       setIsRightOpen(false);
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -248,6 +259,7 @@ export default function App() {
 
   const handleNodePointerDown = (e: React.PointerEvent, id: string) => {
     e.stopPropagation();
+    if (connectionDraftRef.current) return;
     const node = nodes.find(n => n.id === id);
     if (!node) return;
 
@@ -304,13 +316,13 @@ export default function App() {
   }, [activeNotebookId, nodes, screen]);
 
   useEffect(() => {
-    if (screen !== 'workspace' || fitAfterAssistantRequest === 0) return;
+    if (screen !== 'workspace' || fitViewRequest === 0) return;
     const activeSelectedNode = nodes.find(node => node.id === selectedNodeId);
     const leftInset = isLeftOpen ? 312 : 82;
     const hasInspector = activeSelectedNode?.type === 'source' || activeSelectedNode?.type === 'result';
-    const rightInset = isRightOpen ? (hasInspector ? 436 : 336) : 82;
-    const transform = getFitTransform(
-      nodes,
+    const rightInset = isRightOpen ? (activeSelectedNode?.type === 'result' ? 696 : hasInspector ? 436 : 336) : 82;
+    const transform = getFitCanvasTransform(
+      nodes.map(node => ({ ...node, ...NODE_SIZES[node.type] })),
       window.innerWidth,
       window.innerHeight,
       leftInset,
@@ -322,11 +334,15 @@ export default function App() {
     panRef.current = transform.pan;
     setZoom(transform.zoom);
     setPan(transform.pan);
-  }, [fitAfterAssistantRequest]);
+  }, [fitViewRequest]);
 
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+
+  useEffect(() => {
+    if (inspectorContentRef.current) inspectorContentRef.current.inert = !isRightOpen;
+  }, [isRightOpen]);
 
   useEffect(() => {
     panRef.current = pan;
@@ -367,29 +383,113 @@ export default function App() {
     return () => canvas.removeEventListener('wheel', handleControlWheel);
   }, [screen]);
 
+  useEffect(() => {
+    if (!connectionNotice || connectionDraft) return;
+    const timer = window.setTimeout(() => setConnectionNotice(''), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [connectionNotice, connectionDraft]);
+
+  useEffect(() => {
+    if (!connectionDraft) return;
+
+    const targetAt = (clientX: number, clientY: number) => {
+      const point = { x: clientX, y: clientY };
+      return [...document.querySelectorAll<HTMLElement>('[data-connection-handle="input"]')]
+        .map(element => {
+          const rect = element.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+          const topmostAtCenter = document.elementFromPoint(centerX, centerY);
+          return {
+            nodeId: element.dataset.connectionNodeId ?? null,
+            distance: (clientX - centerX) ** 2 + (clientY - centerY) ** 2,
+            nearby: rect.width > 0 && rect.height > 0
+              && (topmostAtCenter === element || Boolean(topmostAtCenter && element.contains(topmostAtCenter)))
+              && isPointNearRect(point, rect, CONNECTION_DROP_MARGIN_PX),
+          };
+        })
+        .filter(candidate => candidate.nodeId && candidate.nearby)
+        .sort((left, right) => left.distance - right.distance)[0]?.nodeId ?? null;
+    };
+    const cancel = (message = '連線已取消。') => {
+      updateConnectionDraft(null);
+      setConnectionNotice(message);
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      const currentDraft = connectionDraftRef.current;
+      if (!currentDraft || event.pointerId !== currentDraft.pointerId) return;
+      updateConnectionDraft({
+        ...currentDraft,
+        current: clientToCanvasPoint(event.clientX, event.clientY),
+        hoveredTargetNodeId: targetAt(event.clientX, event.clientY),
+      });
+    };
+    const handlePointerUp = (event: PointerEvent) => {
+      const currentDraft = connectionDraftRef.current;
+      if (!currentDraft || event.pointerId !== currentDraft.pointerId) return;
+      const targetNodeId = targetAt(event.clientX, event.clientY);
+      updateConnectionDraft(null);
+      if (!targetNodeId) {
+        setConnectionNotice('未放在成果輸入端點上，沒有建立連線。');
+        return;
+      }
+      completeCanvasConnectionRef.current(currentDraft.fromNodeId, targetNodeId);
+    };
+    const handlePointerCancel = (event: PointerEvent) => {
+      const currentDraft = connectionDraftRef.current;
+      if (currentDraft && event.pointerId === currentDraft.pointerId) cancel();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') cancel('已按 Esc 取消連線。');
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [connectionDraft?.fromNodeId]);
+
   const activeNotebook = notebooks.find(notebook => notebook.id === activeNotebookId) ?? null;
 
   const handleAuthenticated = (user: AuthUser) => {
+    requestGate.current.cancelAll();
     clearAllPolicyRadarRunTimers();
     setCurrentUser(user);
     setNotebooks(INITIAL_NOTEBOOKS.map(notebook => ({ ...notebook })));
-    setWorkspaceNodes({
-      'youth-education-employment': DEMO_NODES.map(node => ({ ...node })),
-    });
-    setPolicyRadarByNotebook({
-      'youth-education-employment': createPolicyRadarState(),
-    });
+    setWorkspaceNodes({ ...INITIAL_WORKSPACES });
+    setPolicyRadarByNotebook({ ...INITIAL_POLICY_RADAR_STATES });
     setActiveNotebookId(null);
     setSelectedNodeId(null);
     setDirtyInspectorNodeId(null);
     setAnalysisByNode({});
     setPresentationByNode({});
+    try {
+      const draft = readDraft(window.localStorage, user.email);
+      if (draft) {
+        setNotebooks(draft.notebooks);
+        setWorkspaceNodes(draft.workspaces);
+        setPolicyRadarByNotebook(draft.radar);
+      }
+      setDraftWritable(true);
+    } catch {
+      setDraftWritable(false);
+      setDraftNotice('無法讀取本機草稿。已保留原始儲存內容，本次僅使用記憶體，尚未自動保存。');
+    }
     setScreen('notebooks');
   };
 
   const handleLogout = () => {
+    if ((!draftWritable || draftSaveFailed) && !window.confirm('本次草稿尚未成功保存，登出可能遺失變更。確定要登出嗎？')) return;
+    requestGate.current.cancelAll();
     clearAllPolicyRadarRunTimers();
     setCurrentUser(null);
+    setDraftWritable(false);
     setPolicyRadarByNotebook({});
     setActiveNotebookId(null);
     setSelectedNodeId(null);
@@ -403,7 +503,7 @@ export default function App() {
     new Promise<Notebook>(resolve => {
       window.setTimeout(() => {
         const notebook: Notebook = {
-          id: `notebook-${Date.now()}`,
+          id: `notebook-${crypto.randomUUID()}`,
           name,
           description,
           updatedAt: '剛剛',
@@ -420,11 +520,10 @@ export default function App() {
     });
 
   const handleOpenNotebook = (notebook: Notebook) => {
-    setPolicyRadarByNotebook(current => (
-      current[notebook.id]
-        ? current
-        : { ...current, [notebook.id]: createPolicyRadarState() }
-    ));
+    setPolicyRadarByNotebook(current => ({
+      ...current,
+      [notebook.id]: preparePolicyRadarStateForOpen(current[notebook.id]),
+    }));
     setActiveNotebookId(notebook.id);
     setNodes((workspaceNodes[notebook.id] ?? []).map(cloneWorkspaceNode));
     setPan({ x: 0, y: 0 });
@@ -434,6 +533,7 @@ export default function App() {
     setSelectedNodeId(null);
     setDirtyInspectorNodeId(null);
     setScreen('workspace');
+    setFitViewRequest(value => value + 1);
   };
 
   const handleRenameNotebook = (id: string, name: string, description: string) => {
@@ -455,7 +555,7 @@ export default function App() {
 
     const duplicate: Notebook = {
       ...source,
-      id: `notebook-${Date.now()}`,
+      id: `notebook-${crypto.randomUUID()}`,
       name: copyName,
       updatedAt: '剛剛',
     };
@@ -493,6 +593,18 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    if (!isRightOpen || !activeNotebookId) return;
+    setPolicyRadarByNotebook(current => {
+      const state = current[activeNotebookId] ?? createPolicyRadarState();
+      if (state.collapsed) return current;
+      return {
+        ...current,
+        [activeNotebookId]: { ...state, collapsed: true },
+      };
+    });
+  }, [activeNotebookId, isRightOpen]);
+
   if (screen === 'auth') {
     return <AuthScreen onAuthenticated={handleAuthenticated} />;
   }
@@ -500,6 +612,7 @@ export default function App() {
   if (screen === 'notebooks') {
     return (
       <NotebookHome
+        storageNotice={draftNotice}
         displayName={currentUser?.displayName ?? '使用者'}
         notebooks={notebooks}
         onCreate={handleCreateNotebook}
@@ -519,21 +632,12 @@ export default function App() {
   const sourceNodes = nodes.filter(node => node.type === 'source');
   const resultNodes = nodes.filter(node => node.type === 'result');
   const assistantNodes = nodes.filter(node => node.type === 'assistant');
-  const currentSourceNodeIds = new Set(sourceNodes.map(node => node.id));
-  const policyRadarCounts: PolicyRadarCounts = {
-    sourceCount: sourceNodes.length,
-    readySourceCount: sourceNodes.filter(isSourceReady).length,
-    resultCount: resultNodes.length,
-    configuredResultCount: resultNodes.filter(node => Boolean(
-      node.result?.kind === 'chart'
-      && node.result.sourceNodeIds.length > 0
-      && node.result.sourceNodeIds.every(sourceNodeId => currentSourceNodeIds.has(sourceNodeId)),
-    )).length,
-  };
+  const policyRadarCounts = getPolicyRadarCounts(nodes);
   const policyRadarWorkspaceSignature = getPolicyRadarWorkspaceSignature(nodes);
   const activePolicyRadarState = activeNotebookId
     ? policyRadarByNotebook[activeNotebookId] ?? createPolicyRadarState()
     : createPolicyRadarState();
+
   const isPolicyRadarStale = Boolean(
     activePolicyRadarState.latestRecord
     && activePolicyRadarState.latestRecord.workspaceSignature !== policyRadarWorkspaceSignature,
@@ -548,6 +652,95 @@ export default function App() {
         ? '小幫手'
         : '來源';
     return window.confirm(`${label}設定尚未儲存，確定要放棄這次修改嗎？`);
+  };
+
+  const completeCanvasConnection = (fromNodeId: string, toNodeId: string) => {
+    const liveNodes = executionContext.current.nodes;
+    const outcome = connectCanvasNodes(liveNodes, fromNodeId, toNodeId);
+    if (outcome.status === 'invalid') {
+      setConnectionNotice('無法建立連線：來源只能連到圖表，圖表只能連到簡報。');
+      return;
+    }
+    if (outcome.status === 'duplicate') {
+      setConnectionNotice('這兩張卡片已經連接。');
+      return;
+    }
+
+    const fromNode = liveNodes.find(node => node.id === fromNodeId);
+    const toNode = liveNodes.find(node => node.id === toNodeId);
+    const fromName = fromNode?.source?.name || fromNode?.result?.name || '上游卡片';
+    const toName = toNode?.result?.name || '成果卡片';
+
+    requestGate.current.cancel(toNodeId);
+    if (outcome.kind === 'source') {
+      const downstreamPresentationIds = liveNodes
+        .filter(node => node.result?.kind === 'presentation' && node.result.sourceModuleIds?.includes(toNodeId))
+        .map(node => node.id);
+      downstreamPresentationIds.forEach(id => requestGate.current.cancel(id));
+      setAnalysisByNode(current => {
+        if (!(toNodeId in current)) return current;
+        const next = { ...current };
+        delete next[toNodeId];
+        return next;
+      });
+      setPresentationByNode(current => {
+        const idsToClear = new Set([toNodeId, ...downstreamPresentationIds]);
+        if (![...idsToClear].some(id => id in current)) return current;
+        const next = { ...current };
+        idsToClear.forEach(id => delete next[id]);
+        return next;
+      });
+    } else {
+      setPresentationByNode(current => {
+        if (!(toNodeId in current)) return current;
+        const next = { ...current };
+        delete next[toNodeId];
+        return next;
+      });
+    }
+
+    setNodes(outcome.nodes);
+    setDirtyInspectorNodeId(null);
+    setSelectedNodeId(toNodeId);
+    setIsRightOpen(true);
+    setNotebooks(current => current.map(notebook =>
+      notebook.id === activeNotebookId ? { ...notebook, updatedAt: '剛剛' } : notebook,
+    ));
+    setConnectionNotice(outcome.status === 'replaced'
+      ? `「${toName}」已改用「${fromName}」；舊分析結果已清除。`
+      : `已連接「${fromName}」與「${toName}」。`);
+  };
+  completeCanvasConnectionRef.current = completeCanvasConnection;
+
+  const handleConnectionPointerDown = (
+    event: React.PointerEvent<HTMLButtonElement>,
+    fromNodeId: string,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (dirtyInspectorNodeId) {
+      window.alert('請先儲存或放棄卡片設定的修改，再建立連線。');
+      return;
+    }
+
+    const fromNode = nodes.find(node => node.id === fromNodeId);
+    const kind = outputConnectionKind(fromNode);
+    const start = fromNode ? connectionPortPoint(fromNode, 'output') : null;
+    if (!kind || !start) return;
+
+    setIsPanning(false);
+    setDraggingNode(null);
+    setConnectionNotice(kind === 'source'
+      ? '拖曳到圖表卡片左側的藍色端點。'
+      : '拖曳到簡報卡片左側的紫色端點。');
+    updateConnectionDraft({
+      fromNodeId,
+      pointerId: event.pointerId,
+      kind,
+      start,
+      current: start,
+      hoveredTargetNodeId: null,
+    });
   };
 
   const handleSelectNode = (id: string) => {
@@ -640,9 +833,10 @@ export default function App() {
     y: number,
     type: AddableCardType,
     existingNodes: CanvasNode[] = nodes,
+    rightInsetOverride?: number,
   ) => {
     const candidateSize = NODE_SIZES[type];
-    const rightInset = type === 'assistant' ? 82 : 436;
+    const rightInset = rightInsetOverride ?? (type === 'assistant' ? 82 : type === 'result' ? 696 : 436);
     const visibleBounds = {
       left: ((isLeftOpen ? 308 : 76) - pan.x) / zoom,
       right: (window.innerWidth - rightInset - pan.x) / zoom,
@@ -676,7 +870,7 @@ export default function App() {
   };
 
   const addSourceNode = (x: number, y: number) => {
-    if (!confirmDiscardInspectorChanges()) return;
+    if (!confirmDiscardInspectorChanges()) return false;
 
     const sourceNumber = sourceNodes.length + 1;
     const existingNames = new Set(sourceNodes.map(node => node.source?.name.trim()).filter(Boolean));
@@ -704,10 +898,11 @@ export default function App() {
     setDirtyInspectorNodeId(null);
     setSelectedNodeId(sourceNode.id);
     setIsRightOpen(true);
+    return true;
   };
 
-  const addResultNode = (x: number, y: number) => {
-    if (!confirmDiscardInspectorChanges()) return;
+  const addResultNode = (x: number, y: number, rightInsetOverride?: number) => {
+    if (!confirmDiscardInspectorChanges()) return false;
 
     const resultNumber = resultNodes.length + 1;
     const existingNames = new Set(resultNodes.map(node => node.result?.name.trim()).filter(Boolean));
@@ -717,7 +912,7 @@ export default function App() {
       resultName = `未命名成果 ${resultNameNumber}`;
       resultNameNumber += 1;
     }
-    const position = findOpenCardPosition(x, y, 'result');
+    const position = findOpenCardPosition(x, y, 'result', nodes, rightInsetOverride);
     const resultNode: CanvasNode = {
       id: `result-${Date.now()}-${resultNumber}-${Math.random().toString(36).slice(2, 6)}`,
       type: 'result',
@@ -735,10 +930,11 @@ export default function App() {
     setDirtyInspectorNodeId(null);
     setSelectedNodeId(resultNode.id);
     setIsRightOpen(true);
+    return true;
   };
 
   const addAssistantNode = (x: number, y: number) => {
-    if (!confirmDiscardInspectorChanges()) return;
+    if (!confirmDiscardInspectorChanges()) return false;
 
     const existingNames = new Set(assistantNodes.map(node => node.assistant?.name.trim()).filter(Boolean));
     let assistantName = '政策資料小幫手';
@@ -764,11 +960,12 @@ export default function App() {
     setDirtyInspectorNodeId(null);
     setSelectedNodeId(assistantNode.id);
     setIsRightOpen(false);
+    return true;
   };
 
   const handleAddCardFromClick = (type: AddableCardType) => {
     const leftEdge = isLeftOpen ? 312 : 82;
-    const rightEdge = type === 'assistant' ? 82 : 436;
+    const rightEdge = type === 'assistant' || type === 'result' ? 82 : 436;
     const visibleBounds = {
       left: (leftEdge - pan.x) / zoom,
       right: (window.innerWidth - rightEdge - pan.x) / zoom,
@@ -795,9 +992,18 @@ export default function App() {
         : (visibleBounds.top + visibleBounds.bottom - ASSISTANT_CARD_SIZE.height) / 2
           + assistantNodes.length * 36;
 
-    if (type === 'source') addSourceNode(x, y);
-    else if (type === 'result') addResultNode(x, y);
-    else addAssistantNode(x, y);
+    const added = type === 'source'
+      ? addSourceNode(x, y)
+      : type === 'result'
+        ? addResultNode(x, y, rightEdge)
+        : addAssistantNode(x, y);
+    if (!added) return;
+
+    if (type === 'result') {
+      setIsRightOpen(false);
+      setConnectionNotice('從來源或圖表右側端點拖到新成果左側端點；連接後會自動開啟設定。');
+    }
+    setFitViewRequest(value => value + 1);
   };
 
   const handleCardDragStart = (
@@ -890,106 +1096,134 @@ export default function App() {
     ));
   };
 
+  const beginExecution = (id: string) => {
+    if (dirtyInspectorNodeId) {
+      window.alert('請先儲存或放棄卡片設定的修改，再執行分析／產生簡報。');
+      return null;
+    }
+    if (analysisByNode[id]?.state === 'running' || presentationByNode[id]?.state === 'running') return null;
+    const controller = requestGate.current.begin(id);
+    const projectId = activeNotebookId!;
+    const inputSignature = resultInputSignature(id, nodes, analysisByNode);
+    setSelectedNodeId(id);
+    setIsRightOpen(true);
+    const isCurrent = () => {
+      const live = executionContext.current;
+      return requestGate.current.isCurrent(id, controller) && live.screen === 'workspace'
+        && live.activeNotebookId === projectId
+        && resultInputSignature(id, live.nodes, live.analysisByNode) === inputSignature;
+    };
+    return { controller, projectId, inputSignature, isCurrent };
+  };
+
   const handleRunAnalysis = async (resultNodeId: string) => {
     const resultNode = nodes.find(node => node.id === resultNodeId);
-    if (!activeNotebookId || !resultNode?.result) return;
-
-    setAnalysisByNode(current => ({
-      ...current,
-      [resultNodeId]: { state: 'running' },
-    }));
+    if (!activeNotebookId || resultNode?.result?.kind !== 'chart') return;
+    const run = beginExecution(resultNodeId);
+    if (!run) return;
+    // Never reuse a backend module ID: an aborted HTTP request may still finish on the server.
+    const moduleId = `analysis-${crypto.randomUUID()}`;
+    const metadata = { projectId: run.projectId, moduleId, inputSignature: run.inputSignature };
+    setAnalysisByNode(current => ({ ...current, [resultNodeId]: { ...metadata, state: 'running' } }));
     setPresentationByNode(current => {
       const next = { ...current };
-      nodes
-        .filter(node => node.result?.sourceModuleIds?.includes(resultNodeId))
-        .forEach(node => delete next[node.id]);
+      nodes.filter(node => node.result?.sourceModuleIds?.includes(resultNodeId)).forEach(node => {
+        requestGate.current.cancel(node.id);
+        delete next[node.id];
+      });
       return next;
     });
-    setSelectedNodeId(resultNodeId);
-    setIsRightOpen(true);
-
     try {
       const request = buildAnalysisRequest({
-        projectId: activeNotebookId,
-        moduleId: resultNodeId,
-        result: resultNode.result,
-        sourceNodes,
+        projectId: run.projectId, moduleId, result: resultNode.result, sourceNodes,
       });
-      const response = await runAnalysis(request);
-      const view = buildChartArtifactView(response.payload, {
-        httpStatus: response.httpStatus,
-      });
-      setAnalysisByNode(current => ({
-        ...current,
-        [resultNodeId]: {
-          state: view.kind === 'error' ? 'failed' : 'ready',
-          view,
-        },
-      }));
+      const catalog = await loadSourceCatalog(import.meta.env.VITE_YOUTHLM_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '', run.controller.signal);
+      if (!run.isCurrent()) return;
+      for (const selection of request.source_selections) {
+        const source = catalog.find(item => item.source_id === selection.source_id);
+        if (!source || !supportsSourceFilters(source)) throw new Error('選取的資料集目前不可用，請重新整理來源目錄。');
+        const problem = validateSourceFilters(source, selection.filters);
+        if (problem) throw new Error(problem);
+      }
+      const response = await runAnalysis(request, undefined, undefined, { signal: run.controller.signal });
+      if (!run.isCurrent()) return;
+      if (response.httpStatus < 400 && !response.payload.error
+        && (response.payload.project_id !== request.project_id || response.payload.module_id !== moduleId)) {
+        throw new Error('後端回應的筆記本／分析編號不符，已停止套用結果。');
+      }
+      const view = buildChartArtifactView(response.payload, { httpStatus: response.httpStatus });
+      setAnalysisByNode(current => ({ ...current, [resultNodeId]: {
+        ...metadata, state: view.kind === 'error' ? 'failed' : 'ready', view,
+      } }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'YouthLM API 無法完成分析';
-      const view = buildChartArtifactView(
-        {
-          contract_version: '0.1.0',
-          error: {
-            code: 'frontend_integration_error',
-            message,
-            retriable: true,
-          },
+      if (!run.isCurrent()) return;
+      setAnalysisByNode(current => ({ ...current, [resultNodeId]: {
+        ...metadata, state: 'failed', view: {
+          kind: 'error', httpStatus: 0, code: 'frontend_integration_error',
+          message: error instanceof Error ? error.message : '後端無法完成分析。', retriable: true,
         },
-        { httpStatus: 0 },
-      );
-      setAnalysisByNode(current => ({
-        ...current,
-        [resultNodeId]: { state: 'failed', view },
-      }));
-    }
+      } }));
+    } finally { requestGate.current.finish(resultNodeId, run.controller); }
   };
 
   const handleRunPresentation = async (resultNodeId: string) => {
     const resultNode = nodes.find(node => node.id === resultNodeId);
     if (!activeNotebookId || resultNode?.result?.kind !== 'presentation') return;
-
-    setPresentationByNode(current => ({
-      ...current,
-      [resultNodeId]: { state: 'running' },
-    }));
-    setSelectedNodeId(resultNodeId);
-    setIsRightOpen(true);
-
+    const run = beginExecution(resultNodeId);
+    if (!run) return;
+    const metadata = { projectId: run.projectId, inputSignature: run.inputSignature };
+    setPresentationByNode(current => ({ ...current, [resultNodeId]: { ...metadata, state: 'running' } }));
     try {
       const request = buildPresentationRequest({
-        projectId: activeNotebookId,
-        result: resultNode.result,
+        projectId: run.projectId, result: resultNode.result, analyses: analysisByNode,
       });
-      const response = await createPresentation(request);
-      const view = buildPresentationArtifactView(response.payload, {
-        httpStatus: response.httpStatus,
-      });
-      setPresentationByNode(current => ({
-        ...current,
-        [resultNodeId]: {
-          state: view.kind === 'error' ? 'failed' : 'ready',
-          view,
-        },
-      }));
+      const response = await createPresentation(request, undefined, undefined, { signal: run.controller.signal });
+      if (!run.isCurrent()) return;
+      const view = buildPresentationArtifactView(response.payload, { httpStatus: response.httpStatus });
+      if (view.kind === 'ready' && (view.projectId !== run.projectId
+        || JSON.stringify([...view.sourceModuleIds].sort()) !== JSON.stringify([...request.source_module_ids].sort()))) {
+        throw new Error('簡報引用的分析與目前選取不符，已停止套用結果。');
+      }
+      setPresentationByNode(current => ({ ...current, [resultNodeId]: {
+        ...metadata, state: view.kind === 'error' ? 'failed' : 'ready', view,
+      } }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'YouthLM API 無法產生簡報';
-      setPresentationByNode(current => ({
-        ...current,
-        [resultNodeId]: {
-          state: 'failed',
-          view: {
-            kind: 'error',
-            httpStatus: 0,
-            code: 'frontend_integration_error',
-            message,
-            retriable: true,
-            details: {},
-          },
+      if (!run.isCurrent()) return;
+      setPresentationByNode(current => ({ ...current, [resultNodeId]: {
+        ...metadata, state: 'failed', view: {
+          kind: 'error', httpStatus: 0, code: 'frontend_integration_error',
+          message: error instanceof Error ? error.message : '後端無法產生簡報。',
+          retriable: true, details: {},
         },
-      }));
-    }
+      } }));
+    } finally { requestGate.current.finish(resultNodeId, run.controller); }
+  };
+
+  const handleCancelExecution = (id: string) => {
+    requestGate.current.cancel(id);
+    const view = { kind: 'error' as const, httpStatus: 0, code: 'cancelled',
+      message: '已停止等待；後端可能仍在處理。重試會建立新工作，不會引用舊回應。', retriable: true, details: {} };
+    setAnalysisByNode(current => current[id]?.state === 'running'
+      ? { ...current, [id]: { ...current[id], state: 'failed', view } } : current);
+    setPresentationByNode(current => current[id]?.state === 'running'
+      ? { ...current, [id]: { ...current[id], state: 'failed', view } } : current);
+  };
+
+  const handleCreatePresentationFromAnalysis = (id: string) => {
+    if (!isAnalysisReady(analysisByNode[id]) || !confirmDiscardInspectorChanges()) return;
+    const source = nodes.find(node => node.id === id)!;
+    const position = findOpenCardPosition(source.x + 350, source.y, 'result');
+    const newId = `result-${crypto.randomUUID()}`;
+    const name = getUniqueName(`${source.result?.name || '分析'}簡報`, new Set(resultNodes.map(node => node.result?.name || '')));
+    setNodes(current => [...current, {
+      id: newId, type: 'result', x: position.x, y: position.y,
+      result: { kind: 'presentation', name, sourceNodeIds: [], sourceModuleIds: [id],
+        prompt: '保留資料限制、來源與警告，整理為政策會議使用的洞察簡報。' },
+    }]);
+    setDirtyInspectorNodeId(null);
+    setSelectedNodeId(newId);
+    setIsRightOpen(true);
+    setFitViewRequest(value => value + 1);
   };
 
   const handleAssistantSubmit = (id: string, prompt: string) => {
@@ -999,8 +1233,8 @@ export default function App() {
         .filter(node => node.type === 'source')
         .map(node => node.id);
       const response = sourceNodeIds.length > 0
-        ? `需求已記錄，並依目前 ${sourceNodeIds.length} 張來源準備 1 項洞察圖表設定草稿。這是固定的前端操作示意，不是 AI 分析，也沒有統計結果。${PRESENTATION_UNAVAILABLE_MESSAGE}`
-        : `需求已記錄，目前沒有來源卡片，因此沒有建立圖表草稿。請先新增來源後再送出；AI 與資料分析尚未串接。${PRESENTATION_UNAVAILABLE_MESSAGE}`;
+        ? `需求已記錄，並依目前 ${sourceNodeIds.length} 張來源分別準備 ${new Set(sourceNodeIds).size} 項單一來源圖表草稿。這是固定的前端操作示意，不是 AI 分析，也沒有統計結果。${PRESENTATION_UNAVAILABLE_MESSAGE}`
+        : `需求已記錄，目前沒有來源卡片，因此沒有建立圖表草稿。請先新增官方資料來源後再送出；小幫手目前僅建立操作草稿。${PRESENTATION_UNAVAILABLE_MESSAGE}`;
 
       return current.map(node => {
         if (node.id !== id || node.type !== 'assistant' || !node.assistant) return node;
@@ -1106,7 +1340,7 @@ export default function App() {
     setNotebooks(current => current.map(notebook =>
       notebook.id === activeNotebookId ? { ...notebook, updatedAt: '剛剛' } : notebook,
     ));
-    setFitAfterAssistantRequest(current => current + 1);
+    setFitViewRequest(current => current + 1);
   };
 
   const handleDeleteSource = (id: string) => {
@@ -1205,9 +1439,9 @@ export default function App() {
   const handleZoomOut = () => setZoom(z => Math.max(0.3, z - 0.1));
   const handleFitView = () => {
     const leftInset = isLeftOpen ? 312 : 82;
-    const rightInset = isRightOpen ? (selectedSource || selectedResult ? 436 : 336) : 82;
-    const transform = getFitTransform(
-      nodes,
+    const rightInset = isRightOpen ? (selectedResult ? 696 : selectedSource ? 436 : 336) : 82;
+    const transform = getFitCanvasTransform(
+      nodes.map(node => ({ ...node, ...NODE_SIZES[node.type] })),
       window.innerWidth,
       window.innerHeight,
       leftInset,
@@ -1222,26 +1456,18 @@ export default function App() {
   };
 
   // Node Positions and Connection Points
-  const transform = nodes.find(n => n.type === 'transform');
-  const analysis = nodes.find(n => n.type === 'analysis');
-
-  const transformOutput = transform ? { x: transform.x + 365, y: transform.y + 220 } : null;
-  const analysisInput = analysis ? { x: analysis.x, y: analysis.y + 85 } : null;
   const resultConnections = resultNodes.filter(node => usesRawSourceInputs(node.result)).flatMap(resultNode =>
     (resultNode.result?.sourceNodeIds ?? []).flatMap(sourceNodeId => {
       const sourceNode = sourceNodes.find(node => node.id === sourceNodeId);
       if (!sourceNode) return [];
+      const start = connectionPortPoint(sourceNode, 'output');
+      const end = connectionPortPoint(resultNode, 'input');
+      if (!start || !end) return [];
       return [{
         id: `${sourceNode.id}-${resultNode.id}`,
         kind: 'source' as const,
-        start: {
-          x: sourceNode.x + SOURCE_CARD_SIZE.width,
-          y: sourceNode.y + SOURCE_CARD_SIZE.height / 2,
-        },
-        end: {
-          x: resultNode.x,
-          y: resultNode.y + RESULT_CARD_SIZE.height / 2,
-        },
+        start,
+        end,
       }];
     }),
   );
@@ -1250,23 +1476,30 @@ export default function App() {
     .flatMap(presentationNode => (presentationNode.result?.sourceModuleIds ?? []).flatMap(sourceModuleId => {
       const analysisNode = resultNodes.find(node => node.id === sourceModuleId && node.result?.kind === 'chart');
       if (!analysisNode) return [];
+      const start = connectionPortPoint(analysisNode, 'output');
+      const end = connectionPortPoint(presentationNode, 'input');
+      if (!start || !end) return [];
       return [{
         id: `${analysisNode.id}-${presentationNode.id}`,
         kind: 'analysis' as const,
-        start: {
-          x: analysisNode.x + RESULT_CARD_SIZE.width,
-          y: analysisNode.y + RESULT_CARD_SIZE.height / 2,
-        },
-        end: {
-          x: presentationNode.x,
-          y: presentationNode.y + RESULT_CARD_SIZE.height / 2,
-        },
+        start,
+        end,
       }];
     }));
   const artifactConnections = [...resultConnections, ...presentationConnections];
 
   return (
     <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden font-sans relative">
+      {draftNotice && <div role="status" className="pointer-events-none absolute bottom-0 left-4 z-50 max-w-[calc(100vw-32px)] rounded bg-white/95 px-2 py-1 text-[10px] text-slate-600">{draftNotice}</div>}
+      {connectionNotice && (
+        <div
+          role="status"
+          data-connection-notice="true"
+          className="pointer-events-none absolute bottom-16 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm"
+        >
+          {connectionNotice}
+        </div>
+      )}
 
       {/* Floating Header */}
       <header className="absolute top-4 left-4 right-4 z-50 flex items-start justify-between gap-3 pointer-events-none">
@@ -1310,7 +1543,12 @@ export default function App() {
         </div>
 
         <div className="pointer-events-auto flex shrink-0 gap-2">
-          <button className="h-9 px-3 text-sm font-medium bg-card border border-border text-foreground shadow-sm rounded-lg hover:bg-muted transition-colors flex items-center gap-2">
+          <button
+            type="button"
+            disabled
+            title="分享功能尚未開放"
+            className="flex h-9 cursor-not-allowed items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-medium text-muted-foreground opacity-70 shadow-sm"
+          >
             <Share className="size-4" />
             分享
           </button>
@@ -1352,54 +1590,34 @@ export default function App() {
           }}
         >
           {/* Dynamic SVG Connections */}
-          <svg className="absolute top-0 left-0 pointer-events-none z-0" style={{ overflow: 'visible' }}>
+          <svg className="absolute inset-0 size-full overflow-visible pointer-events-none z-0">
             {artifactConnections.map(connection => {
-              const controlDistance = Math.min(
-                140,
-                Math.max(60, Math.abs(connection.end.x - connection.start.x) * 0.35),
-              );
-              const path = connection.end.x >= connection.start.x
-                ? `M ${connection.start.x} ${connection.start.y} C ${connection.start.x + controlDistance} ${connection.start.y}, ${connection.end.x - controlDistance} ${connection.end.y}, ${connection.end.x} ${connection.end.y}`
-                : `M ${connection.start.x} ${connection.start.y} C ${connection.start.x + 60} ${connection.start.y}, ${connection.end.x - 60} ${connection.end.y}, ${connection.end.x} ${connection.end.y}`;
               return (
-                <g key={connection.id}>
-                  <path
-                    d={path}
-                    fill="none"
-                    stroke={connection.kind === 'analysis' ? '#059669' : '#7c3aed'}
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    opacity="0.75"
-                  />
-                  <circle
-                    cx={connection.start.x}
-                    cy={connection.start.y}
-                    r="4"
-                    fill={connection.kind === 'analysis' ? '#7c3aed' : '#2563eb'}
-                  />
-                  <circle
-                    cx={connection.end.x}
-                    cy={connection.end.y}
-                    r="4"
-                    fill={connection.kind === 'analysis' ? '#059669' : '#7c3aed'}
-                  />
-                </g>
+                <path
+                  key={connection.id}
+                  data-connection-id={connection.id}
+                  data-connection-kind={connection.kind}
+                  d={buildConnectionPath(connection.start, connection.end)}
+                  fill="none"
+                  stroke={CONNECTION_COLORS[connection.kind]}
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity="0.8"
+                />
               );
             })}
-            {transformOutput && analysisInput && (
-              <>
-                <path
-                  d={`M ${transformOutput.x} ${transformOutput.y} C ${transformOutput.x + 70} ${transformOutput.y}, ${analysisInput.x - 70} ${analysisInput.y}, ${analysisInput.x} ${analysisInput.y}`}
-                  fill="none"
-                  stroke="var(--color-ring)"
-                  strokeWidth="2"
-                  strokeDasharray="4 4"
-                  opacity="0.5"
-                />
-                <circle cx={transformOutput.x} cy={transformOutput.y} r="4" fill="var(--color-ring)" opacity="0.8" />
-                <circle cx={analysisInput.x} cy={analysisInput.y} r="4" fill="var(--color-ring)" opacity="0.8" />
-              </>
+            {connectionDraft && (
+              <path
+                data-connection-preview="true"
+                d={buildConnectionPath(connectionDraft.start, connectionDraft.current)}
+                fill="none"
+                stroke={CONNECTION_COLORS[connectionDraft.kind]}
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeDasharray="7 5"
+                opacity="0.8"
+              />
             )}
           </svg>
 
@@ -1413,38 +1631,54 @@ export default function App() {
               onEdit={handleSelectNode}
               onDelete={handleDeleteSource}
               onPointerDown={handleNodePointerDown}
+              onOutputPointerDown={handleConnectionPointerDown}
+              outputConnecting={connectionDraft?.fromNodeId === node.id}
             />
           ))}
 
-          {resultNodes.map(node => (
-            <ResultCard
-              key={node.id}
-              node={node}
-              selected={node.id === selectedNodeId}
-              sourcesReady={Boolean(
-                node.result?.kind === 'chart'
-                  ? node.result.sourceNodeIds.length
-                    && node.result.sourceNodeIds.every(sourceNodeId => {
-                      const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
-                      return sourceNode ? isSourceReady(sourceNode) : false;
-                    })
-                  : node.result?.kind === 'presentation'
-                    && node.result.sourceModuleIds?.length
-                    && node.result.sourceModuleIds.every(sourceModuleId => (
-                      isAnalysisReady(analysisByNode[sourceModuleId])
-                    ))
-              )}
-              execution={analysisByNode[node.id]}
-              presentationExecution={presentationByNode[node.id]}
-              onRun={node.result?.kind === 'presentation'
-                ? handleRunPresentation
-                : handleRunAnalysis}
-              onSelect={handleSelectNode}
-              onEdit={handleSelectNode}
-              onDelete={handleDeleteResult}
-              onPointerDown={handleNodePointerDown}
-            />
-          ))}
+          {resultNodes.map(node => {
+            const acceptsDraft = connectionDraft
+              ? connectionKindBetween(nodes, connectionDraft.fromNodeId, node.id) !== null
+              : false;
+            const inputConnectionState = connectionDraft
+              ? acceptsDraft
+                ? connectionDraft.hoveredTargetNodeId === node.id ? 'hovered' as const : 'available' as const
+                : 'invalid' as const
+              : undefined;
+            return (
+              <ResultCard
+                key={node.id}
+                node={node}
+                selected={node.id === selectedNodeId}
+                sourcesReady={Boolean(
+                  node.result?.kind === 'chart'
+                    ? node.result.sourceNodeIds.length
+                      && node.result.sourceNodeIds.every(sourceNodeId => {
+                        const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
+                        return sourceNode ? isSourceReady(sourceNode) : false;
+                      })
+                    : node.result?.kind === 'presentation'
+                      && node.result.sourceModuleIds?.length
+                      && node.result.sourceModuleIds.every(sourceModuleId => (
+                        isAnalysisReady(analysisByNode[sourceModuleId])
+                      ))
+                )}
+                execution={analysisByNode[node.id]}
+                presentationExecution={presentationByNode[node.id]}
+                onRun={node.result?.kind === 'presentation'
+                  ? handleRunPresentation
+                  : handleRunAnalysis}
+                onSelect={handleSelectNode}
+                onEdit={handleSelectNode}
+                onDelete={handleDeleteResult}
+                onPointerDown={handleNodePointerDown}
+                onOutputPointerDown={outputConnectionKind(node) ? handleConnectionPointerDown : undefined}
+                inputConnectionState={inputConnectionState}
+                inputConnectionKind={connectionDraft?.kind}
+                outputConnecting={connectionDraft?.fromNodeId === node.id}
+              />
+            );
+          })}
 
           {assistantNodes.map(node => {
             const sourceNodeIdSet = new Set(sourceNodes.map(source => source.id));
@@ -1470,165 +1704,6 @@ export default function App() {
             );
           })}
 
-          {/* Age Definition Transform Node */}
-          <div
-            className={`${transform ? '' : 'hidden'} absolute pointer-events-auto w-[360px] bg-card rounded-xl border border-border shadow-sm flex flex-col hover:shadow-md transition-shadow`}
-            style={{ left: 0, top: 0, transform: `translate(${transform?.x ?? 0}px, ${transform?.y ?? 0}px)` }}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <div
-              className="h-10 border-b border-border px-3 flex items-center justify-between bg-muted/30 rounded-t-xl group cursor-grab active:cursor-grabbing"
-              onPointerDown={(e) => transform && handleNodePointerDown(e, transform.id)}
-            >
-              <div className="flex items-center gap-2 pointer-events-none">
-                <GripHorizontal className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                <SlidersHorizontal className="size-3.5 text-blue-600" />
-                <span className="text-xs font-semibold tracking-wider text-muted-foreground">年齡口徑轉換</span>
-              </div>
-              <div className="flex items-center gap-2 pointer-events-none">
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                  <CheckCircle2 className="size-3" />
-                  已完成
-                </span>
-                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">示範資料</span>
-              </div>
-            </div>
-
-            <div className="p-4 space-y-3.5">
-              <div>
-                <h3 className="text-sm font-semibold leading-snug">青年年齡口徑統一</h3>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  將不同資料源的年齡分組轉換為《青年基本法》18–35 歲範圍。
-                </p>
-              </div>
-
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-                <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">原始口徑</p>
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {['15–24', '25–34', '35–44'].map(range => (
-                      <span key={range} className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-mono text-foreground">
-                        {range}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <ArrowRight className="size-4 text-muted-foreground" />
-                <div className="rounded-md bg-primary px-2.5 py-2 text-center text-primary-foreground">
-                  <p className="text-[10px] opacity-70">目標口徑</p>
-                  <p className="mt-0.5 text-sm font-semibold">18–35 歲</p>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-border/70 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-medium">轉換規則</span>
-                  <button
-                    type="button"
-                    className="text-[10px] font-medium text-blue-700 hover:text-blue-900"
-                    aria-label="編輯年齡口徑轉換規則"
-                  >
-                    編輯規則
-                  </button>
-                </div>
-                <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                  單歲資料精確篩選；彙總區間依行政區人口權重估算。
-                </p>
-              </div>
-
-              <div className="grid grid-cols-3 divide-x divide-border rounded-lg bg-muted/35 py-2.5 text-center">
-                <div>
-                  <p className="text-[10px] text-muted-foreground">輸入</p>
-                  <p className="mt-0.5 text-xs font-semibold tabular-nums">86,420</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">保留</p>
-                  <p className="mt-0.5 text-xs font-semibold tabular-nums">51,308</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">排除</p>
-                  <p className="mt-0.5 text-xs font-semibold tabular-nums">35,112</p>
-                </div>
-              </div>
-
-              <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-amber-900">
-                <AlertTriangle className="mt-0.5 size-3.5 flex-none text-amber-600" />
-                <p className="text-[11px] leading-relaxed">
-                  1 個資料源僅提供彙總年齡層；相關結果將標示為估算，不視為精確值。
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between border-t border-border pt-3 text-[10px] text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  <Database className="size-3" />
-                  3 個資料來源
-                </span>
-                <span>2 精確 · 1 估算</span>
-              </div>
-            </div>
-
-            <div className="absolute right-[-5px] top-[215px] size-2.5 rounded-full border-2 border-primary bg-background ring-4 ring-background"></div>
-          </div>
-
-          {/* Analysis Node - Large */}
-          <div
-            className={`${analysis ? '' : 'hidden'} absolute pointer-events-auto w-[360px] bg-card rounded-xl border border-border shadow-sm flex flex-col hover:shadow-md transition-shadow`}
-            style={{ left: 0, top: 0, transform: `translate(${analysis?.x ?? 0}px, ${analysis?.y ?? 0}px)` }}
-            onPointerDown={(e) => e.stopPropagation()} // Prevent canvas drag when clicking inside node
-          >
-            {/* Input Port */}
-            <div className="absolute left-[-5px] top-[80px] size-2.5 rounded-full border-2 border-primary bg-background ring-4 ring-background"></div>
-            <div
-              className="h-10 border-b border-border px-3 flex items-center justify-between bg-muted/30 rounded-t-xl group cursor-grab active:cursor-grabbing"
-              onPointerDown={(e) => analysis && handleNodePointerDown(e, analysis.id)}
-            >
-              <div className="flex items-center gap-2 pointer-events-none">
-                <GripHorizontal className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                <span className="text-xs font-semibold tracking-wider text-muted-foreground">分析結果</span>
-              </div>
-              <button className="text-muted-foreground hover:text-foreground pointer-events-auto">
-                <Settings2 className="size-3.5" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-4">
-              {/* Question */}
-              <div>
-                <h3 className="text-sm font-medium leading-snug">
-                  職業訓練參與情形與第三季青年就業率有什麼關聯？
-                </h3>
-              </div>
-
-              {/* Chart Placeholder */}
-              <div className="h-32 bg-muted/20 border border-border/50 rounded-lg flex items-end justify-between p-3 relative">
-                <div className="absolute top-2 left-2 text-[10px] text-muted-foreground">青年就業率與職訓參與率</div>
-                <div className="w-1/6 bg-primary/20 hover:bg-primary/30 transition-colors h-[30%] rounded-t-sm"></div>
-                <div className="w-1/6 bg-primary/30 hover:bg-primary/40 transition-colors h-[45%] rounded-t-sm"></div>
-                <div className="w-1/6 bg-primary/50 hover:bg-primary/60 transition-colors h-[60%] rounded-t-sm"></div>
-                <div className="w-1/6 bg-primary/70 hover:bg-primary/80 transition-colors h-[85%] rounded-t-sm"></div>
-                <div className="w-1/6 bg-primary hover:bg-primary/90 transition-colors h-[95%] rounded-t-sm"></div>
-              </div>
-
-              {/* Insight */}
-              <div className="bg-emerald-50/50 border border-emerald-100/50 p-3 rounded-lg flex gap-3 items-start">
-                <Sparkles className="size-4 text-emerald-600 mt-0.5 flex-none" />
-                <p className="text-xs leading-relaxed text-emerald-900">
-                  示範分析顯示兩者呈正向關聯。主要行政區中，完成認證職訓課程的青年，第三季就業比例高出 <span className="font-semibold">14.2%</span>。
-                </p>
-              </div>
-
-              {/* Evidence Tag */}
-              <div className="flex items-center gap-2 border-t border-border pt-3">
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 border border-border/50 rounded text-[10px] font-mono text-muted-foreground">
-                  <Database className="size-3" />
-                  2023_青年就業.csv
-                </div>
-              </div>
-            </div>
-            {/* Output Port */}
-            <div className="absolute right-[-5px] top-[220px] size-2.5 rounded-full border-2 border-primary bg-background ring-4 ring-background"></div>
-          </div>
-
         </div>
 
         {nodes.length === 0 && (
@@ -1646,7 +1721,8 @@ export default function App() {
         )}
 
         {/* Zoom & Fit Controls */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-card border border-border rounded-full shadow-sm p-1.5 z-40">
+        <div className="absolute bottom-6 -translate-x-1/2 flex items-center gap-1 bg-card border border-border rounded-full shadow-sm p-1.5 z-40"
+          style={{ left: `calc(50% + ${((isLeftOpen ? 312 : 82) - (isRightOpen ? selectedResult ? 696 : selectedSource ? 436 : 336 : 82)) / 2}px)` }}>
           <span className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-muted-foreground/80">
             Ctrl + 滾輪縮放
           </span>
@@ -1772,7 +1848,7 @@ export default function App() {
                   </span>
                   <span>
                     <span className="block text-sm font-semibold text-blue-950">來源</span>
-                    <span className="mt-1 block text-[11px] leading-4 text-blue-800/80">上傳檔案或設定公開 API</span>
+                    <span className="mt-1 block text-[11px] leading-4 text-blue-800/80">選擇官方資料集或設定自訂來源</span>
                   </span>
                 </span>
               </button>
@@ -1823,26 +1899,27 @@ export default function App() {
 
       {/* Floating Right Panel - Selected Card Settings */}
       <div
-        className={`absolute top-20 bottom-6 right-4 z-40 flex bg-card border border-border shadow-sm rounded-xl transition-all duration-300 ease-in-out ${
-          isRightOpen ? (selectedSource || selectedResult ? 'w-[420px]' : 'w-[320px]') : 'w-14'
+        className={`absolute top-20 bottom-6 right-4 z-[60] flex bg-card border border-border shadow-sm rounded-xl transition-all duration-300 ease-in-out ${
+          isRightOpen ? (selectedResult ? 'w-[min(680px,calc(100vw-32px))]' : selectedSource ? 'w-[min(420px,calc(100vw-32px))]' : 'w-[320px]') : 'w-14'
         }`}
       >
         {/* Expanded Content */}
-        <div className={`flex-1 overflow-hidden transition-opacity duration-300 ${isRightOpen ? 'opacity-100' : 'opacity-0'}`}>
+        <div
+          ref={inspectorContentRef}
+          aria-hidden={!isRightOpen}
+          className={`flex-1 overflow-hidden transition-opacity duration-300 ${isRightOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        >
           {selectedSource ? (
-            <div className="h-full w-[364px]">
+            <div className="h-full w-full min-w-0">
               <SourceInspector
                 node={selectedSource}
-                registrySources={registrySources}
-                registryLoading={registryLoading}
-                registryError={registryError}
                 onSave={handleSaveSource}
                 onDirtyChange={dirty => setDirtyInspectorNodeId(dirty ? selectedSource.id : null)}
                 onClose={closeInspector}
               />
             </div>
           ) : selectedResult ? (
-            <div className="h-full w-[364px]">
+            <div className="h-full w-full min-w-0">
               <ResultInspector
                 node={selectedResult}
                 sourceNodes={sourceNodes}
@@ -1853,6 +1930,9 @@ export default function App() {
                 execution={analysisByNode[selectedResult.id]}
                 presentationExecution={presentationByNode[selectedResult.id]}
                 onSave={handleSaveResult}
+                onCancel={() => handleCancelExecution(selectedResult.id)}
+                onCreatePresentation={isAnalysisReady(analysisByNode[selectedResult.id])
+                  ? () => handleCreatePresentationFromAnalysis(selectedResult.id) : undefined}
                 onRun={selectedResult.result?.kind === 'chart'
                   && selectedResult.result.sourceNodeIds.length > 0
                   && selectedResult.result.sourceNodeIds.every(sourceNodeId => {
@@ -1884,7 +1964,7 @@ export default function App() {
                   <MessageSquare className="mx-auto size-5 text-emerald-700" />
                   <p className="mt-3 text-xs font-medium">直接在卡片內輸入需求</p>
                   <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">
-                    已送出的文字與操作草稿會保留在目前筆記本；真正 AI 與資料分析仍等待後端串接。
+                    已送出的文字與操作草稿會隨筆記本保存。小幫手對話目前是操作示意；請到圖表成果卡執行真正分析。
                   </p>
                 </div>
                 <div className="mt-auto rounded-lg bg-muted/30 p-3 text-[11px] leading-5 text-muted-foreground">

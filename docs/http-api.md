@@ -7,6 +7,9 @@ does not contain model or dataset business logic.
 ## Endpoints
 
 - `GET /health` checks the process without loading provider credentials.
+- `GET /ready` returns status-only provider-configuration, packaged-data, and
+  writable-storage checks. It does not prove live Bedrock permission or durable
+  storage.
 - `GET /v1/data-sources` lists shared sources installed and available to every
   notebook.
 - `POST /v1/analysis` accepts Contract v0 `AnalysisRequest` and returns a
@@ -17,8 +20,10 @@ does not contain model or dataset business logic.
   downloads the generated editable PPTX within the same project boundary.
 
 Local browser clients on ports `3000` and `5173` are allowed by the default CORS
-policy. Deployed frontend origins must be passed explicitly when composing the app;
-the API does not use a wildcard origin.
+policy. The repository Docker image serves the Vite build from this same app, so
+the browser and `/v1/*` need no production CORS entry. For split hosting, set an
+exact comma-separated HTTPS allowlist with `YOUTHLM_CORS_ORIGINS`; wildcard and
+credential-bearing origins are rejected at startup.
 
 Two New Taipei City sources are currently available to every notebook: annual
 age-by-sex unemployment rates and annual resident-population counts by district,
@@ -31,17 +36,20 @@ Start the Gemini API on Windows after copying the API key to the clipboard:
 .\scripts\run-gemini-api.ps1
 ```
 
-Then open `http://127.0.0.1:8000/docs`. The runner starts:
+Then open `http://127.0.0.1:8000/docs`. The direct repository-root equivalent is:
 
-```text
-uvicorn main:app --app-dir apps/api
+```powershell
+uv run --frozen python -m uvicorn main:app `
+    --app-dir apps/api `
+    --host 127.0.0.1 `
+    --port 8000
 ```
 
 In a second PowerShell window, execute the canonical Source-to-Chart request and
 a downstream Module Context request:
 
 ```powershell
-uv run python -m spikes.analysis_api_smoke
+uv run --frozen python -m spikes.analysis_api_smoke
 ```
 
 The first request is loaded without modification from
@@ -85,8 +93,8 @@ For the canonical demo module, first run the Analysis smoke and then the
 Presentation smoke in the same API process:
 
 ```powershell
-uv run python -m spikes.analysis_api_smoke
-uv run python -m spikes.presentation_api_smoke
+uv run --frozen python -m spikes.analysis_api_smoke
+uv run --frozen python -m spikes.presentation_api_smoke
 ```
 
 The second command verifies the returned contract, downloaded byte size and

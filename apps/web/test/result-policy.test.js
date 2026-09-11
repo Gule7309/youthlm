@@ -10,14 +10,20 @@ const { outputText } = ts.transpileModule(
 const { createChartDraftActions, getChartDraftActions, usesRawSourceInputs } =
   await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 
-test('raw sources create one chart draft even when the prompt requests a presentation', () => {
+test('raw sources create one single-source chart draft each', () => {
   const sources = ['source-node-a', 'source-node-b'];
   const actions = createChartDraftActions('draft-1', '請分析並製作簡報', sources);
-  assert.equal(actions.length, 1);
-  assert.equal(actions[0].kind, 'chart');
-  assert.deepEqual(actions[0].sourceNodeIds, sources);
+  assert.equal(actions.length, 2);
+  assert.deepEqual(actions.map(action => action.kind), ['chart', 'chart']);
+  assert.deepEqual(actions.map(action => action.sourceNodeIds), [['source-node-a'], ['source-node-b']]);
   actions[0].sourceNodeIds.pop();
   assert.equal(sources.length, 2);
+});
+
+test('duplicate source IDs do not create duplicate chart drafts', () => {
+  const actions = createChartDraftActions('draft-1', '分析', ['source-node-a', 'source-node-a']);
+  assert.equal(actions.length, 1);
+  assert.deepEqual(actions[0].sourceNodeIds, ['source-node-a']);
 });
 
 test('no sources produces no executable draft', () => {

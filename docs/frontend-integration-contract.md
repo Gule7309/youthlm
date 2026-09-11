@@ -43,6 +43,12 @@ Each source selection has this public shape:
 
 The field is optional and defaults to `[]`, so every valid pre-freeze request
 remains valid. A selected shared source must exist in the Source Registry. The
+current runtime limits the list to one item because Contract v0 produces one
+deterministic dataset result and has no join specification. More than one item
+returns `422 dataset_error` before invoking the model; the frontend therefore
+uses a single-source radio choice for charts and combines separate completed
+analyses at the presentation layer. This is an explicit temporary limitation,
+not a multi-source implementation.
 runtime gives the selection to the existing Research Agent, requires a successful
 compatibility check, and verifies that the deterministic query kept both the
 source ID and every selected filter. It does not ask the model to manufacture

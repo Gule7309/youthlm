@@ -38,6 +38,7 @@ The structured frontend contract is documented in
 The first HTTP boundary is now available:
 
 - `GET /health`
+- `GET /ready`
 - `GET /v1/data-sources`
 - `POST /v1/analysis`
 - `POST /v1/presentations`
@@ -82,10 +83,24 @@ switch, follow [`docs/final-environment-runbook.md`](docs/final-environment-runb
 ## Local setup
 
 ```bash
-uv sync --dev
-uv run pytest
-uv run ruff check .
+uv sync --frozen --dev
+uv run --frozen pytest
+uv run --frozen ruff check .
 ```
+
+Run the Contract v0 API from the repository root with the Python module form.
+This keeps both the root `app/` package and `apps/api/` importable on Windows:
+
+```powershell
+uv run --frozen python -m uvicorn main:app `
+    --app-dir apps/api `
+    --host 127.0.0.1 `
+    --port 8000
+```
+
+`GET /health` is process liveness only. `GET /ready` reports status-only checks
+for provider configuration, installed datasets, and writable storage; it does
+not expose configuration values and does not prove live Bedrock permission.
 
 When dependencies are already available but package downloads are blocked, the
 provider tests also run with Python's standard library:
@@ -93,6 +108,54 @@ provider tests also run with Python's standard library:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## Single-container deployment
+
+The repository-level `Dockerfile` builds the Vite application and serves it from
+the Contract v0 FastAPI application. The browser and `/v1/*` API therefore use
+the same origin; do not set a public API base URL for this layout. Build from the
+repository root:
+
+At the time of this documentation update, the workstation Docker daemon and AWS
+CLI v2 were not available for validation. The image build/run and real Bedrock
+path therefore remain unverified gates until they pass in the target environment.
+
+```powershell
+docker build -t youthlm:competition .
+```
+
+Run the image on an AWS compute resource that has an EC2 instance role or ECS
+task role with permission to invoke the selected Bedrock model. Do not copy an
+AWS profile or static access keys into the image. The following example uses a
+Docker volume on one fixed host; replace only the non-secret placeholders with
+the values issued inside the competition environment:
+
+```powershell
+docker volume create youthlm-data
+docker run -d --name youthlm --restart unless-stopped `
+    -p 8000:8000 `
+    --mount type=volume,source=youthlm-data,target=/data `
+    -e MODEL_PROVIDER=bedrock `
+    -e AWS_REGION="<event-region>" `
+    -e BEDROCK_MODEL_ID="<event-model-or-inference-profile-id>" `
+    youthlm:competition
+```
+
+The image already runs Uvicorn with one worker and stores SQLite plus generated
+PPTX files under `/data`. Mount `/data` on persistent storage and keep exactly
+one application worker and one replica. A writable container filesystem or
+ephemeral task disk is not persistence. After recreating the container with the
+same volume, verify that a stored analysis and its presentation can still be
+retrieved.
+
+Terminate TLS at the AWS ingress or reverse proxy. The bundled frontend is
+same-origin, so no production CORS entry is needed for this layout. If the
+frontend is hosted separately, configure an exact HTTPS allowlist through
+`YOUTHLM_CORS_ORIGINS`; never use `*`.
+
+The Workshop Access Code is only for joining the organizer portal. It is not an
+application password, API token, HTTP header, container variable, or AWS SDK
+credential.
 
 ## Run the real agent with Gemini
 
@@ -156,9 +219,11 @@ Use `npm run check` to run strict TypeScript checking, build the UI, and execute
 all frontend tests, including the fixture-based Chart and Presentation Artifact
 tests, stopping on the first failure. Each gate
 can also run separately with `npm run typecheck`, `npm run build`, or `npm test`.
-Source-to-Chart and Chart-to-Presentation use the live Contract v0 API. Login,
-whole-notebook persistence, uploads, Assistant analysis, and Policy Radar remain
-frontend prototypes.
+Source-to-Chart analysis and Chart-to-Presentation generation use the live
+Contract v0 endpoints. Canvas links remain frontend state: each chart sends
+exactly one raw `source_selection`, while a presentation may aggregate multiple
+completed analyses. Login, whole-notebook cloud persistence, uploads, Assistant
+analysis, and Policy Radar remain frontend prototypes.
 
 After an Analysis module is stored, `POST /v1/presentations` can generate an
 editable `.pptx` without another model call. The deterministic generator uses

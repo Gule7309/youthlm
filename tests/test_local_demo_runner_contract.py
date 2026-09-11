@@ -52,8 +52,9 @@ class LocalDemoRunnerContractTests(unittest.TestCase):
 
     def test_runs_backend_and_frontend_quality_gates(self) -> None:
         self.assertIn('Require-Command "npm.cmd"', self.script)
-        self.assertIn("uv run pytest -q", self.script)
-        self.assertIn("uv run ruff check .", self.script)
+        self.assertIn("python -m app.data_quality", self.script)
+        self.assertIn("uv run --frozen pytest -q tests apps/api/tests", self.script)
+        self.assertIn("uv run --frozen ruff check .", self.script)
         self.assertIn("run check", self.script)
         self.assertIn("SkipQualityChecks", self.script)
 

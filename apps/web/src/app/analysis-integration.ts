@@ -7,6 +7,8 @@ import type {
 } from './types';
 
 export const CONTRACT_VERSION = '0.1.0' as const;
+export const CHART_SINGLE_SOURCE_MESSAGE =
+  '目前每張圖表只支援一個資料來源；跨來源請分開分析後由簡報彙整。';
 
 export function buildDefaultSourceFilters(source: RegistryDataSource): SourceFilters {
   const endYear = source.available_years.end;
@@ -44,6 +46,9 @@ export function buildAnalysisRequest({
 }): AnalysisRequestPayload {
   if (result.kind !== 'chart') {
     throw new Error('目前只有圖表成果可以執行分析');
+  }
+  if (result.sourceNodeIds.length > 1) {
+    throw new Error(CHART_SINGLE_SOURCE_MESSAGE);
   }
   const query = result.prompt.trim();
   if (!query) throw new Error('圖表分析需求不可空白');

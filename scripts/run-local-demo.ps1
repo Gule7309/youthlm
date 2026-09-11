@@ -129,8 +129,7 @@ function Wait-HttpReady {
     $deadline = [DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
         if ($Process.HasExited) {
-            $stderr = Get-Content $ErrorLog -Raw -ErrorAction SilentlyContinue
-            throw "$Name exited during startup. $stderr"
+            throw "$Name exited during startup. Review the saved error log."
         }
 
         try {
@@ -195,10 +194,13 @@ try {
     }
 
     if (-not $SkipQualityChecks) {
-        uv run pytest -q
+        uv run --frozen python -m app.data_quality
+        Require-NativeSuccess "Installed data audit failed. Demo startup stopped."
+
+        uv run --frozen pytest -q tests apps/api/tests
         Require-NativeSuccess "Python tests failed. Demo startup stopped."
 
-        uv run ruff check .
+        uv run --frozen ruff check .
         Require-NativeSuccess "Ruff failed. Demo startup stopped."
 
         Push-Location $webRoot
@@ -235,7 +237,7 @@ try {
     }
     $env:PYTHONPATH = $pythonPathEntries -join [IO.Path]::PathSeparator
 
-    $pythonExecutable = (& uv run python -c "import sys; print(sys.executable)" |
+    $pythonExecutable = (& uv run --frozen python -c "import sys; print(sys.executable)" |
         Out-String).Trim()
     Require-NativeSuccess "Could not resolve the YouthLM Python runtime."
 

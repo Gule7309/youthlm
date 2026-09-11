@@ -82,6 +82,11 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output-directory", default="var/demo-preflight/output")
     parser.add_argument("--timeout-seconds", type=int, default=300)
+    parser.add_argument(
+        "--status-only",
+        action="store_true",
+        help="Hide IDs, hashes, and local paths from standard output.",
+    )
     args = parser.parse_args()
 
     result = run_preflight(
@@ -89,7 +94,8 @@ def main() -> None:
         args.output_directory,
         timeout_seconds=args.timeout_seconds,
     )
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if not args.status_only:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
     print("YouthLM end-to-end demo preflight passed.")
 
 

@@ -37,7 +37,7 @@ if ($Provider -eq "gemini") {
     $env:GEMINI_API_KEY = $apiKey
     $env:GEMINI_MODEL_ID = $resolvedModelId
 
-    Write-Host "YouthLM provider selected: gemini ($resolvedModelId)"
+    Write-Host "YouthLM provider selected: gemini (configuration validated)."
     return
 }
 
@@ -116,8 +116,4 @@ $env:AWS_REGION = $resolvedRegion
 $env:AWS_DEFAULT_REGION = $resolvedRegion
 $env:BEDROCK_MODEL_ID = $resolvedModelId
 
-Write-Host (
-    "YouthLM provider selected: bedrock " +
-    "(account=$accountId, profile=$resolvedProfile, region=$resolvedRegion, " +
-    "model=$resolvedModelId)"
-)
+Write-Host "YouthLM provider selected: bedrock (identity and configuration validated)."

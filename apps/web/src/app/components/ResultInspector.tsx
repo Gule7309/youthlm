@@ -14,6 +14,7 @@ import type {
   PresentationExecution,
   ResultConfig,
 } from '../types';
+import { CHART_SINGLE_SOURCE_MESSAGE } from '../analysis-integration';
 import { AnalysisResultPanel } from './AnalysisResultPanel';
 import { PresentationResultPanel } from './PresentationResultPanel';
 
@@ -28,13 +29,15 @@ export type ResultInspectorProps = {
   presentationExecution?: PresentationExecution;
   onSave: (config: ResultConfig) => void;
   onRun?: () => void;
+  onCancel?: () => void;
+  onCreatePresentation?: () => void;
   onClose?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
 
 function sourceTypeLabel(sourceNode: CanvasNode) {
   if (sourceNode.source?.enabled === false) return '已停用';
-  if (sourceNode.source?.kind === 'registry') return '已安裝資料集';
+  if (sourceNode.source?.kind === 'registry') return '官方資料集';
   if (sourceNode.source?.kind === 'file') return '上傳檔案';
   if (sourceNode.source?.kind === 'api') return '公開 API';
   return '尚未設定';
@@ -77,11 +80,15 @@ export function ResultInspector({
   presentationExecution,
   onSave,
   onRun,
+  onCancel,
+  onCreatePresentation,
   onClose,
   onDirtyChange,
 }: ResultInspectorProps) {
   const sourceNodeIdsKey = sourceNodes.map(sourceNode => sourceNode.id).join('|');
   const analysisNodeIdsKey = analysisNodes.map(analysisNode => analysisNode.id).join('|');
+  const storedSourceNodeIdsKey = (node.result?.sourceNodeIds ?? []).join('|');
+  const storedSourceModuleIdsKey = (node.result?.sourceModuleIds ?? []).join('|');
   const [kind, setKind] = useState<EditableResultKind | null>(node.result?.kind ?? null);
   const [name, setName] = useState(node.result?.name ?? '');
   const [sourceNodeIds, setSourceNodeIds] = useState<string[]>(node.result?.sourceNodeIds ?? []);
@@ -91,7 +98,8 @@ export function ResultInspector({
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const selectedSourcesReady = sourceNodeIds.length > 0 && sourceNodeIds.every(sourceNodeId => {
+  const hasTooManySources = kind === 'chart' && sourceNodeIds.length > 1;
+  const selectedSourcesReady = sourceNodeIds.length === 1 && sourceNodeIds.every(sourceNodeId => {
     const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
     return sourceNode ? sourceIsReady(sourceNode) : false;
   });
@@ -115,7 +123,16 @@ export function ResultInspector({
     setSaved(false);
     setDirty(false);
     onDirtyChange?.(false);
-  }, [node.id, sourceNodeIdsKey, analysisNodeIdsKey]);
+  }, [
+    node.id,
+    node.result?.kind,
+    node.result?.name,
+    node.result?.prompt,
+    storedSourceNodeIdsKey,
+    storedSourceModuleIdsKey,
+    sourceNodeIdsKey,
+    analysisNodeIdsKey,
+  ]);
 
   const markDirty = () => {
     setDirty(true);
@@ -140,10 +157,8 @@ export function ResultInspector({
     markDirty();
   };
 
-  const toggleSource = (sourceNodeId: string) => {
-    setSourceNodeIds(currentIds => currentIds.includes(sourceNodeId)
-      ? currentIds.filter(id => id !== sourceNodeId)
-      : [...currentIds, sourceNodeId]);
+  const selectSource = (sourceNodeId: string) => {
+    setSourceNodeIds([sourceNodeId]);
     setError('');
     markDirty();
   };
@@ -157,7 +172,11 @@ export function ResultInspector({
       return;
     }
     if (kind === 'chart' && sourceNodeIds.length === 0) {
-      setError('請至少選擇一張來源卡片。');
+      setError('請選擇一張來源卡片。');
+      return;
+    }
+    if (kind === 'chart' && sourceNodeIds.length > 1) {
+      setError(CHART_SINGLE_SOURCE_MESSAGE);
       return;
     }
     if (kind === 'presentation' && sourceModuleIds.length === 0) {
@@ -323,9 +342,20 @@ export function ResultInspector({
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-slate-700">使用的來源</span>
             {sourceNodes.length > 0 && (
-              <span className="text-[11px] text-slate-500">已選 {sourceNodeIds.length} 個</span>
+              <span className={`text-[11px] ${hasTooManySources ? 'font-medium text-amber-700' : 'text-slate-500'}`}>
+                {hasTooManySources ? `已選 ${sourceNodeIds.length} 個，請改為 1 個` : '單選'}
+              </span>
             )}
           </div>
+          <p className="mb-3 text-[11px] leading-5 text-slate-500">
+            {CHART_SINGLE_SOURCE_MESSAGE}
+          </p>
+
+          {hasTooManySources && (
+            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800" role="alert">
+              這張既有草稿包含多個來源。請在下方選定其中一個來源後再儲存或執行。
+            </p>
+          )}
 
           {sourceNodes.length === 0 ? (
             <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 px-4 py-5 text-center">
@@ -334,7 +364,7 @@ export function ResultInspector({
               <p className="mt-1 text-[11px] leading-4 text-amber-700">請先在白板新增並設定一張來源卡片。</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2" role="radiogroup" aria-label="圖表資料來源">
               {sourceNodes.map(sourceNode => {
                 const checked = sourceNodeIds.includes(sourceNode.id);
                 const sourceName = sourceNode.source?.name || '未設定的資料來源';
@@ -342,13 +372,13 @@ export function ResultInspector({
                   <button
                     key={sourceNode.id}
                     type="button"
-                    onClick={() => toggleSource(sourceNode.id)}
+                    onClick={() => selectSource(sourceNode.id)}
                     className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition ${
                       checked
                         ? 'border-violet-300 bg-violet-50'
                         : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                     }`}
-                    role="checkbox"
+                    role="radio"
                     aria-checked={checked}
                   >
                     <span className="flex min-w-0 items-center gap-2.5">
@@ -358,7 +388,7 @@ export function ResultInspector({
                         <span className="mt-0.5 block text-[11px] text-slate-500">{sourceTypeLabel(sourceNode)}</span>
                       </span>
                     </span>
-                    <span className={`flex size-5 shrink-0 items-center justify-center rounded border ${
+                    <span className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${
                       checked ? 'border-violet-600 bg-violet-600 text-white' : 'border-slate-300 bg-white'
                     }`}>
                       {checked && <Check className="size-3.5" />}
@@ -418,11 +448,20 @@ export function ResultInspector({
             : '圖表只使用 Contract v0 的 result_data 與 visualization；展開執行紀錄可核對問題、篩選條件、工具與資料版本。'}
         </div>
         {isPresentation
-          ? <PresentationResultPanel execution={presentationExecution} onRetry={onRun} />
-          : <AnalysisResultPanel execution={execution} onRetry={onRun} />}
+          ? <PresentationResultPanel execution={presentationExecution} onRetry={dirty ? undefined : onRun} />
+          : <AnalysisResultPanel execution={execution} onRetry={dirty ? undefined : onRun} />}
+        {!isPresentation && onCreatePresentation && (
+          <button type="button" disabled={dirty} onClick={onCreatePresentation}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-3 py-3 text-xs font-semibold text-violet-800 disabled:opacity-50">
+            <Presentation className="size-4" /> 用這份分析建立簡報
+          </button>
+        )}
       </div>
 
       <div className="border-t border-slate-200 bg-white px-5 py-4">
+        {activeExecution?.state === 'running' && onCancel && (
+          <button type="button" onClick={onCancel} className="mb-2 text-xs text-slate-600 underline">停止等待（不會中止後端工作）</button>
+        )}
         {error && <p className="mb-2 text-xs text-red-600" role="alert">{error}</p>}
         {saved && (
           <p className="mb-2 flex items-center gap-1.5 text-xs text-emerald-600" role="status">
@@ -447,7 +486,7 @@ export function ResultInspector({
           <button
             type="button"
             onClick={onRun}
-            disabled={!onRun || dirty || activeExecution?.state === 'running'}
+            disabled={!onRun || dirty || hasTooManySources || activeExecution?.state === 'running'}
             className="h-10 rounded-lg bg-violet-700 text-sm font-medium text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {activeExecution?.state === 'running'

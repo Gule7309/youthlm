@@ -23,7 +23,20 @@
   "source_catalog_metadata_updated_at": "2025-11-27T14:22:00+08:00",
   "snapshot_retrieved_at": "2026-08-29",
   "source_sha256": "4084cd786eee726d98c9b5baa83e3abbc8bf393990c74c7aff9715fe03b3f59f",
+  "snapshot_sha256": "aaba0abe745cce5f9ef09934fa92d432584a9205aacbddb1fd7410bc412fbe92",
   "snapshot_row_count": 76,
+  "normalization": {
+    "script": "app/unemployment_normalizer.py",
+    "source_encoding": "UTF-8 with BOM",
+    "year_column": "field1",
+    "column_mapping": {
+      "item value4": "25-29/male",
+      "item value5": "25-29/female",
+      "item value6": "30-34/male",
+      "item value7": "30-34/female"
+    },
+    "unselected_columns": "The source's other age bands are preserved only in the official raw source and are not installed in this Contract v0 dataset."
+  },
   "license": "政府資料開放授權條款－第1版",
   "youth_definition_compatibility": {
     "target": "18-35",

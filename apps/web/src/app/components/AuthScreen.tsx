@@ -253,7 +253,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           </form>
 
           <p className="mt-6 text-center text-xs leading-5 text-slate-400">
-            此版本僅展示前端流程，帳號資料不會傳送或儲存。
+          此為預覽登入，不會驗證或保存密碼。筆記本設定僅存於本機，請勿輸入正式密碼。
           </p>
         </div>
       </section>

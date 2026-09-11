@@ -1,5 +1,6 @@
 """Minimal provider-neutral YouthLM agent loop."""
 
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -7,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.analysis_result import AnalysisResult, build_analysis_result
 from app.provider import ModelProvider, ModelRequest, ModelTurn
 from app.tooling import ToolExecution, ToolRegistry
+
+CompletionGuard = Callable[[Sequence[ToolExecution]], str | None]
 
 
 class AgentProtocolError(RuntimeError):
@@ -44,7 +47,12 @@ class YouthLMAgent:
         self._tools = tools
         self._max_steps = max_steps
 
-    def run(self, prompt: str) -> AgentResult:
+    def run(
+        self,
+        prompt: str,
+        *,
+        completion_guard: CompletionGuard | None = None,
+    ) -> AgentResult:
         if not prompt.strip():
             raise ValueError("prompt must not be empty")
 
@@ -70,6 +78,19 @@ class YouthLMAgent:
                     raise AgentProtocolError(
                         "end_turn must contain a non-empty answer"
                     )
+                correction = (
+                    completion_guard(tuple(executions))
+                    if completion_guard is not None
+                    else None
+                )
+                if correction is not None and correction.strip():
+                    messages.append(
+                        {"role": "assistant", "content": turn.text}
+                    )
+                    messages.append(
+                        {"role": "user", "content": correction}
+                    )
+                    continue
                 return AgentResult(
                     answer=turn.text,
                     model_steps=model_step,
