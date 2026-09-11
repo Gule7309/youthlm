@@ -23,6 +23,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $apiRoot = Join-Path $repoRoot "apps\api"
+$webRoot = Join-Path $repoRoot "apps\web"
 $serverProcess = $null
 $runRoot = $null
 
@@ -84,11 +85,27 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 Push-Location $repoRoot
 try {
     if (-not $SkipQualityChecks) {
-        uv run pytest -q
+        uv run --frozen python -m app.data_quality
+        Require-NativeSuccess "Installed data audit failed. Demo preflight stopped."
+
+        uv run --frozen pytest -q tests apps/api/tests
         Require-NativeSuccess "Unit tests failed. Demo preflight stopped."
 
-        uv run ruff check .
+        uv run --frozen ruff check .
         Require-NativeSuccess "Ruff failed. Demo preflight stopped."
+
+        $npmExecutable = Get-Command npm.cmd -ErrorAction SilentlyContinue
+        if ($null -eq $npmExecutable) {
+            throw "npm was not found. Install Node.js before running the demo preflight."
+        }
+        Push-Location $webRoot
+        try {
+            & $npmExecutable.Source run check
+            Require-NativeSuccess "Frontend checks failed. Demo preflight stopped."
+        }
+        finally {
+            Pop-Location
+        }
     }
 
     $selectionArgs = @{ Provider = $Provider }
@@ -130,7 +147,7 @@ try {
     }
     $env:PYTHONPATH = $pythonPathEntries -join [IO.Path]::PathSeparator
 
-    $pythonExecutable = (& uv run python -c "import sys; print(sys.executable)" |
+    $pythonExecutable = (& uv run --frozen python -c "import sys; print(sys.executable)" |
         Out-String).Trim()
     Require-NativeSuccess "Could not resolve the YouthLM Python runtime."
 
@@ -153,8 +170,7 @@ try {
     $healthy = $false
     while ([DateTime]::UtcNow -lt $deadline) {
         if ($serverProcess.HasExited) {
-            $stderr = Get-Content $stderrLog -Raw -ErrorAction SilentlyContinue
-            throw "YouthLM API exited during startup. $stderr"
+            throw "YouthLM API exited during startup. Review the saved API error log."
         }
         try {
             $health = Invoke-RestMethod `
@@ -174,11 +190,36 @@ try {
         throw "YouthLM API did not become healthy within $StartupTimeoutSeconds seconds."
     }
 
+    $readiness = Invoke-RestMethod `
+        -Method Get `
+        -Uri "$baseUrl/ready" `
+        -TimeoutSec 10
+    if ($readiness.status -ne "ready") {
+        throw "YouthLM API readiness checks did not pass."
+    }
+
+    $catalog = Invoke-RestMethod `
+        -Method Get `
+        -Uri "$baseUrl/v1/data-sources" `
+        -TimeoutSec 10
+    $sourceIds = @($catalog.sources | ForEach-Object { $_.source_id })
+    $requiredSourceIds = @(
+        "ntpc_population_by_age_sex_district",
+        "ntpc_unemployment_by_age_sex"
+    )
+    $missingSourceIds = @(
+        $requiredSourceIds | Where-Object { $_ -notin $sourceIds }
+    )
+    if ($missingSourceIds.Count -gt 0) {
+        throw "YouthLM shared source catalog is incomplete."
+    }
+
     Write-Host "YouthLM API ready: $baseUrl"
     & $pythonExecutable -m spikes.demo_preflight `
         --base-url $baseUrl `
         --output-directory $outputRoot `
-        --timeout-seconds $RequestTimeoutSeconds
+        --timeout-seconds $RequestTimeoutSeconds `
+        --status-only
     Require-NativeSuccess "YouthLM end-to-end demo preflight failed."
 
     Write-Host "YouthLM $Provider demo is ready."

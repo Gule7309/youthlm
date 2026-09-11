@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { safeSourceUrl } from '../source-catalog';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -21,24 +22,56 @@ type AnalysisResultPanelProps = {
   onRetry?: () => void;
 };
 
-function EChartsCanvas({ option }: { option: Record<string, unknown> }) {
+export function EChartsCanvas({
+  option,
+  className = 'h-80 w-full',
+  ariaLabel = 'YouthLM 分析圖表',
+  errorClassName = 'rounded bg-amber-50 p-3 text-xs text-amber-800',
+}: {
+  option: Record<string, unknown>;
+  className?: string;
+  ariaLabel?: string;
+  errorClassName?: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [chartError, setChartError] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let disposed = false;
+    let loading = false;
     let disposeChart: (() => void) | undefined;
-    import('../echarts-runtime').then(({ mountChart }) => {
-      if (!disposed) disposeChart = mountChart(container, option);
-    });
+    setChartError(false);
+
+    const mountWhenVisible = () => {
+      if (disposed || loading || disposeChart || container.clientWidth === 0 || container.clientHeight === 0) return;
+      loading = true;
+      import('../echarts-runtime').then(({ mountChart }) => {
+        loading = false;
+        if (disposed || container.clientWidth === 0 || container.clientHeight === 0) return;
+        disposeChart = mountChart(container, option);
+      }).catch(() => {
+        loading = false;
+        if (!disposed) setChartError(true);
+      });
+    };
+
+    const visibilityObserver = new ResizeObserver(mountWhenVisible);
+    visibilityObserver.observe(container);
+    mountWhenVisible();
+
     return () => {
       disposed = true;
+      visibilityObserver.disconnect();
       disposeChart?.();
     };
   }, [option]);
 
-  return <div ref={containerRef} className="h-64 w-full" role="img" aria-label="YouthLM 分析圖表" />;
+  return <>
+    {chartError && <p role="alert" className={errorClassName}>圖表暫時無法顯示，仍可使用資料表核對結果。</p>}
+    <div ref={containerRef} className={chartError ? 'hidden' : className} role="img" aria-label={ariaLabel} />
+  </>;
 }
 
 const FILTER_LABELS: Record<string, string> = {
@@ -50,7 +83,7 @@ const FILTER_LABELS: Record<string, string> = {
 };
 
 const FILTER_VALUE_LABELS: Record<string, string> = {
-  all: '全體',
+  all: '合計（官方值）',
   female: '女性',
   male: '男性',
 };
@@ -72,6 +105,7 @@ function formatFilterValue(value: SourceFilterValue): string {
 
 function SourceTrace({ source }: { source: AnalysisSourceView }) {
   const version = source.datasetVersion;
+  const sourceUrl = source.source_url ? safeSourceUrl(source.source_url) : undefined;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
@@ -79,6 +113,7 @@ function SourceTrace({ source }: { source: AnalysisSourceView }) {
         <Database className="mt-0.5 size-3.5 shrink-0 text-violet-600" />
         <div className="min-w-0">
           <p className="text-[11px] font-semibold text-slate-800">{source.title}</p>
+          {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-700 underline">查看官方原始來源 ↗</a>}
           <p className="mt-0.5 text-[10px] text-slate-500">
             {source.agency ?? '未提供機關'}
             {version?.retrieved_at ? ` · 擷取 ${version.retrieved_at.slice(0, 10)}` : ''}
@@ -115,7 +150,7 @@ function AgentTrace({ view }: { view: ChartArtifactView }) {
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-xs font-semibold text-violet-900 [&::-webkit-details-marker]:hidden">
         <span className="flex items-center gap-2">
           <ListChecks className="size-4 text-violet-600" />
-          Agent 執行紀錄{steps.length > 0 ? ` · ${steps.length} 個步驟` : ''}
+          小幫手執行紀錄{steps.length > 0 ? ` · ${steps.length} 個步驟` : ''}
         </span>
         <ChevronDown className="size-4 shrink-0 text-violet-500 transition group-open:rotate-180" />
       </summary>
@@ -135,7 +170,7 @@ function AgentTrace({ view }: { view: ChartArtifactView }) {
               {steps.map((step, index) => (
                 <li key={step.step_id} className="flex items-start gap-2 text-[11px] leading-4 text-slate-700">
                   <CheckCircle2 className={`mt-0.5 size-3.5 shrink-0 ${step.status === 'completed' ? 'text-emerald-600' : 'text-slate-400'}`} />
-                  <span><span className="font-medium">{index + 1}.</span> {step.description}</span>
+                  <span><span className="font-medium">{index + 1}.</span> {step.description}{step.status === 'skipped' ? '（已略過）' : ''}</span>
                 </li>
               ))}
             </ol>
@@ -179,7 +214,7 @@ export function AnalysisResultPanel({ execution, onRetry }: AnalysisResultPanelP
     return (
       <div className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-4 text-xs text-violet-800" role="status">
         <LoaderCircle className="size-4 animate-spin" />
-        YouthLM Agent 正在檢查資料相容性並產生分析…
+        小幫手正在檢查資料相容性並產生分析，最多等待約兩分鐘…
       </div>
     );
   }
@@ -191,6 +226,11 @@ export function AnalysisResultPanel({ execution, onRetry }: AnalysisResultPanelP
       <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800" role="alert">
         <p className="font-semibold">分析失敗 · {view.code ?? 'unknown_error'}</p>
         <p className="mt-1 leading-5">{view.message ?? 'YouthLM API 無法完成分析。'}</p>
+        {execution.moduleId && (
+          <p className="mt-2 font-mono text-[10px] text-red-600">
+            後端追蹤編號：{execution.moduleId}
+          </p>
+        )}
         {view.retriable && onRetry && (
           <button type="button" onClick={onRetry} className="mt-3 inline-flex items-center gap-1 rounded-lg bg-red-700 px-3 py-2 font-medium text-white">
             <RotateCw className="size-3.5" />
@@ -239,15 +279,15 @@ export function AnalysisResultPanel({ execution, onRetry }: AnalysisResultPanelP
       {view.kind === 'chart' && view.chartOption && <EChartsCanvas option={view.chartOption} />}
 
       {view.table && view.table.records.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="max-h-80 overflow-auto rounded-lg border border-slate-200">
           <table className="min-w-full text-left text-[11px]">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>{view.table.columns.map(column => <th key={column.name} className="whitespace-nowrap px-2 py-2 font-semibold">{column.label}</th>)}</tr>
+            <thead className="sticky top-0 bg-slate-50 text-slate-600">
+              <tr>{view.table.columns.map(column => <th key={column.name} className="whitespace-nowrap px-2 py-2 font-semibold">{column.label}{column.unit ? `（${column.unit}）` : ''}</th>)}</tr>
             </thead>
             <tbody>
               {view.table.records.map((record, rowIndex) => (
                 <tr key={rowIndex} className="border-t border-slate-100">
-                  {view.table?.columns.map(column => <td key={column.name} className="whitespace-nowrap px-2 py-2 text-slate-700">{String(record[column.name] ?? '—')}</td>)}
+                  {view.table?.columns.map(column => <td key={column.name} className="whitespace-nowrap px-2 py-2 text-slate-700">{column.name === 'sex' ? FILTER_VALUE_LABELS[String(record[column.name])] ?? String(record[column.name] ?? '—') : String(record[column.name] ?? '—')}</td>)}
                 </tr>
               ))}
             </tbody>

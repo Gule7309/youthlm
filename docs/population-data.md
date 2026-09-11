@@ -15,6 +15,16 @@ stored in `data/ntpc_population_by_age_sex_district.metadata.json`. The source f
 contains 2,250 rows: 25 years, New Taipei City plus 29 districts, and official
 all/male/female rows.
 
+Run the repository-wide, fail-closed audit before a release:
+
+```powershell
+uv run --frozen python -m app.data_quality
+```
+
+The audit checks the pinned hash, exact schema, row count, full dimension
+coverage, duplicates, numeric cells, age-band reconciliation, sex totals, and
+city-versus-district totals without changing official values.
+
 ## Query dimensions
 
 | Field | Supported values |
@@ -51,6 +61,13 @@ male and female rows. Geography is available only at city and district level.
 The published age bands cannot represent exact ages 18–35: ages 18–19 are part of
 15–19, while age 35 is part of 35–39. YouthLM may analyze whole published bands,
 such as 20–34, but must narrow or refuse an exact 18–35 claim.
+
+The official 2013 rows for 樹林區、鶯歌區、汐止區 (all/male/female) have a
+published age-band sum smaller than the total population. The difference is
+concentrated in the `5-9` cell and also explains the 2013 city-versus-district
+reconciliation difference for that band. YouthLM preserves the official bytes,
+reports this as a data-quality warning, and rejects queries that combine 2013,
+`5-9`, and any of those three districts. It does not invent corrected values.
 
 The checked-in version is immutable. A future source refresh creates a new hash and
 dataset version instead of silently changing an existing analysis.

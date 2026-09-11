@@ -25,6 +25,12 @@ AnalysisRequest
 The request sends only `upstream_module_ids`; it never sends prior results.
 Optional `source_selections` supplies raw data source IDs and source-specific
 filters. Raw source selection and prior module context are separate semantics.
+The current `0.1.0` runtime accepts at most one raw source selection per analysis
+module because one `AnalysisResult` does not yet combine multiple datasets; a
+larger list receives `422 dataset_error` before the model runs. The field remains
+an array so a later contract checkpoint can add an explicit join plan without
+mixing Canvas IDs into the API. Multiple completed analysis modules can already
+be combined as presentation inputs.
 The API resolves upstream IDs from local SQLite using the composite project and
 module identity. Missing IDs receive a structured `module_not_found` response
 rather than being silently ignored. Canvas coordinates and other presentation

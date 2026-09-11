@@ -30,6 +30,7 @@ function fixture(name) {
 test('Presentation Result config maps to the standalone Contract v0 request', () => {
   const request = buildPresentationRequest({
     projectId: 'project_1',
+    analyses: { analysis_1: { state: 'ready', moduleId: 'backend_run_1', projectId: 'project_1', view: { kind: 'chart', status: 'completed' } } },
     result: {
       kind: 'presentation',
       name: '板橋區青年人口趨勢',
@@ -42,7 +43,7 @@ test('Presentation Result config maps to the standalone Contract v0 request', ()
   assert.deepEqual(request, {
     contract_version: '0.1.0',
     project_id: 'project_1',
-    source_module_ids: ['analysis_1'],
+    source_module_ids: ['backend_run_1'],
     title: '板橋區青年人口趨勢',
     language: 'zh-TW',
     template_id: 'youthlm_default',

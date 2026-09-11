@@ -17,6 +17,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
+    throw "AWS CLI v2 was not found. Install it before the event-day preflight."
+}
 Write-Host (
     "Final-round provider policy: use Amazon Bedrock or SageMaker AI; " +
     "Gemini fallback is not permitted."

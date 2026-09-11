@@ -34,7 +34,7 @@ type StatusPresentation = {
 const STATUS_PRESENTATION: Record<PolicyRadarDisplayStatus, StatusPresentation> = {
   empty: {
     label: '尚無可盤點來源',
-    description: '請先新增來源，並完成檔案或公開 API 的前端基本設定。',
+    description: '請先新增來源，並完成官方資料集或自訂來源的基本設定。',
     dotClassName: 'bg-slate-400',
   },
   ready: {
@@ -49,7 +49,7 @@ const STATUS_PRESENTATION: Record<PolicyRadarDisplayStatus, StatusPresentation> 
   },
   complete: {
     label: '前端盤點完成',
-    description: '本次頁面已保留最近一次盤點；重新整理頁面後會重置。',
+    description: '最近一次盤點會隨本機草稿保存；這是資料盤點，不是 AI 政策分析或雲端備份。',
     dotClassName: 'bg-emerald-500',
   },
 };

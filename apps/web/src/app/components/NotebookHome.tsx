@@ -12,9 +12,12 @@ import {
   X,
 } from 'lucide-react';
 import type { Notebook } from '../types';
+import type { TextSize } from '../text-size';
+import { TextSizeControl } from './TextSizeControl';
 
 type NotebookHomeProps = {
   displayName: string;
+  storageNotice?: string;
   notebooks: Notebook[];
   onCreate: (name: string, description: string) => Promise<Notebook>;
   onOpen: (notebook: Notebook) => void;
@@ -22,6 +25,8 @@ type NotebookHomeProps = {
   onDuplicate: (notebook: Notebook) => void;
   onDelete: (id: string) => void;
   onLogout: () => void;
+  textSize: TextSize;
+  onTextSizeChange: (value: TextSize) => void;
 };
 
 type EditorState = {
@@ -31,6 +36,7 @@ type EditorState = {
 
 export function NotebookHome({
   displayName,
+  storageNotice,
   notebooks,
   onCreate,
   onOpen,
@@ -38,6 +44,8 @@ export function NotebookHome({
   onDuplicate,
   onDelete,
   onLogout,
+  textSize,
+  onTextSizeChange,
 }: NotebookHomeProps) {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Notebook | null>(null);
@@ -106,6 +114,7 @@ export function NotebookHome({
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
+      {storageNotice && <div role="status" className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-xs text-amber-900">{storageNotice}。僅供此瀏覽器使用，預覽登入不提供帳號安全隔離。</div>}
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
           <div className="flex items-center gap-3">
@@ -119,6 +128,7 @@ export function NotebookHome({
           </div>
 
           <div className="flex items-center gap-3">
+            <TextSizeControl value={textSize} onChange={onTextSizeChange} />
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{displayName}</p>
               <p className="text-[11px] text-slate-500">前端預覽帳號</p>
@@ -161,7 +171,7 @@ export function NotebookHome({
             </div>
             <h2 className="mt-4 text-lg font-semibold">建立第一本政策筆記本</h2>
             <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
-              筆記本建立後，就能在白板中加入來源、成果與小幫手卡片。
+              筆記本建立後，就能在白板加入來源與成果，並從右側 AI 小幫手規劃工作。
             </p>
             <button
               type="button"

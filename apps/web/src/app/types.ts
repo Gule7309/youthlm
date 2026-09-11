@@ -141,6 +141,9 @@ export type ChartArtifactView = {
 export type AnalysisExecution = {
   state: 'running' | 'ready' | 'failed';
   view?: ChartArtifactView;
+  projectId?: string;
+  moduleId?: string;
+  inputSignature?: string;
 };
 
 export type PresentationRequestPayload = {
@@ -180,6 +183,8 @@ export type PresentationArtifactView =
 export type PresentationExecution = {
   state: 'running' | 'ready' | 'failed';
   view?: PresentationArtifactView;
+  projectId?: string;
+  inputSignature?: string;
 };
 
 export type ResultKind = 'chart' | 'presentation' | null;
@@ -188,7 +193,7 @@ export type ResultConfig = {
   kind: ResultKind;
   name: string;
   sourceNodeIds: string[]; // Canvas links only; never send as registry source IDs.
-  // Presentation-only Canvas links. Result node IDs equal stored backend module IDs.
+  // Presentation-only Canvas links; resolved to the latest successful backend run IDs.
   sourceModuleIds?: string[];
   prompt: string;
 };

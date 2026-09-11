@@ -1,6 +1,67 @@
 # YouthLM 後端整合與未完成事項
 
-最後更新：2026-09-07
+最後更新：2026-09-11
+
+## 2026-09-11：最終驗收前收斂
+
+- [x] 新帳號不再 seed 缺乏資料支撐的教育／職訓數字、假檔名或 legacy transform/analysis 卡；舊草稿載入與保存時安全移除這兩種不可新增節點，保留使用者來源／成果，並將既有小幫手對話整併至右側聊天室後重算可見卡片數。
+- [x] 政策雷達新建及每次開啟筆記本皆預設收合，避免遮住卡片；保留最近紀錄並清除殘留 running，成果數同時涵蓋有效圖表與簡報連線。
+- [x] 模型 compatibility 修復：選擇 25–29 + 30–34 時驗證完整 25–34 scope；只有問題中明確且相符的年齡範圍拒絕可阻擋，不相關 broad refusal 不再造成錯誤完成。
+- [x] 兩份資料加入 hash/schema/coverage/reconciliation audit；2013 樹林／鶯歌／汐止 5–9 歲官方異常保留原值、明確警告並在分析前阻擋。失業率官方寬表的 raw→normalized mapping 已可重現。
+- [x] 前端正式相依已移除未使用 react-router、升級 ECharts 6.1.0 與 Vite 6.4.3；目前完整 npm audit 為 0。
+- [x] 已新增 same-origin 單容器骨架及 FastAPI 靜態前端服務測試；正式 image/AWS/Bedrock 尚未實機通過，原因見根目錄 [BACKEND_TODO](../../BACKEND_TODO.md)。
+- [x] 最終自動品質閘門通過：Python 193/193、前端 96/96、Ruff、typecheck、production build、資料 audit、diff whitespace 與 npm audit 0；同源 production smoke 的首頁、JS/CSS、health、ready 與資料目錄皆為 200。
+- [x] 新增導引式主流程：空白頁直接選官方資料、來源卡建立已連結圖表、完成圖表建立已連結簡報；手動端點拖曳仍保留。快捷卡片固定沿來源→圖表→簡報水平排列，小流程全覽上限為 100%。
+- [x] 第一本筆記本會顯示四步操作教學，涵蓋流程、來源、小幫手與卡片操作；可略過、完成後直接選資料、從頁首重開，完成狀態保存在本機草稿。筆記本預設收合左右面板，政策雷達只在已有可盤點內容後顯示。
+- [x] 已完成的成果直接在白板卡片顯示：圖表採實際 ECharts option，無 visualization 時改用實際資料表；簡報顯示依真實標題產生的封面摘要、分析數量、PPTX 完成狀態與檔案大小。右側設定仍保留完整資料、來源、警告與下載操作。
+- [x] 全站提供小／中／大／特大四檔文字大小；原 14px 為小，rem 介面與固定 8–11px 輔助文字會一起按比例調整。設定以獨立 localStorage preference 保存，不混入筆記本草稿。
+- [ ] PresentationResult 尚無頁數、投影片圖片或 PDF 預覽網址；真正逐頁簡報縮圖／線上預覽須由後端新增契約與產物，前端目前不假造投影片內容。
+- [x] 最終 Playwright fixture 流程已完成來源→圖表→簡報、PPTX 簽章／hash 下載驗證、雷達／縮放／空白收合、窄螢幕、重新登入保存，以及官方異常範圍拒絕。重開筆記本現在會自動全覽負座標／畫面外卡片；收合 inspector 使用真正 inert，ECharts 隱藏容器不再產生零尺寸警告。
+- [ ] 最後只做一次 [FRONTEND_ACCEPTANCE](../../FRONTEND_ACCEPTANCE.md) 人工驗收；本輪未 commit／push。
+
+## 2026-09-10：白板端點拖曳連線
+
+- [x] 修正來源卡實際 280px、連線計算 320px 所造成的約 40px 錯位；來源／成果卡與 SVG 共用固定像素尺寸及端點座標，縮放、平移與移動卡片後仍貼齊。
+- [x] 支援 `來源 → 空白／圖表` 與 `圖表 → 空白／簡報` 實際拖曳；空白成果自動轉型，單圖來源重接採取代語意，多個圖表可追加到同一簡報。
+- [x] 來源線及目標為藍色，分析到簡報為紫色；30% 全覽時保留 22px 螢幕命中邊界。支援 Esc、未命中、不合法方向及重複連線提示。
+- [x] 關係仍保存於 `sourceNodeIds`／`sourceModuleIds`，外部拖曳後 inspector 同步；來源重接會清除過期圖表及下游簡報執行結果。本機草稿另拒絕懸空來源引用。
+- [x] 小幫手多來源需求改成每個來源各一張單來源圖表草稿，符合 Contract v0。
+- [x] 前端 85/85、typecheck、build，完整 Python 105/105、Ruff 與 diff whitespace 檢查通過；Playwright 完成兩段拖曳、低縮放命中、卡片移動、分析、PPTX 與本機還原，Console 0 error／warning。
+- [ ] 等待使用者依根目錄 [FRONTEND_ACCEPTANCE](../../FRONTEND_ACCEPTANCE.md) 人工驗收；未 commit／push。
+
+## 2026-09-10：分析契約穩定性修正
+
+本輪處理實際出現的 `agent_protocol_error`。正式 Agent 會在模型漏做相容性檢查或 deterministic query 時於同一對話補正；篩選陣列換序不再誤判，但少選、多選、改來源或改年度仍會拒絕。錯誤 UI 與後端 log 可用同一 backend module ID 對照。
+
+Contract v0 現階段每張分析圖表只支援一個 raw source，因此成果設定已改為單選，request builder 與 API 也有防線；多份已完成分析仍可交由簡報彙整，真正跨資料集 join 尚未完成。驗收 fixture 已能依人口／失業率任意合法 filters 執行正式資料工具。Windows SQLite 連線占用亦已修正；完整 Python 105/105、前端 85/85、Ruff、typecheck、build 與動態瀏覽器流程通過。真實模型與 AWS 仍須重啟／部署後另驗，詳見 [根目錄狀態入口](../../BACKEND_TODO.md)。
+
+## 2026-09-09：整合交付
+
+本輪已整合 main `83b37f5` 的 Source → Analysis → Presentation，並完成來源多選篩選器、分析 run ID 分離、來源／設定更新使下游失效、遲到回應防護、停止等待、API 逾時與中文錯誤、PPTX 驗證下載、簡報捷徑、成果面板閱讀優化及本機草稿保存。
+
+完整變更、驗證範圍、P0/P1 工作分工集中於 [根目錄 BACKEND_TODO](../../BACKEND_TODO.md)；人工步驟見 [FRONTEND_ACCEPTANCE](../../FRONTEND_ACCEPTANCE.md)。本機 8000 實測模型未設定（503）；獨立 fixture 已跑通圖表／PPTX，但不代表真實模型或 AWS 驗收。未 commit／push。
+
+以下日期為歷史紀錄，反映當日狀態；不得把舊的「簡報停用／分析未接」當成 9/9 的現況。模組清單已同步本輪主要功能，雲端保存、真實登入、清洗、對話與雷達分析仍未完成。
+
+## 2026-09-07：官方資料目錄與篩選器（歷史）
+
+基於已合併 PR #12 的 main `9c8395d`，在 `codex/source-catalog` 實作一項功能，完成後等待人工檢查。本步不修改後端、contracts、原始 CSV，不呼叫 AI 或執行分析；尚未 commit／push。
+
+- [x] 「官方資料集」讀取真實 `GET /v1/data-sources`，包含載入、空目錄、HTTP／網路／格式錯誤、15 秒逾時及手動重試；取消已離開面板的請求，沒有 fixture 備援。
+- [x] 依目錄設定年度、年齡、性別；人口提供行政區，全市失業率不帶 `geographies`、不提供不存在的男女合計。切換資料集重設不相容條件。
+- [x] 驗證必要條件、有效年度與人口 500 筆上限；顯示資料機關、單位、取得日、官方連結及後端已提供的限制。
+- [x] SourceConfig 新增 `kind: registry`；明確保存 Registry ID／filters，與 Canvas ID 分開，複製深拷貝、來源方式切換及既有連線判斷一併處理。官方快照不顯示尚未實作的「自動清理」。
+- [x] `npm run check` 通過型別、建置與 49 個測試；新增 18 個測試涵蓋目錄、篩選、HTTP／取消／逾時及 Registry 保存。
+- [x] Playwright 使用真實本機 FastAPI 目錄驗證兩份來源、篩選保存／關閉重開、切換資料集重設、錯誤年度／空勾選／500 筆防護及點空白處收合保留草稿。另以瀏覽器攔截模擬 HTTP 503、空目錄，確認禁用儲存及重試後保留條件，再恢復真實服務。正常流程 Console 無錯誤；故障注入產生 1 筆預期 HTTP 503 紀錄，沒有應用程式例外。請求僅有資料目錄 GET，沒有分析／模型呼叫。
+- [ ] 使用者人工驗收；步驟見 [前端 README](./README.md#本次官方資料目錄與篩選器)。目前保存仍只在 React 記憶體，不代表分析結果或白板已存入後端。
+- [ ] 下一步才接 `POST /v1/analysis`、Chart Artifact 與真實圖表；之後再接簡報生成／下載。
+- [ ] 正式環境 API base URL、HTTPS、CORS／同源反向代理仍待部署確認。開發 Vite `/v1` 代理至 `127.0.0.1:8000`；公開 `VITE_API_BASE_URL` 只能放 API 位址，不能放模型或 AWS 金鑰。
+
+### 上一輪稽核發現，交由後端／資料負責人處理
+
+- [ ] Windows SQLite 連線釋放：核心＋API 測試實跑 139 通過、8 失敗，均為 SQLite 暫存檔清理的 WinError 32；`SQLiteModuleStore` 使用交易 context manager 後未明確關閉連線，獨立檢查確認 `get_result` 返回後連線仍開啟。需修正後重測，本步未更動。
+- [ ] 人口 CSV 品質：2013 年樹林、鶯歌、汐止的合計／男／女共 9 列，年齡細項加總與總人口不符，差異集中 5–9 歲。重新下載官方 CSV 與 repo 快照一致；保留原檔、回查原始統計，勿自行補值。此問題尚未寫入後端 `known_limitations`，本步只呈現 API 已提供的警告，未假裝已修復或自動排除。
+- [ ] 將上述品質檢查加入可重跑的資料驗收；教育程度／起薪資料蒐集、地圖邊界、白板永久保存及 AWS 真實驗收仍未完成。
 
 這份文件追蹤前端、後端、AI、資料保存、原始資料與 AWS 部署的交接狀態。「後端已有實作」不等於「前端已串接」，也不等於「已在比賽 AWS 環境驗證」。每完成一個功能，都應同步更新狀態、驗證方式與負責人；正式契約的變更另由團隊確認。
 
@@ -8,7 +69,7 @@
 
 - 正式前端：`apps/web/`；FastAPI application：`apps/api/`；Python 核心：`app/`。
 - 正式介面以 [API 契約](../../docs/api-contract.md)、[前端整合契約](../../docs/frontend-integration-contract.md) 及 [contracts](../../contracts/README.md) 為準，版本為 `0.1.0`（Contract v0）。
-- 最新同步基準已包含 [PR #13 簡報契約](https://github.com/Gule7309/youthlm/pull/13)、[PR #14 資料目錄 fixture](https://github.com/Gule7309/youthlm/pull/14)、[PR #15 簡報生成](https://github.com/Gule7309/youthlm/pull/15)、[PR #16 示範驗收工具](https://github.com/Gule7309/youthlm/pull/16) 與 [PR #17 Windows 簡報檔案路徑修正](https://github.com/Gule7309/youthlm/pull/17)。簡報後端與 PPTX 下載已存在，但前端尚未串接；不能把本次同步視為真實模型或 AWS 驗收。
+- 最新同步基準已包含 [PR #13 簡報契約](https://github.com/Gule7309/youthlm/pull/13)、[PR #14 資料目錄 fixture](https://github.com/Gule7309/youthlm/pull/14)、[PR #15 簡報生成](https://github.com/Gule7309/youthlm/pull/15)、[PR #16 示範驗收工具](https://github.com/Gule7309/youthlm/pull/16) 與 [PR #17 Windows 簡報檔案路徑修正](https://github.com/Gule7309/youthlm/pull/17)。簡報後端、PPTX 下載與前端流程已於後續整合完成；不能因此把真實模型或 AWS 視為已驗收。
 
 ## 2026-09-07：Tooltip 零值與 PR 空白修正
 
@@ -80,33 +141,35 @@
 - [x] 筆記本列表 UI。
 - [x] 建立、重新命名、建立副本、刪除與開啟筆記本的前端互動。
 - [x] 新筆記本的空白白板狀態。
+- [x] 第一本筆記本首次開啟導覽、略過／上一步／下一步／開始選資料，以及頁首重新開啟入口；是否看過會隨本機草稿保存。
 - [x] 從白板返回筆記本列表。
 - [x] 現有示範白板可拖曳節點、縮放與移動畫布。
 - [x] 支援按住 `Ctrl` 搭配滑鼠滾輪，以游標所在位置為中心縮放白板。
 - [x] 卡片設定面板開啟時，點擊白板空白處可直接收合，且保留尚未儲存的表單內容。
 - [x] 來源卡片可由左側點擊新增或拖入白板，並可移動、選取、設定與刪除。
 - [x] 成果卡片可由左側點擊新增或拖入白板，並可移動、選取、設定與刪除。
-- [x] 圖表成果可設定名稱、Prompt 與多個來源並顯示連線；簡報選項停用並說明需使用分析成果，沒有假裝已完成生成。
-- [x] 小幫手卡片可由左側點擊新增或拖入白板，並可移動、選取與刪除。
-- [x] 小幫手可保存需求並依目前來源產生 1 項圖表設定草稿；不再產生簡報草稿，不執行 AI 分析或產生成果內容。
+- [x] 圖表成果可設定名稱、Prompt 與一個原始來源；可用端點拖曳建立藍色來源線。簡報可彙整一個或多個已完成分析，並以紫色連線顯示。
+- [x] AI 小幫手固定於筆記本右側聊天室，不再佔用或干擾流程白板；舊版小幫手卡片的對話與草稿會整併保留。
+- [x] 小幫手顯示目前畫布來源／成果摘要，可保存需求，並為每個唯一來源各產生一項待確認的單一來源圖表草稿；不產生簡報草稿，也不執行 AI 分析或產生成果內容。
 - [x] 政策雷達固定顯示於白板，可收合、執行前端盤點、保留本次頁面最近一次紀錄，並在來源／成果設定變更後提示重新盤點。
-- [x] 每本筆記本在本次瀏覽器工作階段內各自保留白板卡片與設定。
+- [x] 每本筆記本在本機草稿中各自保存白板卡片與設定；重新整理後以相同預覽電子郵件可還原。
 - [x] 來源設定支援檔案 metadata 與公開 API 網址的前端表單及驗證。
-- [x] `npm run check` 已通過型別檢查、建置及 31 個測試（6 個圖表交接、15 個白板狀態、4 個簡報分界、6 個 Tooltip 渲染）；先前型別檢查步驟亦已完成乾淨安裝與上述瀏覽器回歸。
+- [x] `npm run check` 已通過型別檢查、建置及 85 個測試，涵蓋圖表／簡報契約、白板狀態、連線規則、草稿、錯誤韌性、來源目錄與 Tooltip；另完成瀏覽器回歸。
 
-目前的帳號、筆記本與白板資料都只存在 React 記憶體中，重新整理頁面後會重置。後端另有 SQLite 分析模組保存，但前端未串接，且它不保存帳號、筆記本清單或白板配置。
+預覽登入不是驗證；筆記本／已儲存白板設定與已送出對話草稿可保存在本機，重整後用相同電子郵件還原。分析結果不存本機，須重新執行。後端 SQLite 保存分析模組，尚無帳號／Notebook／白板 CRUD 與雲端還原。
 
 ## 功能開發總覽
 
 | 模組 | 前端現況 | 後端／資料已有 | 尚未完成 |
 | --- | --- | --- | --- |
 | 登入、註冊與筆記本 | 表單、列表與操作原型 | 分析 API 有 project 範圍，但不是登入權限 | 真實驗證、Notebook CRUD、使用者權限與恢復登入 |
-| 來源卡片 | 拖放、設定及摘要；檔案僅 metadata，網址不連線 | 兩份官方快照、Source Registry、`GET /v1/data-sources`、確定性查詢與相容性檢查 | 串接目錄、篩選／預覽；通用上傳、清理、抓取與更新 pipeline |
-| 圖表成果 | 設定 UI；adapter 與六個測試已合併，未接 React | `POST /v1/analysis` 回傳結構化資料、圖表規格、警告與引用 | Source → Chart 請求、四種回應狀態、實際圖表／表格、來源追溯與匯出 |
-| 簡報成果 | 選項停用，明示需完成／部分完成分析成果；舊簡報卡不接原始來源 | 簡報契約、同步生成服務及 project-scoped PPTX 下載已合併至 main | 前端真實分析模組選取、生成／下載串接與預覽；PDF 另待設計 |
-| 小幫手 | 訊息及固定操作草稿，未呼叫 AI | Research Agent、工具迴圈、Gemini／Bedrock adapters | Notebook 對話生命週期、串流／停止、畫布操作工具與紀錄保存 |
-| 政策雷達 | 固定面板、卡片數量盤點與本次頁面最近紀錄 | 可重用既有分析能力，但無專用雷達服務 | 雷達契約、真實政策分析、失敗處理、最近成功結果永久保存 |
-| 分析／白板保存 | 白板仍為 React 記憶體 | SQLite 保存 `(project_id, module_id)` 分析結果並解析上游模組 | 整本筆記本／節點／連線／對話保存及還原；雲端持久化 |
+| 來源卡片 | 官方目錄、單張卡片內的維度複選及分析請求已串接；檔案僅 metadata，網址不連線 | 兩份官方快照、Source Registry、確定性查詢與相容性檢查 | 通用上傳、預覽、清理、抓取與更新 pipeline |
+| 圖表成果 | Contract v0 每張圖表一個 raw source；端點拖曳、真實請求、ECharts／表格、狀態、警告、篩選／來源／版本及遲到回應防護 | `POST /v1/analysis` 與模組保存 | 真實模型／AWS 驗收、真正跨資料集分析、分析歷史、圖片／CSV 匯出 |
+| 簡報成果 | 選取 completed／partial 分析、生成、驗證下載與已連結捷徑 | 同步生成及 project-scoped PPTX 下載 | 線上預覽、PDF、檔案授權與雲端保存 |
+| 小幫手 | 筆記本右側聊天室、畫布上下文摘要、訊息及需確認的固定操作草稿，未呼叫 AI | Research Agent、工具迴圈、Gemini／Bedrock adapters | Notebook 對話生命週期、串流／停止、畫布操作工具與紀錄保存 |
+| 白板註記 | 尚未實作；目前只呈現來源→圖表→簡報流程 | 無專用契約 | 文字、畫筆、選取／刪除、復原／重做、持久化及 AI 可讀取的註記格式 |
+| 政策雷達 | 固定面板、卡片數量盤點與本機最近紀錄 | 可重用既有分析能力，但無專用雷達服務 | 雷達契約、真實政策分析、失敗處理、最近成功結果永久保存 |
+| 分析／白板保存 | 已保存白板設定可在本機還原；分析仍需重跑 | SQLite 保存 `(project_id, module_id)` 分析結果並解析上游模組 | 整本筆記本／節點／連線／對話保存及還原；雲端持久化 |
 | AWS | 尚未完成部署串接 | Bedrock adapter、provider 切換文件及 smoke／preflight 工具 | 比賽帳號／Region／模型權限確認、真實雲端驗證與整合部署 |
 
 ## 0. 登入、註冊與筆記本後端
@@ -140,7 +203,7 @@
 
 ### 前端進度
 
-- [x] 左側工具列提供「來源、成果、小幫手」三個主要入口。
+- [x] 左側工具列提供「來源、成果」兩個白板入口；小幫手固定由右側聊天室進入。
 - [x] 來源圖示可點擊新增，也可拖入白板指定位置建立空白來源卡片。
 - [x] 來源卡片摘要：名稱、類型、設定狀態、啟用狀態與自動清理選項。
 - [x] 來源設定側邊面板。
@@ -148,19 +211,21 @@
 - [x] 公開 API 網址設定與 `http/https` 格式驗證；目前不會真正連線。
 - [x] 卡片在同一本筆記本的本次工作階段內可保存，切換筆記本不會互相混用。
 - [x] 未儲存設定離開前提示、來源刪除確認，以及新增卡片的基本避讓定位。
-- [ ] 串接 `GET /v1/data-sources`，顯示已安裝的兩份官方資料；將目前「預設資料集尚未蒐集」的原型文案改為符合實際狀態。本次文件校正尚未改 UI 文案。
-- [x] SourceConfig 已預留 `registrySourceId` 與 JSON filters；成果／小幫手的 Canvas 連線欄位已改為 `sourceNodeIds`。目前只是前端欄位與狀態分離，未建立 API request mapper。
+- [x] 串接 `GET /v1/data-sources`，顯示已安裝官方資料與篩選器；原型「尚未蒐集」文案已移除。本步僅讀取目錄及保存前端篩選。
+- [x] 官方資料集篩選器已保存 `registrySourceId` 與 JSON filters；成果／小幫手的 Canvas 連線欄位為 `sourceNodeIds`，並已建立 Contract v0 分析 request mapper。
 - [x] 複製筆記本只重新映射卡片 ID，Registry ID 保留、filters 深拷貝；來源名稱／選項編輯保留綁定，資料方式／檔案 metadata／API URL 變更時清除舊綁定與 filters。
-- [ ] Source → Chart 串接時驗證 Registry 來源及 filters，並處理多張卡指向同一資料集的情況；目前後端不接受重複 `source_id`，不可直接逐卡送出或自動混合不同篩選。
+- [x] Source → Chart 執行前驗證 Registry 來源及 filters；每張圖表只送一張來源卡，因此不會自動混合重複 `source_id` 或不同篩選。
 - [ ] 真正檔案上傳後以後端來源版本／內容識別判斷換檔；目前 UI 只保存 metadata，不能證明檔案內容相同。
 - [ ] 顯示實際筆數、資料版本、同步時間與上傳進度。
-- [ ] 資料預覽、欄位勾選與篩選介面。
+- [x] 官方資料的年度／年齡／性別／地區篩選介面，已由分析 API 執行確定性查詢。
+- [ ] 真實資料預覽與欄位勾選介面。
 - [ ] 缺值、重複值、資料型別與欄位重新命名介面。
-- [ ] 年齡範圍與相容性提示；沒有單歲資料或必要分子／分母時，不提供無依據的精確換算。
-- [ ] 多來源合併設定。
+- [x] 顯示目錄提供的年齡級距及限制，不提供無依據的精確換算。
+- [x] 分析執行時呈現後端相容性判斷、結構化 warnings、實際 filters、資料版本與來源。
+- [ ] 真正跨資料集 join／cross-source analysis 的契約、相容性與合併設定；不能用前端多選假裝完成。
 - [ ] 來源執行中的 loading、成功、警告、錯誤與重試狀態。
-- [ ] 來源卡片之間與完整的連線相容性規則；目前僅支援在成果設定中選擇來源並顯示 `來源 → 成果` 連線。
-- [ ] 防止節點形成循環依賴。
+- [x] 現行類型規則只允許 `來源 → 圖表 → 簡報`，其他方向明確拒絕；端點拖曳與成果設定共用同一關係欄位。
+- [x] 現行三層單向類型規則不允許反向或同層連線，因此不會形成循環依賴。
 
 目前「等待後端處理」是刻意的前端狀態。選擇檔案不會讀取或上傳內容；儲存公開 API 也不會發出網路請求。
 
@@ -246,54 +311,58 @@
 
 - [x] 成果圖示可點擊新增，也可拖入白板指定位置。
 - [x] 空白成果卡片與來源選擇。
-- [x] 可選擇多張來源卡片，並在白板顯示多條 `來源 → 成果` 連線。
-- [x] 圖表類型可選，簡報類型明示尚未提供並停用。
+- [x] 每張圖表可選擇或拖入一張來源卡片，並在白板顯示一條 `來源 → 圖表` 藍色連線；重接採取代語意。
+- [x] 圖表及簡報類型可選；簡報只接已完成／部分完成分析。
 - [x] 成果名稱與 Prompt 設定。
 - [x] 已保留 main 的 [Chart Artifact adapter](./src/chart-artifact.js) 與 [六個測試](./test/chart-artifact.test.js)；回應可轉為 `chart`／`table`／`blocked`／`error`。
-- [ ] 將 adapter 接入 React 成果卡與真實 analysis API；ECharts 尚未安裝，現有 adapter 只產生繪圖設定，不代表 UI 已繪製後端結果。
-- [x] 已停止簡報直接選原始來源及小幫手建立簡報草稿，明示不可用及正確輸入分界。
-- [ ] 真實分析結果串接後，再依獨立簡報契約選取已保存 completed／partial 模組，處理 project 權限與下載；目前未實作分析成果選擇器。
+- [x] adapter 已接入 React 與 analysis API，ECharts 動態載入、失敗時仍保留資料表。
+- [x] 簡報不直接選原始來源；小幫手仍只建立圖表草稿，已完成分析可另建簡報。
+- [x] 分析成果選擇器、生成、下載及過期失效已完成；project 範圍不是使用者授權，授權仍待後端。
 - [ ] 圖表設定：指標、維度、篩選與圖表類型。
 - [ ] 地圖分級設色圖與點位熱點圖。
 - [ ] 簡報頁數、用途、受眾與重點設定。
-- [ ] 成果預覽、重新生成、編輯、下載與複製。
+- [x] 圖表預覽、重新分析、簡報生成與下載。
+- [ ] 簡報線上預覽、投影片編輯、雲端成果歷史。
 - [ ] 每項成果顯示來源、篩選、生成時間與限制。
-- [ ] 依 [圖表交接規則](../../docs/frontend-chart-artifact.md) 顯示引用、資料版本、可展開來源紀錄及無障礙資料表；`partial` 保留警告，`blocked` 不繪圖，API 錯誤僅在 `retriable=true` 時提供重試。
-- [ ] 支援 `來源 → 圖表成果 → 簡報成果` 的單向連線。
+- [x] 依 [圖表交接規則](../../docs/frontend-chart-artifact.md) 顯示引用、資料版本、可展開來源紀錄及無障礙資料表；`partial` 保留警告，`blocked` 不繪圖，API 錯誤僅在 `retriable=true` 時提供重試。
+- [x] 支援 `來源 → 圖表成果 → 簡報成果` 的單向連線。
 
-目前成果卡片只把類型、名稱、Canvas 來源節點 ID 與 Prompt 保存在 React 狀態，重新整理後會重置。後端已有結構化分析與圖表規格，但這些結果尚未進入 UI；圖表數值必須來自 `result_data.records`，不能從 AI 摘要猜測。簡報則是另一條尚未提供的生成流程，不應把它視為切換圖表類型即可完成。
+成果設定保存在本機草稿，分析結果由真實 API 回應供 UI 顯示；數值只來自 `result_data.records`，不從摘要猜測。簡報獨立引用最新完成的後端 run ID。重整不還原分析結果，必須重新分析。
 
 ### 後端與生成服務
 
 - [x] `POST /v1/analysis` 直接回傳 Contract v0 `AnalysisResult`，包含結構化查詢資料、可選的 visualization、摘要、警告、來源、版本與 provenance；不是圖片或舊版 `AgentResult` 包裝。
 - [x] 已定義 `completed`／`partial`／`blocked` 分析狀態及非 2xx `ErrorResponse`，並提供 [正式整合 fixtures](../../contracts/fixtures/frontend-integration/)。
 - [x] SQLite 以 `(project_id, module_id)` 保存有效 `AnalysisResult`，需要上游資料時再讀出並轉為 `ModuleContext`；同一 key 更新目前結果，不是獨立的上下文快照或完整版本歷史。
-- [x] 獨立簡報服務已合併：`POST /v1/presentations` 使用已保存的 completed／partial 分析模組，確定性產生可編輯 PPTX，成功回傳 HTTP 201／ready `PresentationResult`；不直接接 raw Source Nodes，也不另外呼叫模型。前端未串接。
+- [x] 獨立簡報服務已合併：`POST /v1/presentations` 使用已保存的 completed／partial 分析模組，確定性產生可編輯 PPTX，成功回傳 HTTP 201／ready `PresentationResult`；不直接接 raw Source Nodes，也不另外呼叫模型。前端已串接。
 - [x] 已有 project-scoped PPTX 生成及下載端點，見 [HTTP API](../../docs/http-api.md)；project 範圍不是登入授權，檔案仍為本機儲存。
 - [ ] PDF 匯出／預覽與雲端檔案保存。
 - [ ] 圖表圖片或 SVG 匯出。
-- [ ] UI 重新分析流程、成果版本與完整歷史；既有 SQLite 最新分析結果保存不涵蓋這些功能。
-- [ ] Notebook／成果編輯設定的名稱、Prompt 與畫布連線保存；不要把這項與 AnalysisResult 已有的 filters、來源及版本混為一談。
-- [ ] 前端使用既有 `download_url`；補齊雲端檔案期限及使用者權限控制，不把 project-scoped 下載當成身分驗證。
-- [ ] 前端串接已有的分析狀態／錯誤格式與 [簡報契約](../../docs/presentation-contract.md)；不自訂非同步 job／polling API。
+- [x] UI 重新分析流程與每次獨立 run ID。
+- [ ] 成果版本瀏覽、完整歷史與過期分析／產物清理。
+- [ ] Notebook／成果名稱、Prompt 與畫布連線的**雲端**保存；目前已有本機草稿，不要把它與 AnalysisResult 已有的 filters、來源及版本混為一談。
+- [x] 前端使用並驗證既有 `download_url`。
+- [ ] 雲端檔案期限與使用者權限，不把 project-scoped 下載當成身分驗證。
+- [x] 前端串接已有的分析狀態／錯誤格式與 [簡報契約](../../docs/presentation-contract.md)；不自訂非同步 job／polling API。
 
-## 3. 小幫手卡片
+## 3. 右側 AI 小幫手
 
 ### 前端進度
 
-- [x] 小幫手圖示可點擊新增，也可拖入白板指定位置。
-- [x] 小幫手卡片可移動、選取與刪除。
-- [x] 提供本機訊息顯示、需求輸入框與建議問題；送出後只產生固定的前端操作草稿，不是 AI 回覆。
+- [x] 每本筆記本固定提供一個右側聊天室，不需在白板新增小幫手卡片。
+- [x] 舊草稿若有多張小幫手卡，會整併訊息與操作草稿成一段側欄對話，且不計入白板卡片數或全覽範圍。
+- [x] 提供本機訊息顯示、需求輸入框、建議問題與目前來源／成果摘要；送出後只產生固定的前端操作草稿，不是 AI 回覆。
 - [x] 顯示預計建立的圖表草稿及來源數量；簡報草稿不再提供，並顯示限制說明。
-- [x] 可由操作草稿建立成果卡片、沿用 Canvas 來源節點 ID，並顯示前端操作摘要；不會產生圖表或簡報內容。
-- [x] 已送出的訊息與操作草稿可隨筆記本白板狀態保留至本次頁面使用期間；重新整理後仍會重置。
+- [x] 操作草稿須經使用者確認，才會建立已連結成果卡片並顯示前端操作摘要；不會產生圖表或簡報內容。
+- [x] 已送出的訊息與操作草稿隨本機筆記本保存；未送出的輸入及真實 AI 對話還原仍不在此範圍。
 - [ ] 顯示目前對話可使用的來源與既有成果詳細清單。
 - [ ] 停止生成、串流回應、loading、失敗與重試狀態。
 - [ ] 刪除、覆蓋或大量修改前的確認畫面。
 - [ ] 回答中的來源引用可展開查看。
 - [ ] 透過自然語言執行上傳、來源全選、篩選、清理與修改卡片等操作。
+- [ ] 讀取文字／畫筆等白板註記並納入討論；需先定義可序列化格式、權限與上下文大小限制。
 
-目前小幫手不會呼叫模型、讀取或分析來源內容，也不會執行上傳、篩選與資料清理。送出文字只產生固定操作草稿；「建立成果草稿」只建立類型、名稱、Prompt 與 Canvas 來源節點 ID。後端已有研究分析工具，不代表小幫手已串接；圖表需接現有分析契約，簡報則仍待獨立服務。
+目前小幫手不會呼叫模型、讀取或分析來源內容，也不會執行上傳、篩選與資料清理。送出文字只產生固定操作草稿；「建立成果草稿」只建立類型、名稱、Prompt 與 Canvas 來源節點 ID。圖表與簡報 UI 已接既有契約，但後端研究 Agent 尚未成為 notebook-scoped 對話服務。
 
 ### AI 與工具呼叫
 
@@ -332,7 +401,7 @@
 - [ ] 串接後端後補上真正的分析成功、失敗、錯誤訊息與重試狀態。
 - [ ] 顯示實際使用的資料版本、篩選快照、來源引用與分析限制。
 - [ ] 顯示後端產生的趨勢、資源落差、觀察議題、政策方向與限制內容。
-- [ ] 將最近一次成功結果永久保存；目前重新整理頁面或重新登入後會重置。
+- [ ] 真實政策分析最近成功結果的雲端永久保存；目前本機僅保存前端盤點紀錄。
 - [ ] 後端重新分析失敗時保留最近一次成功結果，並提供失敗原因與重試入口。
 
 目前「開始盤點」只會在前端等待約一秒後保存卡片設定數量與設定版本，不會讀取檔案、不會連線公開 API、不會呼叫 AI，也不代表已完成政策分析。
@@ -351,14 +420,14 @@
 
 - [ ] 視需要評估 `@xyflow/react`；這是後續維護選項，不是目前 review 或比賽前必須重寫白板的要求。
 - [x] 已定義前端來源／成果／小幫手節點資料結構；來源到成果的關係目前存放在成果設定的 Canvas 來源節點 ID 清單，尚未建立獨立連線資料表或後端契約。
-- [x] 本次瀏覽器工作階段內可按筆記本保留節點位置、來源／成果設定、小幫手已送出訊息、操作草稿、來源到成果關係，以及政策雷達收合狀態與最近盤點紀錄；卡片大小目前固定。
-- [x] 成果／小幫手草稿已由 `sourceIds` 改為 `sourceNodeIds`，與 SourceConfig 的 `registrySourceId`／filters 分開；未新增後端 module ID 或推測 API 請求。前端資料仍只在記憶體中，無舊資料庫遷移。
+- [x] 本機瀏覽器可按預覽電子郵件與筆記本保存節點位置、來源／成果設定、右側小幫手已送出訊息、操作草稿、連線，以及政策雷達收合狀態與最近盤點紀錄；卡片大小目前固定。
+- [x] 成果／小幫手草稿使用 `sourceNodeIds`，與 SourceConfig 的 `registrySourceId`／filters 及執行期後端 module ID 分開；前端設定保存在本機草稿，沒有雲端資料庫遷移。
 - [ ] 將節點、可調整大小與獨立連線資料持久化至後端，並在重新整理或重新登入後恢復。
-- [ ] 自動儲存與儲存失敗提示。
+- [x] 本機草稿自動儲存、損壞讀取防護與儲存失敗提示；雲端同步仍未完成。
 - [ ] 工作流版本或復原機制。
 - [ ] 節點執行狀態：空白、設定中、等待、執行中、完成、警告、失敗。
-- [ ] 卡片刪除、複製與復原。
-- [ ] 卡片連線相容性驗證與循環檢查。
+- [x] 卡片刪除與筆記本複製會同步清理或重映射連線；刪除復原尚未完成。
+- [x] 已驗證現行 `來源 → 圖表 → 簡報` 相容性，類型規則排除循環。
 - [ ] 多人協作與分享列為賽後項目，除非主辦要求。
 
 白板座標、縮放、平移、尺寸與面板狀態是 UI 資料，不應塞入 `AnalysisRequest`／`AnalysisResult`。後端 [SQLite 模組儲存](../../docs/module-context-storage.md) 預設使用 `var/youthlm.sqlite3`（可由 `YOUTHLM_SQLITE_PATH` 設定），保存分析結果並支援 API 重啟後載入上游上下文；它不保存整本筆記本、登入狀態、小幫手對話或政策雷達紀錄，雲端磁碟持久化也尚待部署確認。
@@ -393,30 +462,30 @@
 
 ## AWS 部署與基礎設施
 
-已有 provider adapters、切換文件及 smoke／preflight 工具；這不代表已完成真實 Bedrock、AgentCore 或前後端整合部署。以下服務名稱是候選方案，除既有程式設定外尚未定案。
+已有 provider adapters、切換文件、smoke／preflight、repository Dockerfile 與 FastAPI same-origin 靜態服務；這仍不代表 Docker image、真實 Bedrock、AgentCore 或 AWS URL 已實機通過。最新阻斷與操作方式以根目錄 [BACKEND_TODO](../../BACKEND_TODO.md) 及 [正式環境 runbook](../../docs/final-environment-runbook.md) 為準。
 
 - [ ] 確認主辦提供的 AWS 帳號、Region 與可使用服務。
 - [ ] 確認前後端是否必須部署在同一個 AWS 帳號。
-- [ ] 確認前端託管方案；若採 S3／CloudFront，部署 Vite build 並驗證正式網址。
-- [ ] API Gateway、Lambda、ECS 或其他後端執行環境選型。
-- [ ] 確認檔案與原始資料的雲端儲存方案（例如 S3），以及 SQLite 或替代資料庫的持久化、備份與多實例限制。
+- [x] 比賽前部署骨架採單一 image：multi-stage build Vite，再由 Contract v0 FastAPI 同源提供靜態前端及 `/v1/*`；S3／CloudFront 分離託管不再是目前必要路徑。
+- [ ] 在主辦允許的 EC2／ECS 執行單一 image，配置 HTTPS ingress 並驗證正式網址；目前 Docker daemon、AWS CLI 與真實環境尚未通過。
+- [ ] 將 image 的 `/data` 掛載到可持久化儲存，維持一個 Uvicorn worker 及一個 replica，重建容器後驗證 SQLite 分析與 PPTX 仍可取回。
 - [ ] 帳號驗證是否使用 Cognito。
 - [ ] 若後續工作需要非同步處理，再決定佇列／工作服務；現有 `/v1/analysis` 不要求 Step Functions、SQS 或 job polling。
 - [ ] CloudWatch logs、錯誤監控與基本告警。
-- [x] API 已設定本機 localhost／127.0.0.1 的 3000、5173 CORS origins，供本機開發使用。
-- [ ] 依正式 `/v1/*` 路徑確認反向代理、正式 origin 的 CORS、TLS 與自訂網域，不直接採用歷史 `/api/*` 草案。
-- [ ] SPA 路由 fallback，避免重新整理子路徑時出現 404。
+- [x] API 已設定本機 origins，並支援 `YOUTHLM_CORS_ORIGINS` 精確 allowlist；單容器同源模式不需額外 CORS，分離託管禁止 wildcard。
+- [x] Bedrock readiness 支援 EC2 instance role／ECS task role，不要求容器內的 `AWS_PROFILE`；Access Code 只供 Workshop portal，不是應用或 AWS SDK 憑證。
+- [ ] 在正式 `/v1/*` 路徑確認 TLS、ingress timeout 與網址，不直接採用歷史 `/api/*` 草案。
+- [x] 單容器將 Vite build 掛載在所有 API routes 之後，根路徑與靜態 assets 已有同源 contract test。
 - [ ] 前端環境變數與 Secrets Manager／Parameter Store 分工。
 - [ ] 建立 development、staging、competition 三種環境。
 - [ ] 建立自動建置與部署流程。
 - [ ] 測試後端故障時的明示 Demo mode。
 
-前端公開環境變數候選如下；目前尚未接入 API client 或 Demo mode，名稱與行為仍需在串接時定案：
+前端 API client 已使用下列正式公開變數；單容器同源模式保持空白，只有分離託管才填 HTTPS API 根位址。Demo mode 仍未設計：
 
 ```text
-VITE_API_BASE_URL
-VITE_APP_ENV
-VITE_DEMO_MODE
+VITE_YOUTHLM_API_BASE_URL=
+# VITE_DEMO_MODE 尚未設計
 ```
 
 任何 AWS 密鑰、模型金鑰、資料庫密碼或私密 token 都不得放在 `VITE_*` 或提交到 Git。
@@ -432,7 +501,7 @@ VITE_DEMO_MODE
 - [ ] 資料刪除、帳號刪除與保留期限。
 - [ ] 前端不可顯示內部錯誤堆疊或敏感設定。
 - [x] 後端已有單元、provider、資料、API 契約及模組保存測試定義；此文件更新未重新執行，不以檔案存在宣稱本次測試通過。
-- [x] 前端 `npm run check` 已通過型別、build 及 31 個測試；6 個圖表 adapter、15 個白板 ID／狀態、4 個簡報分界、6 個 Tooltip 渲染測試。
+- [x] 前端 `npm run check` 已通過型別、build 及 85 個測試；涵蓋圖表／簡報契約、白板 ID／狀態與連線、草稿、來源目錄、錯誤韌性及 Tooltip。
 - [ ] 補新增 UI／整合案例、自動化瀏覽器測試套件與 CI 品質門檻；一次手動或瀏覽器回歸不等於已有完整 CI／E2E。
 - [ ] 1440×900 比賽展示尺寸檢查。
 - [ ] 鍵盤操作、焦點管理、對比與螢幕閱讀器標籤。
@@ -445,8 +514,8 @@ VITE_DEMO_MODE
 - [x] 已提交兩份固定資料快照、確定性查詢與正式分析 fixtures，可作為重現及離線測試基礎。
 - [ ] 依最終展示問題整理固定、可重現的完整分析結果及引用，不把現有 fixtures 當成已完成展示劇本。
 - [ ] 所有示範數字需明確標示來源；假資料需標示為 Demo。
-- [ ] 將現有 [整合 fixtures](../../contracts/fixtures/frontend-integration/) 接成明示的前端離線 Demo 流程，補足正式展示情境；目前僅供 adapter 測試。
-- [ ] Demo mode 必須明確顯示，不能偽裝成即時後端結果。
+- [x] 已提供獨立 `apps/web/test/fixture-api.py` 與 5180 前端整合模式，依正式資料工具及契約跑圖表／PPTX；不會在正常 API 失敗時偷偷 fallback。
+- [x] Fixture 摘要明示「整合測試，非 AI 回答」，不偽裝成真實模型或 AWS 結果。
 - [ ] 準備三分鐘與七分鐘兩種展示流程。
 - [ ] 比賽前完成一次全新 AWS 環境部署演練。
 
@@ -455,7 +524,7 @@ VITE_DEMO_MODE
 - [x] repository 為 `Gule7309/youthlm`；已使用前端分支及 PR #12 協作。
 - [x] 架構為 `app/` Python 核心、`apps/api/` FastAPI、`apps/web/` React／Vite；JSON schemas、Pydantic models、文件與 fixtures 用於 Contract v0 交接。
 - [x] 分析模組採本機 SQLite；Gemini／Bedrock adapters 已存在，切換方式已文件化。
-- [ ] 本輪 Tooltip／空白修正的 review／合併、後續 Source → Chart 小 PR 與比賽 release 流程。
+- [ ] 本輪白板拖曳連線與契約穩定修正的人工驗收、commit／PR／review，以及比賽 release 流程。
 - [ ] Cognito 或自建登入。
 - [ ] Notebook／白板／對話的保存設計，以及分析 SQLite 在 AWS 的儲存、備份或替代方案。
 - [ ] 比賽使用的模型、provider、權限、配額與真實執行驗收。
@@ -464,7 +533,7 @@ VITE_DEMO_MODE
 - [ ] 是否另找可精確描述 18–35 歲的資料，以及展示範圍；既有不可拆分年齡組／不造數值規則已確定。
 - [ ] 地圖邊界來源與地圖套件。
 - [x] 圖表以 AnalysisResult 結構化 records／visualization 與既有 adapter 交接。
-- [ ] 圖表匯出格式與前端簡報生成／下載串接；簡報契約、PPTX 生成及下載服務已合併，PDF 與雲端保存仍待完成。
+- [ ] 圖表圖片／CSV、PDF 與雲端成果保存；前端簡報生成及 PPTX 驗證下載已完成。
 - [ ] 檔案上傳大小與保存期限。
 - [ ] 政策雷達是否只保存最新結果或保留完整歷史。
 - [ ] 主辦 AWS 平台的服務限制與部署截止時間。
@@ -481,4 +550,4 @@ VITE_DEMO_MODE
 - 時間格式、時區與檔案網址期限。
 - 對應的前端 loading、empty、error 與 retry 狀態。
 
-有正式契約但尚未串接時，前端 mock 應使用對應 fixtures；尚無契約的功能明示「前端草稿／尚未提供」，不要假裝已執行 AI 或已保存到後端。Canvas ID 分離及簡報不可用修正已以 `24b7f5d` 推送；目前補 Tooltip 零值與空白修正，待本輪 PR 重新 review／合併後，再以獨立小 PR 串接 Source → Chart。
+有正式契約但尚未串接時，前端 mock 應使用對應 fixtures；尚無契約的功能明示「前端草稿／尚未提供」，不要假裝已執行 AI 或已保存到後端。PR #12、分析／簡報相關 PR 已合併；本輪整合端點拖曳、Source → Chart → PPTX 與本機草稿，等待人工驗收。正式目錄讀取失敗不自動切換 mock。

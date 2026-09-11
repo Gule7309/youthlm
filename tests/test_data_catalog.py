@@ -40,6 +40,9 @@ class DataSourceCatalogTests(unittest.TestCase):
         self.assertEqual(len(source.available_geographies), 30)
         self.assertEqual(source.query_tool, "query_population_dataset")
         self.assertIn("map", source.capabilities)
+        self.assertTrue(
+            any("2013年樹林區" in warning for warning in source.known_limitations)
+        )
 
     def test_catalog_preserves_source_and_youth_compatibility(self) -> None:
         source = build_default_data_source_catalog().sources[0]

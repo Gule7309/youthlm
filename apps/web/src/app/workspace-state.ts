@@ -1,4 +1,21 @@
-import type { CanvasNode, SourceConfig } from './types';
+import type {
+  CanvasNode,
+  PolicyRadarCounts,
+  PolicyRadarState,
+  SourceConfig,
+} from './types';
+
+export function createPolicyRadarState(): PolicyRadarState {
+  return { collapsed: true, running: false };
+}
+
+export function preparePolicyRadarStateForOpen(
+  state: PolicyRadarState | undefined,
+): PolicyRadarState {
+  if (!state) return createPolicyRadarState();
+  if (state.collapsed && !state.running) return state;
+  return { ...state, collapsed: true, running: false };
+}
 
 export function cloneSourceConfig(source: SourceConfig): SourceConfig {
   return structuredClone(source);
@@ -25,25 +42,62 @@ function hasSameSourceData(previous: SourceConfig | undefined, next: SourceConfi
   return false;
 }
 
-// Registry selections carry explicit IDs and filters. Local file/API drafts may
-// preserve an old binding only while their underlying identity stays unchanged.
+// Registry selection explicitly replaces the binding and filters. Local file/API
+// edits preserve bindings only while their underlying input remains unchanged.
 export function updateSourceConfig(
   previous: SourceConfig | undefined,
   next: SourceConfig,
 ): SourceConfig {
   if (next.kind === 'registry') {
-    return cloneSourceConfig({
-      ...next,
-      filters: next.filters ?? {},
-    });
+    const { file: _file, apiUrl: _apiUrl, ...registry } = next;
+    return cloneSourceConfig({ ...registry, autoClean: false, filters: next.filters ?? {} });
   }
-
   const sameSourceData = hasSameSourceData(previous, next);
   return cloneSourceConfig({
     ...next,
     registrySourceId: sameSourceData ? previous?.registrySourceId : undefined,
     filters: sameSourceData ? previous?.filters ?? {} : {},
   });
+}
+
+export function isSourceConfigured(source: SourceConfig | undefined): boolean {
+  if (source?.kind === 'file') return Boolean(source.file?.name);
+  if (source?.kind === 'api') return Boolean(source.apiUrl?.trim());
+  if (source?.kind === 'registry') return Boolean(source.registrySourceId && source.filters && Object.keys(source.filters).length);
+  return false;
+}
+
+export function getPolicyRadarCounts(workspace: CanvasNode[]): PolicyRadarCounts {
+  const sourceNodes = workspace.filter(node => node.type === 'source');
+  const resultNodes = workspace.filter(node => node.type === 'result');
+  const sourceNodeIds = new Set(sourceNodes.map(node => node.id));
+  const chartNodeIds = new Set(
+    resultNodes
+      .filter(node => node.result?.kind === 'chart')
+      .map(node => node.id),
+  );
+
+  const configuredResultCount = resultNodes.filter(node => {
+    if (node.result?.kind === 'chart') {
+      return node.result.sourceNodeIds.length > 0
+        && node.result.sourceNodeIds.every(sourceNodeId => sourceNodeIds.has(sourceNodeId));
+    }
+    if (node.result?.kind === 'presentation') {
+      const sourceModuleIds = node.result.sourceModuleIds ?? [];
+      return sourceModuleIds.length > 0
+        && sourceModuleIds.every(sourceModuleId => chartNodeIds.has(sourceModuleId));
+    }
+    return false;
+  }).length;
+
+  return {
+    sourceCount: sourceNodes.length,
+    readySourceCount: sourceNodes.filter(
+      node => node.source?.enabled && isSourceConfigured(node.source),
+    ).length,
+    resultCount: resultNodes.length,
+    configuredResultCount,
+  };
 }
 
 export function cloneWorkspaceNode(node: CanvasNode): CanvasNode {

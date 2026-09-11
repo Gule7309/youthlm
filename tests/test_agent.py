@@ -131,6 +131,78 @@ class YouthLMAgentTests(unittest.TestCase):
             "Unknown tool: not_allowed",
         )
 
+    def test_completion_guard_continues_until_required_tool_executes(self) -> None:
+        provider = FakeModelProvider(
+            [
+                ModelTurn(stop_reason="end_turn", text="The answer is 8."),
+                ModelTurn(
+                    stop_reason="tool_use",
+                    tool_calls=[
+                        ModelToolCall(
+                            call_id="call-after-correction",
+                            name="double",
+                            arguments={"value": 4},
+                        )
+                    ],
+                ),
+                ModelTurn(stop_reason="end_turn", text="Verified answer: 8."),
+            ]
+        )
+        agent = YouthLMAgent(provider, build_registry())
+        guard_calls: list[tuple[str, ...]] = []
+
+        def require_double(executions):
+            self.assertIsInstance(executions, tuple)
+            names = tuple(execution.name for execution in executions)
+            guard_calls.append(names)
+            if "double" not in names:
+                return "Call the double tool before answering."
+            return None
+
+        result = agent.run("Double 4", completion_guard=require_double)
+
+        self.assertEqual(result.answer, "Verified answer: 8.")
+        self.assertEqual(result.model_steps, 3)
+        self.assertEqual(guard_calls, [(), ("double",)])
+        self.assertEqual(
+            provider.requests[1].messages,
+            [
+                {"role": "user", "content": "Double 4"},
+                {"role": "assistant", "content": "The answer is 8."},
+                {
+                    "role": "user",
+                    "content": "Call the double tool before answering.",
+                },
+            ],
+        )
+
+    def test_completion_guard_rejection_uses_maximum_model_steps(self) -> None:
+        provider = FakeModelProvider(
+            [
+                ModelTurn(stop_reason="end_turn", text="First attempt."),
+                ModelTurn(stop_reason="end_turn", text="Second attempt."),
+            ]
+        )
+        agent = YouthLMAgent(provider, build_registry(), max_steps=2)
+
+        with self.assertRaisesRegex(
+            AgentMaxStepsError,
+            "within 2 model steps",
+        ):
+            agent.run(
+                "Use the required tool",
+                completion_guard=lambda _executions: "Use the tool first.",
+            )
+
+        self.assertEqual(len(provider.requests), 2)
+        self.assertEqual(
+            provider.requests[1].messages[-2:],
+            [
+                {"role": "assistant", "content": "First attempt."},
+                {"role": "user", "content": "Use the tool first."},
+            ],
+        )
+
     def test_rejects_empty_end_turn(self) -> None:
         provider = FakeModelProvider([ModelTurn(stop_reason="end_turn")])
         agent = YouthLMAgent(provider, build_registry())

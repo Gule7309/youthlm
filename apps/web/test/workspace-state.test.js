@@ -15,15 +15,78 @@ const { outputText } = ts.transpileModule(readFileSync(helperUrl, "utf8"), {
 });
 const {
   cloneSourceConfig,
+  createPolicyRadarState,
+  preparePolicyRadarStateForOpen,
   updateSourceConfig,
   cloneWorkspaceNode,
   duplicateWorkspaceNodes,
   removeResultNode,
   removeSourceNode,
   getPolicyRadarWorkspaceSignature,
+  getPolicyRadarCounts,
+  isSourceConfigured,
 } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 
 const REGISTRY_SOURCE_ID = "ntpc_population_by_age_sex_district";
+
+test('new policy radar starts collapsed so it cannot cover card settings', () => {
+  assert.deepEqual(createPolicyRadarState(), { collapsed: true, running: false });
+});
+
+test('opening a notebook collapses persisted radar UI without losing its latest record', () => {
+  const latestRecord = {
+    createdAt: '2026-09-11T00:50:00.000Z',
+    workspaceSignature: 'saved-signature',
+    counts: {
+      sourceCount: 1,
+      readySourceCount: 1,
+      resultCount: 2,
+      configuredResultCount: 2,
+    },
+  };
+  const persisted = { collapsed: false, running: true, latestRecord };
+  const prepared = preparePolicyRadarStateForOpen(persisted);
+
+  assert.deepEqual(prepared, { collapsed: true, running: false, latestRecord });
+  assert.notEqual(prepared, persisted);
+  assert.equal(preparePolicyRadarStateForOpen(prepared), prepared);
+  assert.deepEqual(preparePolicyRadarStateForOpen(undefined), createPolicyRadarState());
+});
+
+test('explicit registry selection replaces prior filters and removes local input metadata', () => {
+  const previous = sourceConfig();
+  const next = { ...previous, kind: 'registry', registrySourceId: 'ntpc_unemployment_by_age_sex', filters: { start_year: 2024, end_year: 2024, age_groups: ['25-29'], sexes: ['female'] } };
+  const saved = updateSourceConfig(previous, next);
+  assert.equal(saved.registrySourceId, next.registrySourceId);
+  assert.deepEqual(saved.filters, next.filters);
+  assert.equal(saved.autoClean, false);
+  assert.equal(saved.file, undefined);
+  assert.equal(saved.apiUrl, undefined);
+  next.filters.sexes.push('male');
+  assert.deepEqual(saved.filters.sexes, ['female']);
+  assert.equal(isSourceConfigured(saved), true);
+});
+
+test('registry filter edits persist while switching back to a local source clears binding', () => {
+  const original = { ...sourceConfig(), kind: 'registry' };
+  const edited = updateSourceConfig(original, { ...original, name: '修改名稱', enabled: false, filters: { ...original.filters, geographies: ['淡水區'] } });
+  assert.deepEqual(edited.filters.geographies, ['淡水區']);
+  assert.equal(edited.enabled, false);
+  assert.equal(edited.registrySourceId, REGISTRY_SOURCE_ID);
+  const local = updateSourceConfig(edited, { ...sourceConfig(), kind: 'api', apiUrl: 'https://example.test/data' });
+  assert.equal(local.registrySourceId, undefined);
+  assert.deepEqual(local.filters, {});
+});
+
+test('a new registry binding survives save and notebook copy with separate canvas IDs', () => {
+  const saved = updateSourceConfig(undefined, { ...sourceConfig(), kind: 'registry' });
+  const nodes = duplicateWorkspaceNodes([{ id: 'canvas-1', type: 'source', x: 0, y: 0, source: saved }]);
+  assert.notEqual(nodes[0].id, 'canvas-1');
+  assert.equal(nodes[0].source.registrySourceId, REGISTRY_SOURCE_ID);
+  nodes[0].source.filters.geographies.push('淡水區');
+  assert.deepEqual(saved.filters.geographies, ['板橋區']);
+  assert.equal(isSourceConfigured({ ...saved, registrySourceId: undefined }), false);
+});
 
 function sourceConfig(overrides = {}) {
   return {
@@ -104,6 +167,27 @@ function workspaceFixture() {
     },
   ];
 }
+
+test('policy radar counts configured charts and presentations without accepting dangling links', () => {
+  const workspace = workspaceFixture();
+  assert.deepEqual(getPolicyRadarCounts(workspace), {
+    sourceCount: 2,
+    readySourceCount: 2,
+    resultCount: 2,
+    configuredResultCount: 2,
+  });
+
+  const broken = workspace.map(cloneWorkspaceNode);
+  broken[2].result.sourceNodeIds = ['missing-source'];
+  broken[4].result.sourceModuleIds = ['missing-analysis'];
+  broken[1].source.enabled = false;
+  assert.deepEqual(getPolicyRadarCounts(broken), {
+    sourceCount: 2,
+    readySourceCount: 1,
+    resultCount: 2,
+    configuredResultCount: 0,
+  });
+});
 
 test("source cloning preserves registry identity without sharing nested filters or file metadata", () => {
   const original = sourceConfig();

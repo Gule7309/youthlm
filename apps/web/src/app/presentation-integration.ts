@@ -1,4 +1,5 @@
 import type {
+  AnalysisExecution,
   PresentationArtifactView,
   PresentationRequestPayload,
   ResultConfig,
@@ -7,9 +8,11 @@ import type {
 export function buildPresentationRequest({
   projectId,
   result,
+  analyses,
 }: {
   projectId: string;
   result: ResultConfig;
+  analyses: Record<string, AnalysisExecution>;
 }): PresentationRequestPayload {
   if (result.kind !== 'presentation') {
     throw new Error('只有簡報成果可以產生 PPTX');
@@ -18,7 +21,15 @@ export function buildPresentationRequest({
   const title = result.name.trim();
   if (!title) throw new Error('簡報名稱不可空白');
 
-  const sourceModuleIds = [...new Set(result.sourceModuleIds ?? [])];
+  const sourceModuleIds = [...new Set(result.sourceModuleIds ?? [])].map(id => {
+    const execution = analyses[id];
+    if (execution?.state !== 'ready' || !execution.moduleId || execution.projectId !== projectId
+      || !['completed', 'partial'].includes(execution.view?.status ?? '')
+      || execution.view?.kind === 'blocked' || execution.view?.kind === 'error') {
+      throw new Error('簡報來源分析尚未完成或已過期，請先重新執行圖表分析。');
+    }
+    return execution.moduleId;
+  });
   if (sourceModuleIds.length === 0) {
     throw new Error('簡報至少需要一個已完成的分析成果');
   }

@@ -1,6 +1,7 @@
 """Deterministic queries over versioned YouthLM public-data snapshots."""
 
 import csv
+import hashlib
 import json
 from copy import deepcopy
 from functools import lru_cache
@@ -11,6 +12,12 @@ DATASET_ID = "ntpc_unemployment_by_age_sex"
 DATA_ROOT = Path(__file__).resolve().parent.parent / "data"
 DATA_PATH = DATA_ROOT / f"{DATASET_ID}.csv"
 METADATA_PATH = DATA_ROOT / f"{DATASET_ID}.metadata.json"
+EXPECTED_COLUMNS = [
+    "year",
+    "age_group",
+    "sex",
+    "unemployment_rate_percent",
+]
 
 
 class YouthDatasetQueryError(ValueError):
@@ -103,7 +110,22 @@ def query_youth_dataset(arguments: dict[str, Any]) -> dict[str, Any]:
 @lru_cache(maxsize=1)
 def _load_dataset() -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
     metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
-    with DATA_PATH.open(encoding="utf-8", newline="") as stream:
+    snapshot_bytes = DATA_PATH.read_bytes()
+    actual_hash = hashlib.sha256(snapshot_bytes).hexdigest()
+    expected_hash = metadata["snapshot_sha256"]
+    if not _matches_snapshot_hash(snapshot_bytes, expected_hash):
+        raise RuntimeError(
+            "Unemployment installed snapshot hash mismatch: "
+            f"expected {expected_hash}, got {actual_hash}"
+        )
+
+    with DATA_PATH.open(encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream)
+        if reader.fieldnames != EXPECTED_COLUMNS:
+            raise RuntimeError(
+                "Unexpected unemployment snapshot columns: "
+                f"expected {EXPECTED_COLUMNS}, got {reader.fieldnames}"
+            )
         rows = tuple(
             {
                 "year": int(row["year"]),
@@ -113,7 +135,7 @@ def _load_dataset() -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
                     row["unemployment_rate_percent"]
                 ),
             }
-            for row in csv.DictReader(stream)
+            for row in reader
         )
 
     expected_count = metadata["snapshot_row_count"]
@@ -122,6 +144,17 @@ def _load_dataset() -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
             f"Dataset row count mismatch: expected {expected_count}, got {len(rows)}"
         )
     return metadata, rows
+
+
+def _matches_snapshot_hash(snapshot_bytes: bytes, expected_hash: str) -> bool:
+    """Accept the installed bytes or Git's Windows CRLF checkout equivalent."""
+    actual_hash = hashlib.sha256(snapshot_bytes).hexdigest()
+    if actual_hash == expected_hash:
+        return True
+
+    lf_normalized_bytes = snapshot_bytes.replace(b"\r\n", b"\n")
+    normalized_hash = hashlib.sha256(lf_normalized_bytes).hexdigest()
+    return normalized_hash == expected_hash
 
 
 def _required_choices(

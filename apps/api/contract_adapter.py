@@ -1,12 +1,14 @@
 """Translate the current AgentResult into YouthLM Contract v0."""
 
 import json
+import re
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Literal
 
-from app.agent import AgentResult
+from app.agent import AgentResult, CompletionGuard
 from app.analysis_result import AnalysisResult as LegacyAnalysisResult
+from app.source_registry import SourceMetadata, SourceRegistry, build_default_source_registry
 from app.tooling import ToolExecution
 
 from contract_models import (
@@ -29,12 +31,24 @@ class ContractMappingError(RuntimeError):
     """Raised when an internal AgentResult cannot satisfy Contract v0."""
 
 
+SET_LIKE_FILTERS = frozenset({"age_groups", "geographies", "sexes"})
+EXPLICIT_AGE_SCOPE_PATTERNS = (
+    re.compile(r"(?P<minimum>\d{1,3})\s*(?:至|到|[-–—~～])\s*(?P<maximum>\d{1,3})\s*歲"),
+    re.compile(
+        r"\bages?\s*(?P<minimum>\d{1,3})\s*(?:to|[-–—~])\s*"
+        r"(?P<maximum>\d{1,3})\b",
+        re.IGNORECASE,
+    ),
+)
+
+
 def to_contract_result(
     request: AnalysisRequest,
     agent_result: AgentResult,
 ) -> AnalysisResult:
     """Create the public result without asking the model to copy data values."""
     try:
+        source_registry = build_default_source_registry()
         analysis_source_id = (
             agent_result.analysis.dataset_ref.dataset_id
             if agent_result.analysis is not None
@@ -42,11 +56,9 @@ def to_contract_result(
         )
         blocking_execution = _blocking_compatibility(
             agent_result.tool_executions,
+            request=request,
+            source_registry=source_registry,
             source_id=analysis_source_id,
-            selected_source_ids={
-                selection.source_id
-                for selection in request.source_selections
-            },
         )
         if blocking_execution is not None:
             return _blocked_analysis(request, agent_result, blocking_execution)
@@ -56,7 +68,7 @@ def to_contract_result(
                     "Selected sources did not produce a deterministic analysis"
                 )
             return _direct_answer(request, agent_result)
-        _validate_selected_source(request, agent_result)
+        _validate_selected_source(request, agent_result, source_registry)
         return _dataset_analysis(request, agent_result)
     except (KeyError, TypeError, ValueError) as error:
         raise ContractMappingError(
@@ -85,7 +97,9 @@ def build_agent_prompt(
             "call check_compatibility using the exact scope in that selection's "
             "filters, not the general YouthLM 18-35 target. For example, age_groups "
             "20-24 means min_age 20 and max_age 24. Apply every selected source "
-            "filter exactly to the deterministic query."
+            "filter exactly to the deterministic query. Do not finish the answer "
+            "until both the compatibility check and deterministic query succeed, "
+            "unless the compatibility result requires refusal."
         )
     if module_contexts:
         contexts = [
@@ -101,6 +115,92 @@ def build_agent_prompt(
     return "\n\n".join(prompt_parts)
 
 
+def build_selected_source_completion_guard(
+    request: AnalysisRequest,
+    source_registry: SourceRegistry,
+) -> CompletionGuard | None:
+    """Require the model to finish the selected-source protocol before answering.
+
+    Contract v0 currently supports one deterministic dataset result per analysis
+    module. The HTTP boundary rejects larger selections before constructing this
+    guard.
+    """
+    if len(request.source_selections) != 1:
+        return None
+
+    selection = request.source_selections[0]
+    source = source_registry.inspect_source(selection.source_id)
+    expected_compatibility, allowed_geographies = _expected_compatibility_scope(
+        selection.filters,
+        source,
+    )
+    expected_arguments = {
+        "dataset_id": selection.source_id,
+        **selection.filters,
+    }
+
+    def completion_guard(executions: Sequence[ToolExecution]) -> str | None:
+        requested_scope = _query_compatibility_scope(
+            request.query,
+            expected_compatibility,
+        )
+        if requested_scope != expected_compatibility:
+            requested_compatibility = _latest_compatibility(
+                executions,
+                expected_arguments=requested_scope,
+                allowed_geographies=allowed_geographies,
+            )
+            if (
+                requested_compatibility is not None
+                and isinstance(requested_compatibility.result, dict)
+                and requested_compatibility.result.get("refusal_required") is True
+            ):
+                return None
+
+        compatibility = _latest_compatibility(
+            executions,
+            expected_arguments=expected_compatibility,
+            allowed_geographies=allowed_geographies,
+        )
+        if compatibility is None:
+            return (
+                "You cannot finalize this answer yet. Your next model turn must "
+                "only call check_compatibility with this selected filter scope: "
+                f"{_compact_json(expected_compatibility)}. "
+                "Wait for that tool result before querying or answering."
+            )
+
+        report = compatibility.result
+        if isinstance(report, dict) and report.get("refusal_required") is True:
+            return None
+
+        query_execution = _latest_successful_dataset_query(executions)
+        if (
+            query_execution is not None
+            and query_execution.name == source.query_tool
+            and query_execution.arguments.get("dataset_id") == selection.source_id
+            and _filters_equivalent(
+                {
+                    name: value
+                    for name, value in query_execution.arguments.items()
+                    if name != "dataset_id"
+                },
+                selection.filters,
+            )
+        ):
+            return None
+
+        return (
+            "You cannot finalize this answer yet. Call the deterministic query "
+            f"tool {source.query_tool!r} with exactly these arguments (array "
+            "order may differ, but no filter may be added, removed, or narrowed): "
+            f"{_compact_json(expected_arguments)}. Wait for the successful tool "
+            "result, then base the answer only on those returned rows."
+        )
+
+    return completion_guard
+
+
 def _compact_json(value: Any) -> str:
     return json.dumps(
         value,
@@ -108,6 +208,156 @@ def _compact_json(value: Any) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def _expected_compatibility_scope(
+    filters: dict[str, Any],
+    source: SourceMetadata,
+) -> tuple[dict[str, Any], set[str]]:
+    age_groups = filters.get("age_groups")
+    sexes = filters.get("sexes")
+    start_year = filters.get("start_year")
+    end_year = filters.get("end_year")
+    geographies = filters.get("geographies", [source.geography])
+    if (
+        not isinstance(age_groups, list)
+        or not age_groups
+        or not isinstance(sexes, list)
+        or not sexes
+        or isinstance(start_year, bool)
+        or not isinstance(start_year, int)
+        or isinstance(end_year, bool)
+        or not isinstance(end_year, int)
+        or not isinstance(geographies, list)
+        or not geographies
+    ):
+        raise ContractMappingError(
+            "Selected source filters cannot define a compatibility scope"
+        )
+
+    bands = {band.label: band for band in source.age_definition.bands}
+    try:
+        selected_bands = [bands[label] for label in age_groups]
+    except (KeyError, TypeError) as error:
+        raise ContractMappingError(
+            "Selected source age groups are not published by the source"
+        ) from error
+    if not all(isinstance(item, str) for item in sexes + geographies):
+        raise ContractMappingError(
+            "Selected source dimensions must contain only strings"
+        )
+
+    allowed_geographies = set(geographies)
+    return (
+        {
+            "source_id": source.source_id,
+            "min_age": min(band.min_age for band in selected_bands),
+            "max_age": max(band.max_age for band in selected_bands),
+            "start_year": start_year,
+            "end_year": end_year,
+            "geography": geographies[0],
+            "sexes": sexes,
+            "unit": source.unit,
+        },
+        allowed_geographies,
+    )
+
+
+def _query_compatibility_scope(
+    query: str,
+    selected_scope: dict[str, Any],
+) -> dict[str, Any]:
+    scope = dict(selected_scope)
+    for pattern in EXPLICIT_AGE_SCOPE_PATTERNS:
+        match = pattern.search(query)
+        if match is None:
+            continue
+        minimum = int(match["minimum"])
+        maximum = int(match["maximum"])
+        if minimum <= maximum:
+            scope["min_age"] = minimum
+            scope["max_age"] = maximum
+        break
+    return scope
+
+
+def _compatibility_arguments_match(
+    actual: dict[str, Any],
+    expected: dict[str, Any],
+    allowed_geographies: set[str],
+) -> bool:
+    if actual.keys() != expected.keys():
+        return False
+    for name, expected_value in expected.items():
+        actual_value = actual[name]
+        if name == "geography":
+            if actual_value not in allowed_geographies:
+                return False
+        elif name == "sexes":
+            if _filter_value(actual_value, set_like=True) != _filter_value(
+                expected_value,
+                set_like=True,
+            ):
+                return False
+        elif actual_value != expected_value:
+            return False
+    return True
+
+
+def _latest_compatibility(
+    executions: Sequence[ToolExecution],
+    *,
+    expected_arguments: dict[str, Any],
+    allowed_geographies: set[str],
+) -> ToolExecution | None:
+    return next(
+        (
+            execution
+            for execution in reversed(executions)
+            if execution.succeeded
+            and execution.name == "check_compatibility"
+            and isinstance(execution.result, dict)
+            and _compatibility_arguments_match(
+                execution.arguments,
+                expected_arguments,
+                allowed_geographies,
+            )
+        ),
+        None,
+    )
+
+
+def _latest_successful_dataset_query(
+    executions: Sequence[ToolExecution],
+) -> ToolExecution | None:
+    return next(
+        (
+            execution
+            for execution in reversed(executions)
+            if execution.succeeded
+            and execution.name.startswith("query_")
+        ),
+        None,
+    )
+
+
+def _filters_equivalent(
+    actual: dict[str, Any],
+    expected: dict[str, Any],
+) -> bool:
+    if actual.keys() != expected.keys():
+        return False
+    return all(
+        _filter_value(value, set_like=name in SET_LIKE_FILTERS)
+        == _filter_value(expected[name], set_like=name in SET_LIKE_FILTERS)
+        for name, value in actual.items()
+    )
+
+
+def _filter_value(value: Any, *, set_like: bool) -> Any:
+    if not set_like or not isinstance(value, list):
+        return value
+    return sorted({_compact_json(item) for item in value})
 
 
 def _direct_answer(
@@ -214,6 +464,10 @@ def _dataset_analysis(
         for message in analysis.warnings
     ]
     query_execution = _query_execution(agent_result.tool_executions)
+    query_parameters = {
+        "dataset_id": source_id,
+        **analysis.filters,
+    }
 
     return AnalysisResult(
         contract_version=CONTRACT_VERSION,
@@ -260,7 +514,7 @@ def _dataset_analysis(
                 source_id=source_id,
                 dataset_version_id=dataset_version_id,
                 query_tool=query_execution.name,
-                query_parameters=query_execution.arguments,
+                query_parameters=query_parameters,
             )
         ],
     )
@@ -269,9 +523,44 @@ def _dataset_analysis(
 def _blocking_compatibility(
     executions: list[ToolExecution],
     *,
+    request: AnalysisRequest,
+    source_registry: SourceRegistry,
     source_id: str | None,
-    selected_source_ids: set[str],
 ) -> ToolExecution | None:
+    if request.source_selections:
+        for selection in request.source_selections:
+            source = source_registry.inspect_source(selection.source_id)
+            expected, allowed_geographies = _expected_compatibility_scope(
+                selection.filters,
+                source,
+            )
+            requested_scope = _query_compatibility_scope(request.query, expected)
+            if requested_scope != expected:
+                requested_execution = _latest_compatibility(
+                    executions,
+                    expected_arguments=requested_scope,
+                    allowed_geographies=allowed_geographies,
+                )
+                if (
+                    requested_execution is not None
+                    and isinstance(requested_execution.result, dict)
+                    and requested_execution.result.get("refusal_required")
+                ):
+                    return requested_execution
+
+            execution = _latest_compatibility(
+                executions,
+                expected_arguments=expected,
+                allowed_geographies=allowed_geographies,
+            )
+            if (
+                execution is not None
+                and isinstance(execution.result, dict)
+                and execution.result.get("refusal_required")
+            ):
+                return execution
+        return None
+
     for execution in reversed(executions):
         if not execution.succeeded or execution.name != "check_compatibility":
             continue
@@ -279,8 +568,6 @@ def _blocking_compatibility(
             continue
         result_source_id = execution.result.get("source_id")
         if source_id is not None and result_source_id != source_id:
-            continue
-        if selected_source_ids and result_source_id not in selected_source_ids:
             continue
         return execution if execution.result.get("refusal_required") else None
     return None
@@ -314,6 +601,7 @@ def _compatibility_warning_type(
 def _validate_selected_source(
     request: AnalysisRequest,
     agent_result: AgentResult,
+    source_registry: SourceRegistry,
 ) -> None:
     if not request.source_selections or agent_result.analysis is None:
         return
@@ -332,16 +620,15 @@ def _validate_selected_source(
             "Agent queried a source outside source_selections"
         )
 
-    compatibility = next(
-        (
-            execution
-            for execution in reversed(agent_result.tool_executions)
-            if execution.succeeded
-            and execution.name == "check_compatibility"
-            and isinstance(execution.result, dict)
-            and execution.result.get("source_id") == source_id
-        ),
-        None,
+    source = source_registry.inspect_source(selection.source_id)
+    expected, allowed_geographies = _expected_compatibility_scope(
+        selection.filters,
+        source,
+    )
+    compatibility = _latest_compatibility(
+        agent_result.tool_executions,
+        expected_arguments=expected,
+        allowed_geographies=allowed_geographies,
     )
     if compatibility is None:
         raise ContractMappingError(
@@ -353,12 +640,10 @@ def _validate_selected_source(
         raise ContractMappingError(
             "Deterministic query did not use the selected source"
         )
-    actual_filters = {
-        name: value
-        for name, value in query_execution.arguments.items()
-        if name != "dataset_id"
-    }
-    if actual_filters != selection.filters:
+    if not _filters_equivalent(
+        agent_result.analysis.filters,
+        selection.filters,
+    ):
         raise ContractMappingError(
             "Deterministic query did not preserve selected filters"
         )

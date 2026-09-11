@@ -2,6 +2,8 @@
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Protocol
 
@@ -70,7 +72,7 @@ class SQLiteModuleStore:
         """Insert or replace one module without crossing project boundaries."""
         payload = result.model_dump_json(exclude_none=True)
         try:
-            with self._connect() as connection:
+            with self._connect() as connection, connection:
                 connection.execute(
                     """
                     INSERT INTO analysis_modules (
@@ -131,18 +133,22 @@ class SQLiteModuleStore:
         except (json.JSONDecodeError, TypeError, ValueError) as error:
             raise ModuleStoreError("Stored module result is invalid") from error
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self._database_path, timeout=5)
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS analysis_modules (
-                project_id TEXT NOT NULL,
-                module_id TEXT NOT NULL,
-                contract_version TEXT NOT NULL,
-                result_json TEXT NOT NULL,
-                PRIMARY KEY (project_id, module_id)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS analysis_modules (
+                    project_id TEXT NOT NULL,
+                    module_id TEXT NOT NULL,
+                    contract_version TEXT NOT NULL,
+                    result_json TEXT NOT NULL,
+                    PRIMARY KEY (project_id, module_id)
+                )
+                """
             )
-            """
-        )
-        return connection
+            yield connection
+        finally:
+            connection.close()
