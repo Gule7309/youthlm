@@ -15,6 +15,7 @@ param(
     [ValidateRange(1, 65535)]
     [int]$Port = 8000,
 
+    [switch]$SkipQualityChecks,
     [switch]$AllowOrganizerRegionOverride
 )
 
@@ -52,6 +53,9 @@ $preflightArgs = @{
     AwsProfile = $AwsProfile
     RequestTimeoutSeconds = $RequestTimeoutSeconds
     Port = $Port
+}
+if ($SkipQualityChecks) {
+    $preflightArgs["SkipQualityChecks"] = $true
 }
 if (-not [string]::IsNullOrWhiteSpace($ExpectedAccountId)) {
     $preflightArgs["ExpectedAccountId"] = $ExpectedAccountId

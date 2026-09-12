@@ -78,6 +78,24 @@ class DemoPreflightRunnerContractTests(unittest.TestCase):
         self.assertIn("AllowOrganizerRegionOverride", script)
         self.assertIn("1.05-second minimum intervals", script)
 
+    def test_build_preflight_proves_image_and_persistent_volume(self) -> None:
+        script = Path("scripts/build-preflight.ps1").read_text(encoding="utf-8")
+
+        event_preflight = script.index("event-day-preflight.ps1")
+        image_build = script.index("docker build")
+
+        self.assertLess(event_preflight, image_build)
+        self.assertIn("docker info", script)
+        self.assertIn('127.0.0.1:${Port}:8000', script)
+        self.assertIn('"$baseUrl/health"', script)
+        self.assertIn('"$baseUrl/ready"', script)
+        self.assertIn('"$baseUrl/v1/data-sources"', script)
+        self.assertIn("/data/build-preflight.marker", script)
+        self.assertIn("Stop-PreflightContainer", script)
+        self.assertIn("docker volume rm $volumeName", script)
+        self.assertNotIn("AWS_ACCESS_KEY_ID", script)
+        self.assertNotIn(".aws", script)
+
 
 if __name__ == "__main__":
     unittest.main()

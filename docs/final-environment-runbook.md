@@ -91,10 +91,10 @@ manual environment gates.
        --region "<event-region>"
    ```
 
-6. Run the complete backend acceptance path:
+6. Run the complete live Bedrock and container build acceptance path:
 
    ```powershell
-   .\scripts\event-day-preflight.ps1 `
+   .\scripts\build-preflight.ps1 `
        -AwsProfile "youthlm-workshop" `
        -AwsRegion "<event-region>" `
        -ModelId "<event-model-or-inference-profile-id>" `
@@ -104,8 +104,12 @@ manual environment gates.
    If and only if event staff has announced a replacement deployment region, add
    `-AllowOrganizerRegionOverride` and keep the announcement with the run record.
 
-The preflight must finish with `YouthLM Bedrock event-day preflight passed`.
-Preserve the reported output and log directory for diagnosis.
+The command must print both `YouthLM Bedrock event-day preflight passed` and
+`YouthLM competition build preflight passed`. It runs the real Bedrock golden
+path outside the container, builds the deployable image, checks the container
+homepage/API readiness/catalog, and recreates the container to prove an isolated
+`/data` volume survives. It never injects or mounts AWS credentials into the
+image. Preserve the reported output and log directory for diagnosis.
 
 ## Build and run the single container
 
@@ -119,8 +123,8 @@ uv run --frozen python -m uvicorn main:app `
     --port 8000
 ```
 
-After the Bedrock event-day preflight passes, build the image from the repository
-root:
+The build preflight leaves the verified image available locally. To rebuild it
+without rerunning the full preflight:
 
 ```powershell
 docker build -t youthlm:competition .
