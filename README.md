@@ -235,6 +235,25 @@ editable `.pptx` without another model call. The deterministic generator uses
 the stored result's summary, structured data, visualization mapping, sources,
 versions, and warnings. Generated files are stored under
 `YOUTHLM_ARTIFACT_DIR` (default `var/artifacts`) and remain project-scoped.
+
+### Competition AWS deployment
+
+The minimal event-day deployment uses one EC2 instance, a private ECR
+repository, and CodeBuild so the image can be built without local Docker. EC2
+uses an IAM role for ECR and Bedrock; temporary participant credentials are
+only read from the PowerShell process that creates the stack. Inbound port
+8000 is restricted to one operator IPv4 `/32`, and SSH is not opened.
+
+```powershell
+.\scripts\deploy-competition.ps1
+```
+
+The deployment defaults to `us-west-2`, the
+`release/competition-2026-09-12` branch, and the competition inference profile
+`us.amazon.nova-lite-v1:0`. The script validates the template, creates or
+updates the stack, runs CodeBuild, and waits for `/ready` before returning the
+restricted application URL.
+
 After the Analysis smoke has stored its canonical module, verify the full
 generation and download boundary with:
 

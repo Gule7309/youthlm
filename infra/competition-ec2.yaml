@@ -1,0 +1,280 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Minimal YouthLM competition deployment using CodeBuild, private ECR, and one SSM-managed EC2 instance.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: youthlm-competition
+    AllowedPattern: "[a-z0-9-]+"
+  ClientCidr:
+    Type: String
+    Description: Exact operator public IPv4 CIDR, normally a single /32 address.
+    AllowedPattern: "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/32$"
+  GitHubRepository:
+    Type: String
+    Default: https://github.com/Gule7309/youthlm.git
+  SourceVersion:
+    Type: String
+    Default: release/competition-2026-09-12
+  ImageTag:
+    Type: String
+    Default: competition
+    AllowedPattern: "[A-Za-z0-9_.-]+"
+  BedrockModelId:
+    Type: String
+    Default: us.amazon.nova-lite-v1:0
+    AllowedValues:
+      - us.amazon.nova-lite-v1:0
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-07497ad9cd74cc876
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-05da4be3a8cc56fd6
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues:
+      - t3.small
+      - t3.medium
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  ContainerRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: !Ref ProjectName
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep the five newest competition images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {"type": "expire"}
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BuildAndPushYouthLMImage
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${ProjectName}:*
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !GetAtt ContainerRepository.Arn
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  ImageBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Ref ProjectName
+      Description: Build the YouthLM single-container competition image.
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      TimeoutInMinutes: 30
+      QueuedTimeoutInMinutes: 15
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Source:
+        Type: GITHUB
+        Location: !Ref GitHubRepository
+        GitCloneDepth: 1
+        BuildSpec: buildspec.yml
+        ReportBuildStatus: false
+      SourceVersion: !Ref SourceVersion
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: REPOSITORY_URI
+            Value: !GetAtt ContainerRepository.RepositoryUri
+          - Name: IMAGE_TAG
+            Value: !Ref ImageTag
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: RunYouthLM
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:DescribeImages
+                Resource: !GetAtt ContainerRepository.Arn
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BedrockModelId}
+                  - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-lite-v1:0
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  ApplicationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: YouthLM demo access from one operator IP only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - Description: YouthLM web and API
+          IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: !Ref ClientCidr
+      SecurityGroupEgress:
+        - Description: HTTPS and package/model access
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-restricted-ingress
+        - Key: Project
+          Value: !Ref ProjectName
+
+  CompetitionInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet:
+            - !Ref ApplicationSecurityGroup
+          SubnetId: !Ref SubnetId
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: 16
+            VolumeType: gp3
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            set -euo pipefail
+            exec > >(tee -a /var/log/youthlm-bootstrap.log) 2>&1
+
+            dnf install -y docker
+            systemctl enable --now docker
+            install -d -m 0750 /opt/youthlm-data/artifacts
+
+            for attempt in $(seq 1 120); do
+              if aws ecr describe-images --region ${AWS::Region} --repository-name ${ProjectName} --image-ids imageTag=${ImageTag} >/dev/null 2>&1; then
+                break
+              fi
+              echo "Waiting for the private competition image ($attempt/120)..."
+              sleep 15
+            done
+
+            aws ecr describe-images --region ${AWS::Region} --repository-name ${ProjectName} --image-ids imageTag=${ImageTag} >/dev/null
+            aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${ContainerRepository.RepositoryUri}
+            docker pull ${ContainerRepository.RepositoryUri}:${ImageTag}
+            docker run -d --name youthlm --restart unless-stopped \
+              --log-opt max-size=10m --log-opt max-file=3 \
+              -p 8000:8000 \
+              --mount type=bind,source=/opt/youthlm-data,target=/data \
+              -e MODEL_PROVIDER=bedrock \
+              -e AWS_REGION=${AWS::Region} \
+              -e BEDROCK_MODEL_ID=${BedrockModelId} \
+              -e YOUTHLM_SQLITE_PATH=/data/youthlm.sqlite3 \
+              -e YOUTHLM_ARTIFACT_DIR=/data/artifacts \
+              ${ContainerRepository.RepositoryUri}:${ImageTag}
+      Tags:
+        - Key: Name
+          Value: !Ref ProjectName
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  ApplicationUrl:
+    Description: Restricted HTTP demo URL. Only ClientCidr can connect.
+    Value: !Sub http://${CompetitionInstance.PublicIp}:8000
+  BuildProjectName:
+    Value: !Ref ImageBuild
+  ContainerRepositoryUri:
+    Value: !GetAtt ContainerRepository.RepositoryUri
+  InstanceId:
+    Value: !Ref CompetitionInstance
+
