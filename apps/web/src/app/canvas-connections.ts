@@ -94,11 +94,16 @@ export function connectionKindBetween(
   const toNode = nodes.find(node => node.id === toNodeId);
   if (!fromNode || toNode?.type !== 'result' || !toNode.result) return null;
 
-  if (fromNode.type === 'source' && toNode.result.kind !== 'presentation') return 'source';
+  if (
+    fromNode.type === 'source'
+    && (toNode.result.kind === null || toNode.result.kind === 'chart')
+  ) return 'source';
   if (
     fromNode.type === 'result'
     && fromNode.result?.kind === 'chart'
-    && toNode.result.kind !== 'chart'
+    && (toNode.result.kind === null
+      || toNode.result.kind === 'presentation'
+      || toNode.result.kind === 'report')
   ) return 'analysis';
 
   return null;
@@ -139,7 +144,7 @@ export function connectCanvasNodes(
   }
 
   const sourceModuleIds = result.sourceModuleIds ?? [];
-  if (result.kind === 'presentation' && sourceModuleIds.includes(fromNodeId)) {
+  if ((result.kind === 'presentation' || result.kind === 'report') && sourceModuleIds.includes(fromNodeId)) {
     return { status: 'duplicate', kind, nodes };
   }
 
@@ -151,7 +156,7 @@ export function connectCanvasNodes(
         ...node,
         result: {
           ...result,
-          kind: 'presentation',
+          kind: result.kind === 'report' ? 'report' : 'presentation',
           sourceNodeIds: [],
           sourceModuleIds: [...sourceModuleIds, fromNodeId],
         },

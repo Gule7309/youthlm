@@ -4,7 +4,7 @@ export const PRESENTATION_UNAVAILABLE_MESSAGE =
   '簡報需使用已完成或部分完成的分析成果；小幫手目前只會建立圖表草稿，請在成果卡中選擇「洞察簡報」。';
 
 export function usesRawSourceInputs(result: ResultConfig | undefined) {
-  return result?.kind !== 'presentation';
+  return result?.kind === 'chart';
 }
 
 export function getChartDraftActions(actions: AssistantDraftAction[]) {

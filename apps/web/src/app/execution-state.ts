@@ -4,7 +4,7 @@ import type { AnalysisExecution, CanvasNode } from './types';
 export function resultInputSignature(id: string, nodes: CanvasNode[], analyses: Record<string, AnalysisExecution> = {}): string {
   const result = nodes.find(node => node.id === id)?.result;
   if (!result) return '';
-  if (result.kind === 'presentation') {
+  if (result.kind === 'presentation' || result.kind === 'report') {
     return JSON.stringify([result, (result.sourceModuleIds ?? []).map(nodeId => {
       const execution = analyses[nodeId];
       return [nodeId, execution?.moduleId, execution?.state, execution?.inputSignature,

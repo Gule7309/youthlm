@@ -1,28 +1,32 @@
 # 比賽前整合與未完成事項
 
-最後更新：2026-09-11。這份是 repo 根目錄的**目前狀態入口**；完整歷史與模組細項保留於 [apps/web/BACKEND_TODO.md](apps/web/BACKEND_TODO.md)。歷史日期的「未串接」不代表現在狀態。
+最後更新：2026-09-12。這份是 repo 根目錄的**目前狀態入口**；完整歷史與模組細項保留於 [apps/web/BACKEND_TODO.md](apps/web/BACKEND_TODO.md)。歷史日期的「未串接」不代表現在狀態。
 
 ## 9/11 最終驗收前收斂
+
+- [x] 以隊友最新 `codex/source-catalog` 整合分支為底，納入 PR #24／#25 的 project-scoped Assistant、可編輯 DOCX Report 與下載端點；保留空白新帳號、資料稽核、同源容器、端點拖曳及遲到回應防護。
+- [x] 修正整合後的 Chart → Report 拖曳型別、Report 取消／逾時／過期回應防護、Report 雷達計數與 Assistant 遲到回應；正式 preflight 現在也會呼叫 live Assistant 並核對三項明確引用。
+- [x] 依 2026-07-22 正式競賽規範加入 `us-east-1`／`us-west-2` 區域防線與 Bedrock 1.05 秒呼叫間隔；Supported Services 清單包含目前候選部署所需的 Bedrock、EC2／ECS／ECR、ELB、IAM、Logs、S3、CloudFormation、Secrets Manager 與 SSM 動作。清單不代表比賽帳號實際 role 一定已授權。
 
 - [x] 兩份安裝資料已加入 fail-closed 稽核：快照 hash、schema、列數、維度覆蓋、缺值、重複、數值範圍及人口加總一致性。人口 2,250 列與失業率 76 列皆無阻斷錯誤。
 - [x] 官方人口快照的 2013 年樹林／鶯歌／汐止、5–9 歲已列為已知限制；保留原值、不自行補值，該組合會在模型執行前回 422，其他年度／年齡仍可使用。
 - [x] 失業率官方 21 欄寬表的正規化已程式化，固定將 `item value4`–`item value7` 轉成 25–29／30–34、男／女長表；會先驗官方 raw hash，來源或 schema 改變即停止。本機用官方快照已精確重現已安裝 CSV。
 - [x] 修正 Analysis compatibility scope：多個相鄰年齡群以完整範圍檢查；只有與使用者明確問題範圍相符的拒絕可產生 blocked result，不相關的 18–35 拒絕不能冒充已選資料檢查。
-- [x] 移除新帳號中的虛構教育／職訓統計與預設白板；舊本機草稿會移除不可新增的 legacy 示範節點，保留使用者來源與成果，並把既有小幫手對話整併到筆記本右側聊天室。政策雷達重開筆記本預設收合，且正確計入圖表與簡報。
+- [x] 移除新帳號中的虛構教育／職訓統計與預設白板；舊本機草稿會移除不可新增的 legacy 示範節點，保留使用者來源與成果，並把既有小幫手對話及明確引用整併到筆記本右側聊天室。政策雷達重開筆記本預設收合，且正確計入圖表、報告與簡報。
 - [x] 新增 status-only `/ready`、精確 CORS allowlist、IAM role 相容的 Bedrock readiness、完整資料／前後端 preflight，以及 same-origin 單容器骨架。映像固定一個 Uvicorn worker、非 root 使用者，狀態路徑指向 `/data`；正式環境仍必須另外掛載可持久化 volume，Dockerfile 不會代替 AWS 儲存設定。
 - [x] 移除未使用且有安全公告的 `react-router`，升級 ECharts 6.1.0 與 Vite 6.4.3；目前 `npm audit`（含 dev）與 production audit 都是 0 vulnerabilities。
-- [x] 自動化驗證涵蓋完整 Python、Ruff、前端 typecheck/build/tests、資料 audit、正式靜態前端與 API 同源路徑。最終結果為 Python 193/193、前端 96/96、`npm audit` 0 vulnerabilities；正式同源 smoke 的首頁、實際 JS/CSS、`/health`、`/ready`、`/v1/data-sources` 皆為 200。
+- [x] 自動化驗證涵蓋完整 Python、Ruff、前端 typecheck/build/tests、資料 audit、正式靜態前端與 API 同源路徑。9/12 整合結果為 Python 218/218、前端 110/110、`npm audit` 0 vulnerabilities；先前正式同源 smoke 的首頁、實際 JS/CSS、`/health`、`/ready`、`/v1/data-sources` 皆為 200。
 - [x] 新增一般使用者導引路徑：空白筆記本直接選官方資料、來源卡一鍵建立已連結圖表、完成圖表一鍵建立已連結簡報；拖曳端點保留為進階操作。快捷建立採來源→圖表→簡報水平排列，全覽不會把小流程放大超過 100%。
-- [x] AI 小幫手由畫布卡片改為每本筆記本唯一的右側聊天室；呈現目前來源／成果上下文，固定前端草稿必須經確認才會建立已連結圖表，且不宣稱已執行 AI 分析。
+- [x] AI 小幫手由畫布卡片改為每本筆記本唯一的右側聊天室；已串接 notebook-scoped Assistant API，可明確選取來源／分析／簡報，並顯示實際引用數與工具執行數；既有固定前端草稿仍必須經確認才會建立已連結圖表。
 - [x] 收斂首次進入白板的視覺：左右面板預設收合，沒有可盤點資料時隱藏政策雷達，空白畫面只保留一個主要動作；第一本筆記本提供可略過、可重開且本機保存完成狀態的四步操作教學。
 - [x] 已完成的圖表成果會在卡片內直接渲染實際 ECharts 縮圖（無 visualization 時顯示實際資料表）與摘要；已產生簡報會直接顯示封面摘要、分析數量、PPTX 狀態與實際檔案大小，不必先開右側設定。
 - [x] 新增全域文字大小設定：小（原始尺寸）、中、大、特大；登入、筆記本、教學、白板卡片與設定面板同步調整，獨立保存在瀏覽器本機，不寫入帳號或後端。
-- [ ] 讓小幫手經 notebook-scoped Agent API 真正讀取畫布內容、串流回覆並呼叫受控工具；目前只有本機對話與確定性的前端圖表草稿。
+- [ ] Assistant 串流回覆、可取消的伺服器端工作與受控畫布 mutation 工具；目前已有真實 Agent API、明確上下文與工具紀錄，但不是串流且不會自行改寫畫布。
 - [ ] 後端若要提供真正的簡報頁面縮圖／線上預覽，需新增投影片縮圖或 PDF 預覽契約；目前 PresentationResult 只有 PPTX metadata／下載資訊。另待加入白板文字、畫筆、選取／刪除、復原／重做與 AI 可讀取的畫布註記格式。
 - [x] 最終 Playwright fixture 流程已完成：全新帳號／筆記本、人口篩選、藍／紫端點連線、真實資料工具圖表、可驗證 PPTX 下載、政策雷達、縮放、空白收合、窄畫面、重新登入草稿還原，以及 2013 已知異常的中文拒絕。Fixture 只取代模型摘要，不代表真實 Bedrock 已驗收。
 - [x] 修正開啟含負座標或畫面外卡片的筆記本會被上緣截切：重開時自動全覽，但不改寫使用者保存的無限畫布座標；收合設定區使用真正 `inert`，ECharts 只在容器具尺寸後掛載，避免隱藏面板警告。
 - [ ] **外部阻斷：** 此電腦沒有 AWS CLI v2，Docker Desktop 服務也無目前使用者權限啟動；因此 Docker image、AWS 帳號／Region／IAM、真實 Bedrock 與部署 URL 尚未實機通過。Access Code 已取得，但不得把它寫入 repo 或當成應用登入憑證。
-- [ ] 使用者只需做一次 [FRONTEND_ACCEPTANCE.md](FRONTEND_ACCEPTANCE.md) 的最終人工驗收；本輪尚未 commit、push 或建立 PR。
+- [ ] 使用者依 [FRONTEND_ACCEPTANCE.md](FRONTEND_ACCEPTANCE.md) 手動驗收真實 Bedrock 與瀏覽器流程；不再把 fixture 或 Codex 代驗視為正式通過。
 
 ## 9/10 白板拖曳連線，等待人工驗收
 
@@ -77,8 +81,8 @@
 - [ ] 分析歷史查詢／重新整理後還原。新 run ID 避免覆寫，但伺服器仍需定義歷史保留、清理與 orphan 產物回收。
 - [ ] 通用檔案上傳、公開 API 抓取、清洗／轉換 pipeline 及資料預覽，目前只保存 metadata／網址。
 - [ ] 多資料集真正交叉分析、教育與起薪資料相容性；不要用勾選多來源冒充完成 join 或因果推論。
-- [ ] 小幫手真實對話與畫布操作工具；目前只有固定操作草稿。
+- [ ] 小幫手已具真實明確上下文對話；畫布 mutation 工具與跨重整對話保存仍未完成，目前操作草稿仍需使用者確認後執行。
 - [ ] 政策雷達真實政策分析、重跑與最近成功結果的雲端保存；目前只是數量盤點。
 - [ ] 地圖熱點篩選、資料轉換工具、PDF／圖表圖片／CSV 匯出、簡報線上預覽。
-- [x] 完整後端測試與 Windows SQLite 檔案占用問題已修正並重驗；9/11 最新 Python 測試 193/193、Ruff、資料 audit 均通過。真實模型及 AWS 實機測試仍須分開完成。
+- [x] 完整後端測試與 Windows SQLite 檔案占用問題已修正並重驗；9/12 最新 Python 測試 218/218、前端 110/110、Ruff、資料 audit 與 npm audit 均通過。真實模型及 AWS 實機測試仍須分開完成。
 - [ ] 9/11 用全新瀏覽器／帳號在 AWS 完整彩排，準備網路／模型失敗時可明確辨識的備用演示，完成後再凍結版本。

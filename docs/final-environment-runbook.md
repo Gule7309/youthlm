@@ -15,9 +15,19 @@ Access Code, one-time passwords, AWS credentials, account IDs, and model IDs.
   email, followed by the team Access Code from the organizer email.
 - Allowed foundation-model path: Amazon Bedrock or SageMaker AI, with AWS cloud
   services. Gemini is not a final-round fallback.
+- Deployment must use `us-east-1` or `us-west-2` unless event staff explicitly
+  announces a replacement region.
+- Keep Amazon Bedrock traffic below one request per second and enable only the
+  model access needed by the project.
+- Do not expose S3 publicly, open an EC2 security group fully to the internet,
+  or make RDS/EMR publicly accessible. Never upload secrets or prohibited
+  personal, regulated, financial, health, biometric, or payment data.
 
-Do not infer the workload region from the Workshop portal hostname. Use the
-region, account, credentials, and model access shown inside the issued environment.
+Do not infer the workload region from the Workshop portal hostname. Confirm that
+the issued workload region is `us-east-1` or `us-west-2`; if staff announces a
+different region, preserve that announcement and use the preflight's explicit
+override switch. Use the account, credentials, and model access shown inside
+the issued environment.
 The Workshop Access Code only unlocks the organizer portal. Never reuse it as an
 application login, API token, HTTP header, environment variable, or AWS SDK
 credential.
@@ -41,6 +51,27 @@ completed deployment.
    Access Code into source files, chat, screenshots, `.env`, or shell history.
 5. Do not reuse or repair the credentials that expired on 2026-08-18.
 
+## Build preflight inputs
+
+Have these ready before starting the event-day command:
+
+| Input | Required value or proof |
+| --- | --- |
+| Local tools | Git, `uv`, Node/npm, AWS CLI v2, and a running Docker daemon |
+| Issued identity | `youthlm-workshop` profile plus expected AWS account ID; no credential environment variables overriding the profile |
+| Region | `us-east-1` or `us-west-2`, unless staff explicitly announces a replacement |
+| Model | One organizer-approved Bedrock model or inference-profile ID with `bedrock:InvokeModel`; do not bulk-enable models |
+| Runtime | One worker and one replica so SQLite storage and the Bedrock request limiter remain coherent |
+| Storage | A persistent `/data` volume writable by the non-root container user; prove analysis, PPTX, and DOCX survive recreation |
+| Network | Same-origin HTTPS ingress; no public S3, fully open EC2 security group, or public RDS／EMR |
+| Secrets | No keys, tokens, Access Code, account credentials, `.env`, or AWS profile files in Git, the image, logs, or screenshots |
+| Data | Only the packaged public youth datasets; do not import prohibited personal or regulated data |
+
+The repository preflight covers code, data, live model calls, Assistant context,
+and artifact integrity. It cannot create the issued credentials, grant model
+access, start Docker, or prove the deployed role and network policy; those remain
+manual environment gates.
+
 ## 2026-09-12 at 08:00
 
 1. Open a clean PowerShell window.
@@ -51,6 +82,7 @@ completed deployment.
    `youthlm-workshop` profile. Never paste those values into chat or GitHub.
 4. Record the issued AWS account ID, workload region, and permitted Bedrock model
    or inference-profile ID outside the repository.
+   Request access only to that model and revoke unused model access after the demo.
 5. Confirm the identity before running YouthLM:
 
    ```powershell
@@ -68,6 +100,9 @@ completed deployment.
        -ModelId "<event-model-or-inference-profile-id>" `
        -ExpectedAccountId "<event-account-id>"
    ```
+
+   If and only if event staff has announced a replacement deployment region, add
+   `-AllowOrganizerRegionOverride` and keep the announcement with the run record.
 
 The preflight must finish with `YouthLM Bedrock event-day preflight passed`.
 Preserve the reported output and log directory for diagnosis.
@@ -107,9 +142,19 @@ BEDROCK_MODEL_ID=<event-model-or-inference-profile-id>
 
 The image already serves the Vite build and `/v1/*` from one origin, listens on
 `0.0.0.0:8000`, and runs one Uvicorn worker. It writes SQLite and generated PPTX
-files below `/data`. Mount `/data` on storage that survives container recreation,
+and DOCX files below `/data`. Mount `/data` on storage that survives container
+recreation,
 and keep exactly one worker and one replica. Do not count an ephemeral task disk
 as persistence.
+
+The 2026-07-22 supported-services workbook includes the required actions for
+Bedrock Runtime, AgentCore, EC2, ECR, ECS, Elastic Load Balancing, IAM, CloudWatch
+Logs, S3, CloudFormation, Secrets Manager, and Systems Manager. This list only
+describes competition support; verify the issued role's effective permissions
+before choosing the deployment shape. Prefer one small EC2 instance or one ECS
+task, Block Public Access on every S3 bucket, and narrowly scope ingress to the
+needed HTTPS port and expected source ranges／load balancer. Do not expose the
+application instance directly when an ingress load balancer is used.
 
 For a fixed Docker host, the equivalent runtime shape is:
 
@@ -135,21 +180,27 @@ Do not start deployment until all of these pass in the issued environment:
 
 1. AWS identity and expected account match.
 2. Bedrock Converse text and tool-call round trip.
-3. Source selection to deterministic query and chart-ready `AnalysisResult`.
-4. Project-scoped upstream Module Context retrieval.
-5. Editable PPTX generation and download.
-6. Local AgentCore `/invocations` smoke, if AgentCore is part of the submitted
+3. Bedrock request starts remain serialized with at least 1.05 seconds between
+   calls; keep exactly one worker and replica so this process-level limiter is
+   effective.
+4. Source selection to deterministic query and chart-ready `AnalysisResult`.
+5. Project-scoped upstream Module Context retrieval.
+6. Editable PPTX generation and download.
+7. Editable DOCX report generation and download.
+8. Live Assistant response with the exact three selected Source, Analysis, and
+   Presentation references.
+9. Local AgentCore `/invocations` smoke, if AgentCore is part of the submitted
    deployment.
-7. Container root, `/health`, `/ready`, and `/v1/data-sources` all respond through
+10. Container root, `/health`, `/ready`, and `/v1/data-sources` all respond through
    the deployed HTTPS origin. `/health` is liveness; `/ready` checks only
    configuration presence, installed data, and writable storage.
-8. Recreate the single container with the same `/data` volume and retrieve a
-   previously stored analysis and PPTX.
+11. Recreate the single container with the same `/data` volume and retrieve a
+   previously stored analysis, PPTX, and DOCX.
 
-Do not infer Bedrock authorization from `/ready`: the live analysis and PPTX path
-in the event-day preflight is the permission and integration proof. Do not scale
-past one worker or one replica while SQLite and local artifact storage remain in
-use.
+Do not infer Bedrock authorization from `/ready`: the live Chart and Assistant
+model calls in the event-day preflight are the permission and integration proof.
+Do not scale past one worker or one replica while SQLite and local artifact
+storage remain in use.
 
 ## Deadline discipline
 

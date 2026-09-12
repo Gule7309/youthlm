@@ -19,6 +19,7 @@
 var
 *.log
 *.pptx
+*.docx
 *.sqlite
 *.sqlite3
 *.sqlite3-shm

@@ -3,6 +3,7 @@
 import logging
 import os
 import tempfile
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol
@@ -39,6 +40,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from assistant_service import AssistantContextNotFoundError, AssistantService
 from contract_adapter import (
     ContractMappingError,
     build_agent_prompt,
@@ -49,10 +51,14 @@ from contract_models import (
     CONTRACT_VERSION,
     AnalysisRequest,
     AnalysisResult,
+    AssistantRequest,
+    AssistantResult,
     ErrorDetail,
     ErrorResponse,
     PresentationRequest,
     PresentationResult,
+    ReportRequest,
+    ReportResult,
 )
 from module_store import (
     ModuleStore,
@@ -62,6 +68,10 @@ from module_store import (
 from presentation_generator import (
     PptxPresentationGenerator,
     PresentationGenerationError,
+)
+from presentation_result_store import (
+    PresentationResultStoreError,
+    SQLitePresentationResultStore,
 )
 from presentation_service import (
     PPTX_MEDIA_TYPE,
@@ -73,6 +83,15 @@ from presentation_store import (
     LocalPresentationArtifactStore,
     PresentationArtifactStoreError,
 )
+from report_generator import DocxReportGenerator, ReportGenerationError
+from report_result_store import ReportResultStoreError, SQLiteReportResultStore
+from report_service import (
+    DOCX_MEDIA_TYPE,
+    ReportModulesBlockedError,
+    ReportModulesNotFoundError,
+    ReportService,
+)
+from report_store import LocalReportArtifactStore, ReportArtifactStoreError
 
 logger = logging.getLogger(__name__)
 
@@ -117,12 +136,27 @@ def build_default_presentation_service(
     module_store: ModuleStore,
 ) -> PresentationService:
     """Compose deterministic PPTX generation over local project storage."""
+    database_path = os.getenv("YOUTHLM_SQLITE_PATH", "var/youthlm.sqlite3")
     return PresentationService(
         module_store=module_store,
         generator=PptxPresentationGenerator(),
         artifact_store=LocalPresentationArtifactStore(
             os.getenv("YOUTHLM_ARTIFACT_DIR", "var/artifacts")
         ),
+        result_store=SQLitePresentationResultStore(database_path),
+    )
+
+
+def build_default_report_service(module_store: ModuleStore) -> ReportService:
+    """Compose deterministic DOCX generation over local project storage."""
+    database_path = os.getenv("YOUTHLM_SQLITE_PATH", "var/youthlm.sqlite3")
+    return ReportService(
+        module_store=module_store,
+        generator=DocxReportGenerator(),
+        artifact_store=LocalReportArtifactStore(
+            os.getenv("YOUTHLM_ARTIFACT_DIR", "var/artifacts")
+        ),
+        result_store=SQLiteReportResultStore(database_path),
     )
 
 
@@ -290,6 +324,7 @@ def create_app(
     *,
     module_store: ModuleStore | None = None,
     presentation_service: PresentationService | None = None,
+    report_service: ReportService | None = None,
     cors_origins: Sequence[str] = DEFAULT_CORS_ORIGINS,
     readiness_probe: Callable[[], dict[str, bool]] | None = None,
     web_directory: str | Path | None = None,
@@ -306,11 +341,15 @@ def create_app(
         allow_headers=["Content-Type"],
     )
     active_agent = agent
+    active_agent_lock = threading.Lock()
     enforce_selected_source_protocol = agent is None
     active_module_store = module_store or build_default_module_store()
     active_presentation_service = (
         presentation_service
         or build_default_presentation_service(active_module_store)
+    )
+    active_report_service = (
+        report_service or build_default_report_service(active_module_store)
     )
     source_registry = build_default_source_registry()
     active_readiness_probe = readiness_probe or (
@@ -323,8 +362,9 @@ def create_app(
 
     def resolve_agent() -> AgentRunner:
         nonlocal active_agent
-        if active_agent is None:
-            active_agent = build_default_agent()
+        with active_agent_lock:
+            if active_agent is None:
+                active_agent = build_default_agent()
         return active_agent
 
     @application.exception_handler(RequestValidationError)
@@ -332,6 +372,11 @@ def create_app(
         request: Request,
         error: RequestValidationError,
     ) -> JSONResponse:
+        validation_message = {
+            "/v1/assistant": "Assistant request validation failed",
+            "/v1/presentations": "Presentation request validation failed",
+            "/v1/reports": "Report request validation failed",
+        }.get(request.url.path, "Analysis request validation failed")
         errors = [
             {
                 "location": ".".join(str(part) for part in item["loc"]),
@@ -343,11 +388,7 @@ def create_app(
         return _error_response(
             422,
             code="validation_error",
-            message=(
-                "Presentation request validation failed"
-                if request.url.path == "/v1/presentations"
-                else "Analysis request validation failed"
-            ),
+            message=validation_message,
             retriable=False,
             details={"errors": errors},
         )
@@ -371,6 +412,67 @@ def create_app(
     @application.get("/v1/data-sources", response_model=DataSourceCatalog)
     def data_sources() -> DataSourceCatalog:
         return build_default_data_source_catalog()
+
+    @application.post(
+        "/v1/assistant",
+        response_model=AssistantResult,
+        response_model_exclude_none=True,
+    )
+    def assistant(request: AssistantRequest) -> AssistantResult | JSONResponse:
+        service = AssistantService(
+            agent_factory=resolve_agent,
+            source_registry=source_registry,
+            module_store=active_module_store,
+            presentation_service=active_presentation_service,
+        )
+        try:
+            return service.run(request)
+        except AssistantContextNotFoundError as error:
+            return _error_response(
+                404,
+                code="context_not_found",
+                message="One or more Assistant context references are unavailable",
+                retriable=False,
+                details={"missing_references": error.missing_references},
+            )
+        except ProviderConfigurationError:
+            return _error_response(
+                503,
+                code="provider_unavailable",
+                message="Model provider is not configured",
+                retriable=False,
+            )
+        except AgentMaxStepsError:
+            return _error_response(
+                502,
+                code="max_steps_exceeded",
+                message="Assistant could not complete the request in time",
+                retriable=True,
+            )
+        except AgentProtocolError:
+            logger.exception("Agent returned an invalid Assistant response")
+            return _error_response(
+                502,
+                code="agent_protocol_error",
+                message="Agent returned an invalid Assistant response",
+                retriable=False,
+            )
+        except (ModuleStoreError, PresentationResultStoreError):
+            logger.exception("Assistant context storage failed")
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Assistant context storage failed",
+                retriable=True,
+            )
+        except RuntimeError:
+            logger.exception("Model provider request failed during Assistant request")
+            return _error_response(
+                502,
+                code="provider_unavailable",
+                message="Model provider request failed",
+                retriable=True,
+            )
 
     @application.post(
         "/v1/analysis",
@@ -576,7 +678,7 @@ def create_app(
                 message="Presentation generation failed",
                 retriable=True,
             )
-        except PresentationArtifactStoreError:
+        except (PresentationArtifactStoreError, PresentationResultStoreError):
             logger.exception("Presentation artifact storage failed")
             return _error_response(
                 500,
@@ -622,14 +724,95 @@ def create_app(
             filename=artifact.file_name,
         )
 
+    @application.post(
+        "/v1/reports",
+        response_model=ReportResult,
+        response_model_exclude_none=True,
+        status_code=201,
+    )
+    def create_report(request: ReportRequest) -> ReportResult | JSONResponse:
+        try:
+            return active_report_service.create(request)
+        except ReportModulesNotFoundError as error:
+            return _error_response(
+                404,
+                code="module_not_found",
+                message="One or more report source modules are not available",
+                retriable=False,
+                details={"missing_module_ids": error.module_ids},
+            )
+        except ReportModulesBlockedError as error:
+            return _error_response(
+                422,
+                code="dataset_error",
+                message="Blocked analysis modules cannot generate a report",
+                retriable=False,
+                details={"blocked_module_ids": error.module_ids},
+            )
+        except ModuleStoreError:
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Module context storage failed",
+                retriable=True,
+            )
+        except ReportGenerationError:
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Report generation failed",
+                retriable=True,
+            )
+        except (ReportArtifactStoreError, ReportResultStoreError):
+            logger.exception("Report artifact storage failed")
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Report artifact storage failed",
+                retriable=True,
+            )
+
+    @application.get(
+        "/v1/projects/{project_id}/reports/{report_id}/download",
+        response_class=FileResponse,
+        response_model=None,
+    )
+    def download_report(
+        project_id: str,
+        report_id: str,
+    ) -> FileResponse | JSONResponse:
+        try:
+            artifact = active_report_service.get_artifact(project_id, report_id)
+        except ReportArtifactStoreError:
+            logger.exception("Report artifact storage failed")
+            return _error_response(
+                500,
+                code="internal_error",
+                message="Report artifact storage failed",
+                retriable=True,
+            )
+        if artifact is None:
+            return _error_response(
+                404,
+                code="module_not_found",
+                message="Report artifact is not available",
+                retriable=False,
+                details={"report_id": report_id},
+            )
+        return FileResponse(
+            artifact.path,
+            media_type=DOCX_MEDIA_TYPE,
+            filename=artifact.file_name,
+        )
+
     if web_directory is not None:
         resolved_web_directory = Path(web_directory)
         if not resolved_web_directory.is_dir() or not (
             resolved_web_directory / "index.html"
         ).is_file():
             raise RuntimeError("Frontend build directory is invalid")
-        # Keep this mount after every API route so /v1, /health and /ready
-        # cannot be shadowed by frontend files.
+        # Keep this mount after every API route so /v1, /health and /ready,
+        # including generated-artifact downloads, cannot be shadowed.
         application.mount(
             "/",
             StaticFiles(directory=resolved_web_directory, html=True),

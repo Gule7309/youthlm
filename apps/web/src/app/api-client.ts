@@ -1,4 +1,12 @@
-import type { AnalysisRequestPayload, PresentationArtifactView, PresentationRequestPayload, RegistryDataSource } from './types';
+import type {
+  AnalysisRequestPayload,
+  AssistantRequestPayload,
+  PresentationArtifactView,
+  PresentationRequestPayload,
+  ReportArtifactView,
+  ReportRequestPayload,
+  RegistryDataSource,
+} from './types';
 
 type Fetcher = typeof fetch;
 export type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };
@@ -95,10 +103,33 @@ export function createPresentation(request: PresentationRequestPayload, fetcher:
   }, readJson, fetcher, options);
 }
 
+export function runAssistant(
+  request: AssistantRequestPayload,
+  fetcher: Fetcher = fetch,
+  baseUrl = apiBaseUrl(),
+  options: RequestOptions = {},
+) {
+  return withRequest(`${normalizeBaseUrl(baseUrl)}/v1/assistant`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request),
+  }, readJson, fetcher, options);
+}
+
+export function createReport(
+  request: ReportRequestPayload,
+  fetcher: Fetcher = fetch,
+  baseUrl = apiBaseUrl(),
+  options: RequestOptions = {},
+) {
+  return withRequest(`${normalizeBaseUrl(baseUrl)}/v1/reports`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request),
+  }, readJson, fetcher, options);
+}
+
 export function resolveApiUrl(path: string, baseUrl = apiBaseUrl()) {
-  // Only the contract download endpoint is allowed, never //host, backslashes or encoded traversal.
-  if (!/^\/v1\/projects\/[A-Za-z0-9_-]+\/presentations\/[A-Za-z0-9_-]+\/download$/.test(path)) {
-    throw new Error('Artifact download URL must be relative to the presentation endpoint（簡報下載位址不正確）。');
+  // Only project-scoped Contract v0 artifact routes are allowed. Reject
+  // absolute URLs, backslashes, encoded traversal, query strings, and hashes.
+  if (!/^\/v1\/projects\/[A-Za-z0-9_-]+\/(?:presentations|reports)\/[A-Za-z0-9_-]+\/download$/.test(path)) {
+    throw new Error('Artifact download URL must be relative and project-scoped.');
   }
   return `${normalizeBaseUrl(baseUrl)}${path}`;
 }
@@ -115,6 +146,26 @@ export async function downloadPresentation(
     if (blob.size !== view.fileSizeBytes) throw new Error('下載檔案大小不符，請重試下載。');
     const bytes = await blob.arrayBuffer();
     if (new Uint8Array(bytes)[0] !== 0x50 || new Uint8Array(bytes)[1] !== 0x4b) throw new Error('下載內容不是有效的 PPTX 檔案。');
+    if (!globalThis.crypto?.subtle) throw new Error('此環境無法驗證檔案，請使用 localhost 或 HTTPS 網站。');
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+    if (hash !== view.artifactSha256.toLowerCase()) throw new Error('下載檔案驗證失敗（SHA-256 不符），請重試下載。');
+    return blob;
+  }, fetcher, { timeoutMs: 60_000, ...options });
+}
+
+export async function downloadReport(
+  view: Extract<ReportArtifactView, { kind: 'ready' }>,
+  fetcher: Fetcher = fetch, baseUrl = apiBaseUrl(), options: RequestOptions = {},
+): Promise<Blob> {
+  const expected = `/v1/projects/${view.projectId}/reports/${view.reportId}/download`;
+  if (view.downloadUrl !== expected) throw new Error('報告下載位址與成果身分不符，請重新產生報告。');
+  return withRequest(resolveApiUrl(view.downloadUrl, baseUrl), {}, async response => {
+    if (!response.ok) throw new Error(`報告下載失敗（HTTP ${response.status}）。若檔案已移除，請重新產生報告。`);
+    const blob = await response.blob();
+    if (blob.size !== view.fileSizeBytes) throw new Error('下載檔案大小不符，請重試下載。');
+    const bytes = await blob.arrayBuffer();
+    if (new Uint8Array(bytes)[0] !== 0x50 || new Uint8Array(bytes)[1] !== 0x4b) throw new Error('下載內容不是有效的 DOCX 檔案。');
     if (!globalThis.crypto?.subtle) throw new Error('此環境無法驗證檔案，請使用 localhost 或 HTTPS 網站。');
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');

@@ -1,16 +1,16 @@
-# YouthLM 前端互動原型與圖表交接模組
+# YouthLM 前端
 
-這是 YouthLM 的 React／Vite 前端，包含筆記本、流程白板、來源卡、成果卡、右側 AI 小幫手與政策雷達。Source Node → Chart Artifact 已串接正式的 `GET /v1/data-sources` 與 `POST /v1/analysis`：使用者可選擇已安裝資料集與篩選條件，呼叫 Research Agent，並在成果設定面板看到 ECharts 圖表、表格、摘要、來源、警告或錯誤。登入、整本筆記本的雲端保存、檔案上傳、任意 API、AI 小幫手與政策雷達仍是前端原型。
+這是 YouthLM 的 React／Vite 前端，包含筆記本、流程白板、來源卡、成果卡、右側 AI 小幫手與政策雷達。Source → Chart、Chart → Report、Chart → Presentation 與明確上下文 Assistant 均已串接 Contract v0 API；登入、整本筆記本的雲端保存、檔案上傳、任意 API 來源與政策雷達分析仍是前端原型。
 
 ## 9/11 最新狀態與驗收入口
 
-已整合 main `83b37f5` 的分析／執行紀錄／簡報功能，保留來源卡內的複選篩選器。每張 Contract v0 圖表只使用一張來源卡；多份分析可由簡報彙整。本輪另完成卡片端點拖曳、藍／紫連線、低縮放命中區、獨立分析 run ID、過期回應防護、API 逾時、PPTX 驗證下載及本機草稿保存。
+已整合分析／執行紀錄／DOCX 報告／PPTX 簡報／Assistant，保留來源卡內的複選篩選器。每張 Contract v0 圖表只使用一張來源卡；多份分析可由報告或簡報彙整。本輪另完成卡片端點拖曳、藍／紫連線、低縮放命中區、獨立分析 run ID、過期回應防護、API 逾時、產物驗證下載及本機草稿保存。
 
-9/11 收斂移除了新帳號原有但無資料支撐的教育／職訓示範統計；沒有草稿時從空白筆記本清單開始。第一本筆記本會顯示四步操作教學，可略過、直接開始選資料並由頁首重開，完成狀態隨本機草稿保存。全站頁首提供小／中／大／特大四檔文字大小，原始 14px 尺寸定義為小，選擇保存在目前瀏覽器。白板預設收合左右面板，沒有可盤點資料時不顯示政策雷達，空白頁只保留「選擇官方資料」主要動作。來源卡可直接建立已連結圖表，完成圖表可直接建立已連結簡報；拖曳端點仍保留為進階編排。已完成圖表會在成果卡直接顯示實際 ECharts 縮圖（缺少 visualization 時顯示實際資料表）與摘要；已產生簡報會顯示封面摘要、分析數量、PPTX 狀態與檔案大小。真正逐頁投影片縮圖仍待後端預覽契約，不會由前端假造。快捷流程採來源→圖表→簡報水平排列，全覽不會把小流程放大超過 100%。卡片本體不會自動開啟設定或觸發拖移，只有鉛筆按鈕進入編輯、右上拖移把手移動卡片。AI 小幫手改為筆記本右側聊天室，會顯示目前畫布上下文，操作草稿需確認才加入白板；舊草稿中的多張小幫手卡會整併為單一側欄對話且不計入卡片數。政策雷達每次開啟筆記本預設收合且會計入圖表與簡報，避免遮住卡片。前端正式相依已更新，完整 `npm audit` 為 0。
+9/11 收斂移除了新帳號原有但無資料支撐的教育／職訓示範統計；沒有草稿時從空白筆記本清單開始。第一本筆記本會顯示四步操作教學，可略過、直接開始選資料並由頁首重開，完成狀態隨本機草稿保存。全站頁首提供小／中／大／特大四檔文字大小，選擇保存在目前瀏覽器。白板預設收合左右面板，沒有可盤點資料時不顯示政策雷達；來源卡可直接建立已連結圖表，完成圖表可直接建立已連結簡報，拖曳端點仍保留為進階編排。已完成圖表、DOCX 報告與 PPTX 簡報會直接顯示真實產物狀態。AI 小幫手改為筆記本右側聊天室，呼叫真實 Assistant API，使用者可明確選取來源／分析／簡報並查看引用與工具執行數；舊草稿中的多張小幫手卡會整併為單一側欄對話且不計入卡片數。政策雷達每次開啟筆記本預設收合且會計入圖表、報告與簡報。前端正式相依已更新，完整 `npm audit` 為 0。
 
 完整啟動、無金鑰 UI 驗收及檢查步驟見 [根目錄驗收文件](../../FRONTEND_ACCEPTANCE.md)，當前剩餘事項見 [根目錄 BACKEND_TODO](../../BACKEND_TODO.md)。
 
-**本機草稿不是雲端保存或真實登入；分析／簡報結果在重整後須重跑。目前正常 API 的模型尚未設定，僅目錄可直接驗收；獨立 fixture 模式不代表 AI／AWS 通過。**
+**本機草稿不是雲端保存或真實登入；分析、報告、簡報與 Assistant 執行結果在重整後須重跑。Fixture 模式不代表真實模型／AWS 通過。**
 
 以下有日期或標示「歷史」的段落保留當時修正脈絡，最新行為以上述驗收文件為準。
 
@@ -47,37 +47,60 @@ npm run dev
 
 ## 既有前端啟動與歷史驗收
 
-正式前端目錄為 `apps/web/`，React UI 與原有的 Chart Artifact 交接模組共同放在這個 application 中。既有 Python 核心留在 `app/`，FastAPI application 留在 `apps/api/`；不再保留 `app/web/` 作為第二套前端。
+登入、整本 Notebook／Canvas 保存、檔案上傳、任意 API 來源與 Policy Radar
+後端仍是原型或後續工作。重新整理頁面會重置前端記憶體狀態；SQLite 目前只
+保存分析與生成 Artifact metadata，不等同使用者帳號或 Notebook 保存。
+
+## 啟動與檢查
 
 使用 Node.js 20 以上版本與 npm。從 repository 根目錄執行：
 
 ```sh
 cd apps/web
 npm ci
+npm run check
 npm run dev
 ```
 
-請先在另一個終端用根目錄的 `scripts/run-gemini-api.ps1` 啟動 API，再開啟 Vite 顯示的網址（通常是 `http://localhost:5173/`）。開發伺服器會把 `/v1` 轉送至 `http://127.0.0.1:8000`；若部署時 API 不在同一個 origin，可設定 `VITE_YOUTHLM_API_BASE_URL`。
+`npm run check` 依序執行 strict TypeScript、正式 Vite build 與所有 Node tests。
+Vite 開發伺服器把 `/v1` 轉送到 `http://127.0.0.1:8000`；跨 origin 部署可設定
+`VITE_YOUTHLM_API_BASE_URL`。
 
-執行完整前端品質檢查：
+Windows 上的完整互動環境可從 repository 根目錄啟動：
 
-```sh
-npm run check
+```powershell
+.\scripts\run-local-demo.ps1
 ```
 
-這個指令依序執行 `npm run typecheck`、`npm run build`、`npm test`，任一步失敗都會停止並回傳非零退出碼。也可分別執行三個指令定位問題；型別檢查成功時不一定有額外訊息，會直接回到終端提示符號。
+腳本會檢查模型與金鑰、執行品質門檻、啟動 API 與 Vite、開啟瀏覽器，並在
+PowerShell 視窗按 Enter 後停止兩個程序。已通過品質門檻時可用
+`-SkipQualityChecks` 快速重啟。
 
-產物位於 `apps/web/dist/`，不提交到 Git。沿用 `package-lock.json` 與 npm；保留的 `pnpm-workspace.yaml` 是原始匯出設定，尚未建立 pnpm lockfile 或 repository 級 JavaScript workspace。
+## 識別與輸入邊界
 
-`tsconfig.json` 對全部 `src/**/*.ts`、`src/**/*.tsx` 及 `vite.config.ts` 啟用 `strict`／`noEmit`，涵蓋未被目前畫面引用的 UI 元件；只略過第三方宣告檔的內部檢查，不略過本專案程式碼。無框架 JavaScript 圖表模組維持由原有六個 Node tests 驗證。
+- `CanvasNode.id` 只用於白板節點與連線。
+- Registry Source 使用 `SourceConfig.registrySourceId` 作為後端 `source_id`。
+- Chart 直接使用已安裝來源與 filters。
+- Report／Presentation 只使用已保存的 Analysis `module_id`，不接受 raw Source
+  Node，也不從 ECharts DOM 截圖。
+- Assistant 只傳使用者明確選取的後端 reference；座標、縮放、邊與顯示標籤
+  不會進入 request。
 
-React／ReactDOM 18.3.1 已列為應用程式直接依賴，React 型別也固定為相容的 18.x。Vite 使用 `import.meta.url`／`fileURLToPath` 計算專案路徑。單獨執行 `npm run build` 仍只代表建置成功，請使用 `npm run check` 完成整組品質檢查。
+來源或分析設定變更時，其下游分析、Report 與 Presentation 執行狀態會失效；
+刪除卡片也會清除相依連線與 Assistant 的失效選取。複製 Notebook 會重新映射
+Canvas ID，並深拷貝 filters、訊息與執行紀錄，避免兩本 Notebook 共用可變物件。
 
-## 人工驗收（型別檢查這一步）
+## 回應狀態
 
-請在 `apps/web` 的終端執行 `npm run check`，確認沒有 `error TS...`、建置錯誤或失敗測試。目前包含圖表／簡報契約、卡片成果預覽、文字偏好、導引流程、白板狀態、端點連線、草稿保存、來源目錄、錯誤韌性、Tooltip 與 request mapping，共 96 個測試。若要重測乾淨安裝，先停止原本的開發伺服器，再執行 `npm ci` 與 `npm run check`。
+請在 `apps/web` 的終端執行 `npm run check`，確認沒有 `error TS...`、建置錯誤或失敗測試。測試包含圖表／報告／簡報／Assistant 契約、卡片成果預覽、文字偏好、導引流程、白板狀態、端點連線、草稿保存、來源目錄、錯誤韌性、Tooltip 與 request mapping。若要重測乾淨安裝，先停止原本的開發伺服器，再執行 `npm ci` 與 `npm run check`。
 
-啟動 `npm run dev`，開啟終端顯示的網址，檢查：
+Chart adapter 將 API 回應轉為 `chart`、`table`、`blocked` 或 `error`。只有
+Contract `result_data.records` 能供圖表與表格顯示；自然語言摘要不會被解析成
+數值。Report 與 Presentation 使用本地 `running` 狀態，再轉為 ready 或明確的
+`ErrorResponse`；ready 狀態顯示檔名、大小、SHA-256、警告與下載操作。
+
+Assistant 不會默默捨棄失效引用。若被勾選的分析／簡報尚未 ready，送出前即
+顯示錯誤；後端仍會按 `(project_id, reference_id)` 再驗證一次。
 
 1. 用測試用電子郵件與至少 8 個字元的密碼登入，建立一本空白筆記本。帳號仍是前端模擬，不會傳送到後端。
 2. 新增一張來源卡，選「已安裝資料集」、資料集與篩選條件後儲存。
@@ -147,6 +170,16 @@ React 成果設定面板已使用 Apache ECharts 呈現 `view.kind === "chart"` 
 - [PR #12 review 回覆與交接清單](./docs/pr-12-review-response.md) 對照第一輪六項 review 要求、已執行檢查，以及下一個 Source → Chart PR 的範圍；已隨 `24b7f5d` 推送，保留提交時的紀錄。最新修正進度以 BACKEND_TODO 為準。
 - [9/1 前端規劃](./docs/frontend-plan-2026-09-01.md) 是歷史提案，其中的 API 路徑、架構與功能優先序不視為目前已凍結的契約。
 - Source → Chart 與 Chart → Presentation 已接上正式契約及端點拖曳。Assistant API、檔案上傳、政策雷達分析與 AWS 部署仍是後續獨立 checkpoint。
+
+## 相關文件
+
+- [前端整合契約](../../docs/frontend-integration-contract.md)
+- [Chart Artifact](../../docs/frontend-chart-artifact.md)
+- [Report Artifact](../../docs/report-contract.md)
+- [Presentation Artifact](../../docs/presentation-contract.md)
+- [Assistant Context](../../docs/assistant-contract.md)
+- [完整 demo 驗收](../../docs/demo-readiness.md)
+- [歷史後端待辦與資料稽核](./BACKEND_TODO.md)
 
 ## 原始設計與授權
 

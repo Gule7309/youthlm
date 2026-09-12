@@ -74,6 +74,9 @@ class DemoPreflightRunnerContractTests(unittest.TestCase):
         self.assertIn("2026-09-13 13:00", script)
         self.assertIn("Get-Command aws", script)
         self.assertIn("AWS CLI v2 was not found", script)
+        self.assertIn('@("us-east-1", "us-west-2")', script)
+        self.assertIn("AllowOrganizerRegionOverride", script)
+        self.assertIn("1.05-second minimum intervals", script)
 
 
 if __name__ == "__main__":

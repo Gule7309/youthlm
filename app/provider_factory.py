@@ -9,6 +9,7 @@ from app.gemini_provider import GeminiGenerateContentProvider, GeminiTransport
 from app.provider import ModelProvider
 
 BedrockClientFactory = Callable[..., Any]
+BEDROCK_COMPETITION_MIN_REQUEST_INTERVAL_SECONDS = 1.05
 
 
 class ProviderConfigurationError(RuntimeError):
@@ -54,7 +55,13 @@ def create_model_provider(
             "bedrock-runtime",
             region_name=region,
         )
-        return BedrockConverseProvider(client=client, model_id=model_id)
+        return BedrockConverseProvider(
+            client=client,
+            model_id=model_id,
+            min_request_interval_seconds=(
+                BEDROCK_COMPETITION_MIN_REQUEST_INTERVAL_SECONDS
+            ),
+        )
 
     raise ProviderConfigurationError(
         f"Unsupported MODEL_PROVIDER: {provider_name}. Use 'gemini' or 'bedrock'."

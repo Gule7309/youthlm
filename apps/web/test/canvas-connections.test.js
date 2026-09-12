@@ -84,6 +84,20 @@ test('chart results connect to presentations and can be appended', () => {
   assert.deepEqual(outcome.nodes.find(node => node.id === 'deck').result.sourceModuleIds, ['chart-a', 'chart-b']);
 });
 
+test('chart results connect to reports without changing their artifact kind', () => {
+  const nodes = [
+    result('chart-a', 'chart'),
+    result('chart-b', 'chart'),
+    result('report', 'report', { sourceModuleIds: ['chart-a'] }),
+  ];
+  const outcome = connectCanvasNodes(nodes, 'chart-b', 'report');
+
+  assert.equal(outcome.status, 'connected');
+  assert.equal(outcome.kind, 'analysis');
+  assert.equal(outcome.nodes.find(node => node.id === 'report').result.kind, 'report');
+  assert.deepEqual(outcome.nodes.find(node => node.id === 'report').result.sourceModuleIds, ['chart-a', 'chart-b']);
+});
+
 test('chart output turns an empty result into a presentation', () => {
   const nodes = [result('chart', 'chart'), result('target')];
   const outcome = connectCanvasNodes(nodes, 'chart', 'target');
@@ -95,9 +109,10 @@ test('chart output turns an empty result into a presentation', () => {
 });
 
 test('invalid directions and incompatible result kinds are rejected', () => {
-  const nodes = [source('s'), result('chart-a', 'chart'), result('chart-b', 'chart'), result('deck', 'presentation')];
+  const nodes = [source('s'), result('chart-a', 'chart'), result('chart-b', 'chart'), result('deck', 'presentation'), result('report', 'report')];
 
   assert.equal(connectionKindBetween(nodes, 's', 'deck'), null);
+  assert.equal(connectionKindBetween(nodes, 's', 'report'), null);
   assert.equal(connectionKindBetween(nodes, 'chart-a', 'chart-b'), null);
   assert.equal(connectionKindBetween(nodes, 'deck', 'chart-a'), null);
   assert.equal(connectionKindBetween(nodes, 'chart-a', 'chart-a'), null);

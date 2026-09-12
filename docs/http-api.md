@@ -18,6 +18,12 @@ does not contain model or dataset business logic.
   with a ready `PresentationResult`.
 - `GET /v1/projects/{project_id}/presentations/{presentation_id}/download`
   downloads the generated editable PPTX within the same project boundary.
+- `POST /v1/reports` loads stored Analysis modules and returns HTTP `201` with a
+  ready `ReportResult`.
+- `GET /v1/projects/{project_id}/reports/{report_id}/download` downloads the
+  generated editable DOCX within the same project boundary.
+- `POST /v1/assistant` resolves explicit Source, Analysis, and Presentation
+  references inside one project before invoking the same Research Agent.
 
 Local browser clients on ports `3000` and `5173` are allowed by the default CORS
 policy. The repository Docker image serves the Vite build from this same app, so
@@ -99,3 +105,32 @@ uv run --frozen python -m spikes.presentation_api_smoke
 
 The second command verifies the returned contract, downloaded byte size and
 SHA-256 digest, then saves the editable file under `var/smoke`.
+
+## Generate a report
+
+After one or more Analysis modules have been stored, create and download an
+editable policy research report:
+
+```powershell
+$body = Get-Content contracts/examples/report-request.json -Raw
+$result = Invoke-RestMethod `
+    -Method Post `
+    -Uri "http://127.0.0.1:8000/v1/reports" `
+    -ContentType "application/json" `
+    -Body $body
+
+Invoke-WebRequest `
+    -Uri ("http://127.0.0.1:8000" + $result.download_url) `
+    -OutFile $result.file_name
+```
+
+For the canonical demo module, run the Analysis smoke first and keep the same API
+process alive:
+
+```powershell
+uv run python -m spikes.analysis_api_smoke
+uv run python -m spikes.report_api_smoke
+```
+
+The Report smoke validates the response, downloaded byte size, SHA-256 digest,
+and DOCX package signature, then saves the file under `var/smoke`.

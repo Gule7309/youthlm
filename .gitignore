@@ -18,5 +18,6 @@ blob-report/
 *.db
 *.log
 *.pptx
+*.docx
 /var/
 node_modules/

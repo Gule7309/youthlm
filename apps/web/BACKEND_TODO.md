@@ -1,23 +1,30 @@
 # YouthLM 後端整合與未完成事項
 
-最後更新：2026-09-11
+最後更新：2026-09-12
+
+> 明日比賽候選版以 `codex/source-catalog` 最新整合成果為底，已納入
+> Source → Chart、Chart → Report、Chart → Presentation 與明確上下文
+> Assistant。Report 由保存的 AnalysisResult 確定性產生可編輯 DOCX；
+> Assistant 只傳使用者勾選的後端來源／分析／簡報 ID。登入、整本
+> Notebook／Canvas 雲端保存、上傳／自訂來源與 Policy Radar 後端仍未完成。
 
 ## 2026-09-11：最終驗收前收斂
 
 - [x] 新帳號不再 seed 缺乏資料支撐的教育／職訓數字、假檔名或 legacy transform/analysis 卡；舊草稿載入與保存時安全移除這兩種不可新增節點，保留使用者來源／成果，並將既有小幫手對話整併至右側聊天室後重算可見卡片數。
-- [x] 政策雷達新建及每次開啟筆記本皆預設收合，避免遮住卡片；保留最近紀錄並清除殘留 running，成果數同時涵蓋有效圖表與簡報連線。
+- [x] 政策雷達新建及每次開啟筆記本皆預設收合，避免遮住卡片；保留最近紀錄並清除殘留 running，成果數同時涵蓋有效圖表、報告與簡報連線。
 - [x] 模型 compatibility 修復：選擇 25–29 + 30–34 時驗證完整 25–34 scope；只有問題中明確且相符的年齡範圍拒絕可阻擋，不相關 broad refusal 不再造成錯誤完成。
 - [x] 兩份資料加入 hash/schema/coverage/reconciliation audit；2013 樹林／鶯歌／汐止 5–9 歲官方異常保留原值、明確警告並在分析前阻擋。失業率官方寬表的 raw→normalized mapping 已可重現。
 - [x] 前端正式相依已移除未使用 react-router、升級 ECharts 6.1.0 與 Vite 6.4.3；目前完整 npm audit 為 0。
 - [x] 已新增 same-origin 單容器骨架及 FastAPI 靜態前端服務測試；正式 image/AWS/Bedrock 尚未實機通過，原因見根目錄 [BACKEND_TODO](../../BACKEND_TODO.md)。
-- [x] 最終自動品質閘門通過：Python 193/193、前端 96/96、Ruff、typecheck、production build、資料 audit、diff whitespace 與 npm audit 0；同源 production smoke 的首頁、JS/CSS、health、ready 與資料目錄皆為 200。
+- [x] 9/12 整合品質閘門通過：Python 218/218、前端 110/110、Ruff、typecheck、production build、資料 audit、diff whitespace 與 npm audit 0；先前同源 production smoke 的首頁、JS/CSS、health、ready 與資料目錄皆為 200。
 - [x] 新增導引式主流程：空白頁直接選官方資料、來源卡建立已連結圖表、完成圖表建立已連結簡報；手動端點拖曳仍保留。快捷卡片固定沿來源→圖表→簡報水平排列，小流程全覽上限為 100%。
 - [x] 第一本筆記本會顯示四步操作教學，涵蓋流程、來源、小幫手與卡片操作；可略過、完成後直接選資料、從頁首重開，完成狀態保存在本機草稿。筆記本預設收合左右面板，政策雷達只在已有可盤點內容後顯示。
 - [x] 已完成的成果直接在白板卡片顯示：圖表採實際 ECharts option，無 visualization 時改用實際資料表；簡報顯示依真實標題產生的封面摘要、分析數量、PPTX 完成狀態與檔案大小。右側設定仍保留完整資料、來源、警告與下載操作。
 - [x] 全站提供小／中／大／特大四檔文字大小；原 14px 為小，rem 介面與固定 8–11px 輔助文字會一起按比例調整。設定以獨立 localStorage preference 保存，不混入筆記本草稿。
+- [x] 小幫手已移到每本筆記本唯一的右側聊天室，串接真實 Assistant API；只傳使用者明確勾選的來源／分析／簡報 reference，並顯示回應的證據與工具執行數。舊版多張小幫手卡會整併保留對話與引用。
 - [ ] PresentationResult 尚無頁數、投影片圖片或 PDF 預覽網址；真正逐頁簡報縮圖／線上預覽須由後端新增契約與產物，前端目前不假造投影片內容。
 - [x] 最終 Playwright fixture 流程已完成來源→圖表→簡報、PPTX 簽章／hash 下載驗證、雷達／縮放／空白收合、窄螢幕、重新登入保存，以及官方異常範圍拒絕。重開筆記本現在會自動全覽負座標／畫面外卡片；收合 inspector 使用真正 inert，ECharts 隱藏容器不再產生零尺寸警告。
-- [ ] 最後只做一次 [FRONTEND_ACCEPTANCE](../../FRONTEND_ACCEPTANCE.md) 人工驗收；本輪未 commit／push。
+- [ ] 最後由使用者依 [FRONTEND_ACCEPTANCE](../../FRONTEND_ACCEPTANCE.md) 手動驗收真實 Bedrock 與瀏覽器流程；fixture 不視為正式 AI 驗收。
 
 ## 2026-09-10：白板端點拖曳連線
 

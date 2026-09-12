@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadTs } from './load-ts.js';
-const { runAnalysis, createPresentation, downloadPresentation, resolveApiUrl } = await loadTs('../src/app/api-client.ts');
+const { runAnalysis, createPresentation, downloadPresentation, downloadReport, resolveApiUrl } = await loadTs('../src/app/api-client.ts');
 const ok = () => new Response(JSON.stringify({ status: 'completed' }));
 
 test('canonical API env takes precedence, legacy env remains compatible', async () => {
@@ -75,4 +75,17 @@ test('PPTX download validates endpoint, size, signature, hash and HTTP failures'
   await assert.rejects(downloadPresentation({ ...view, artifactSha256: '0'.repeat(64) }, fetcher, ''), /SHA-256 不符/);
   await assert.rejects(downloadPresentation(view, async () => new Response('abcdef'), ''), /不是有效/);
   await assert.rejects(downloadPresentation(view, async () => new Response('', { status: 404 }), ''), /HTTP 404/);
+});
+
+test('DOCX download validates endpoint, size, signature, hash and HTTP failures', async () => {
+  const bytes = new Uint8Array([0x50, 0x4b, 3, 4, 1, 0]);
+  const hash = Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
+  const view = { kind: 'ready', projectId: 'p', reportId: 'id', downloadUrl: '/v1/projects/p/reports/id/download', fileSizeBytes: bytes.length, artifactSha256: hash };
+  const fetcher = async () => new Response(bytes);
+  assert.equal((await downloadReport(view, fetcher, '')).size, bytes.length);
+  await assert.rejects(downloadReport({ ...view, projectId: 'wrong' }, fetcher, ''), /身分不符/);
+  await assert.rejects(downloadReport({ ...view, fileSizeBytes: 99 }, fetcher, ''), /大小不符/);
+  await assert.rejects(downloadReport({ ...view, artifactSha256: '0'.repeat(64) }, fetcher, ''), /SHA-256 不符/);
+  await assert.rejects(downloadReport(view, async () => new Response('abcdef'), ''), /不是有效/);
+  await assert.rejects(downloadReport(view, async () => new Response('', { status: 404 }), ''), /HTTP 404/);
 });

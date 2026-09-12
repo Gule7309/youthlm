@@ -3,6 +3,7 @@ import {
   BarChart3,
   CheckCircle2,
   FileOutput,
+  FileText,
   GripHorizontal,
   LoaderCircle,
   Pencil,
@@ -10,7 +11,13 @@ import {
   Presentation,
   Trash2,
 } from 'lucide-react';
-import type { AnalysisExecution, CanvasNode, ChartArtifactView, PresentationExecution } from '../types';
+import type {
+  AnalysisExecution,
+  CanvasNode,
+  ChartArtifactView,
+  PresentationExecution,
+  ReportExecution,
+} from '../types';
 import { RESULT_CARD_SIZE, type CanvasConnectionKind } from '../canvas-connections';
 import { buildCompactChartOption, formatArtifactFileSize } from '../result-preview';
 import { EChartsCanvas } from './AnalysisResultPanel';
@@ -81,12 +88,33 @@ function PresentationCardPreview({ execution, sourceCount }: { execution: Presen
   );
 }
 
+function ReportCardPreview({ execution, sourceCount }: { execution: ReportExecution; sourceCount: number }) {
+  if (execution.view?.kind !== 'ready') return null;
+  const view = execution.view;
+  return (
+    <section className="min-h-0 flex-1 overflow-hidden rounded-xl border border-violet-200 bg-violet-50/40" aria-label="卡片內研析報告成果預覽">
+      <div className="m-2.5 flex min-h-28 items-center gap-3 rounded-lg border border-violet-100 bg-white p-4 shadow-sm">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700"><FileText className="size-5" /></span>
+        <div className="min-w-0">
+          <h4 className="line-clamp-2 text-sm font-semibold leading-5 text-slate-800">{view.title}</h4>
+          <p className="mt-1 text-[9px] text-slate-500">整合 {sourceCount} 份已完成分析</p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2 border-t border-violet-100 bg-white/80 px-3 py-2 text-[9px]">
+        <span className="flex min-w-0 items-center gap-1 font-medium text-emerald-700"><CheckCircle2 className="size-3 shrink-0" /><span className="truncate">DOCX 已產生</span></span>
+        <span className="shrink-0 text-slate-500">{formatArtifactFileSize(view.fileSizeBytes)}</span>
+      </div>
+    </section>
+  );
+}
+
 export type ResultCardProps = {
   node: CanvasNode;
   selected?: boolean;
   sourcesReady?: boolean;
   execution?: AnalysisExecution;
   presentationExecution?: PresentationExecution;
+  reportExecution?: ReportExecution;
   onRun?: (id: string) => void;
   onCreatePresentation?: (id: string) => void;
   onEdit: (id: string) => void;
@@ -105,6 +133,7 @@ export function ResultCard({
   sourcesReady = false,
   execution,
   presentationExecution,
+  reportExecution,
   onRun,
   onCreatePresentation,
   onEdit,
@@ -118,18 +147,24 @@ export function ResultCard({
 }: ResultCardProps) {
   const config = node.result;
   const isPresentation = config?.kind === 'presentation';
+  const isReport = config?.kind === 'report';
+  const usesAnalysisModules = isPresentation || isReport;
   const isConfigured = Boolean(
     config?.name.trim()
     && (
       config.kind === 'chart'
         ? config.sourceNodeIds.length > 0 && config.prompt.trim()
-        : config.kind === 'presentation'
+        : usesAnalysisModules
           ? (config.sourceModuleIds?.length ?? 0) > 0
           : false
     ),
   );
   const isReadyForGeneration = isConfigured && sourcesReady;
-  const activeExecution = isPresentation ? presentationExecution : execution;
+  const activeExecution = isPresentation
+    ? presentationExecution
+    : isReport
+      ? reportExecution
+      : execution;
   const isRunning = activeExecution?.state === 'running';
   const chartPreview = !isPresentation
     && execution?.state === 'ready'
@@ -141,31 +176,42 @@ export function ResultCard({
     && presentationExecution.view?.kind === 'ready'
       ? presentationExecution
       : null;
+  const reportPreview = isReport
+    && reportExecution?.state === 'ready'
+    && reportExecution.view?.kind === 'ready'
+      ? reportExecution
+      : null;
   const compactChartOption = useMemo(
     () => chartPreview?.kind === 'chart' && chartPreview.chartOption
       ? buildCompactChartOption(chartPreview.chartOption)
       : null,
     [chartPreview?.chartOption, chartPreview?.kind],
   );
-  const hasArtifactPreview = Boolean(chartPreview || presentationPreview);
+  const hasArtifactPreview = Boolean(chartPreview || presentationPreview || reportPreview);
   const ResultIcon = config?.kind === 'chart'
     ? BarChart3
+    : config?.kind === 'report'
+      ? FileText
     : config?.kind === 'presentation'
       ? Presentation
       : FileOutput;
   const resultType = config?.kind === 'chart'
     ? '洞察圖表'
+    : config?.kind === 'report'
+      ? '議題研析報告'
     : config?.kind === 'presentation'
       ? '洞察簡報'
       : '尚未選擇成果類型';
-  const sourceCount = isPresentation
+  const sourceCount = usesAnalysisModules
     ? config?.sourceModuleIds?.length ?? 0
     : config?.sourceNodeIds.length ?? 0;
   const promptSummary = config?.prompt.trim()
-    || (isPresentation ? '使用預設政策簡報格式' : '請先描述希望產生的內容與洞察方向');
+    || (usesAnalysisModules
+      ? isReport ? '使用預設政策研析報告格式' : '使用預設政策簡報格式'
+      : '請先描述希望產生的內容與洞察方向');
   const usesAnalysisInputColor = inputConnectionKind
     ? inputConnectionKind === 'analysis'
-    : isPresentation;
+    : usesAnalysisModules;
   const inputConnectionClass = inputConnectionState === 'hovered'
     ? usesAnalysisInputColor
       ? 'scale-125 cursor-copy bg-violet-600 ring-4 ring-violet-200'
@@ -177,7 +223,7 @@ export function ResultCard({
       : inputConnectionState === 'invalid'
         ? 'cursor-not-allowed bg-slate-200 opacity-60'
         : sourceCount > 0
-          ? isPresentation ? 'cursor-default bg-violet-600' : 'cursor-default bg-blue-600'
+          ? usesAnalysisModules ? 'cursor-default bg-violet-600' : 'cursor-default bg-blue-600'
           : 'cursor-default bg-slate-300';
 
   return (
@@ -210,10 +256,10 @@ export function ResultCard({
             : inputConnectionState === 'invalid'
               ? '這張成果卡片不接受目前的連線'
               : onInputPointerDown
-                ? isPresentation ? '拖曳以連接分析成果' : '拖曳以連接來源卡片'
+                ? usesAnalysisModules ? '拖曳以連接分析成果' : '拖曳以連接來源卡片'
           : sourceCount > 0
-            ? `已連接 ${sourceCount} 個${isPresentation ? '分析成果' : '來源'}`
-            : `請在成果設定中選擇${isPresentation ? '分析成果' : '來源'}`}
+            ? `已連接 ${sourceCount} 個${usesAnalysisModules ? '分析成果' : '來源'}`
+            : `請在成果設定中選擇${usesAnalysisModules ? '分析成果' : '來源'}`}
       />
 
       <div
@@ -249,6 +295,8 @@ export function ResultCard({
           <ChartCardPreview view={chartPreview} option={compactChartOption} />
         ) : presentationPreview ? (
           <PresentationCardPreview execution={presentationPreview} sourceCount={sourceCount} />
+        ) : reportPreview ? (
+          <ReportCardPreview execution={reportPreview} sourceCount={sourceCount} />
         ) : (
           <div className="flex items-start gap-3 rounded-lg bg-slate-50 p-3">
           <ResultIcon className="mt-0.5 size-4 shrink-0 text-slate-500" />
@@ -256,7 +304,9 @@ export function ResultCard({
             <div className="flex items-center justify-between gap-2">
               <p className="truncate text-xs font-medium text-slate-700">{resultType}</p>
               <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">
-                {isPresentation ? sourceCount > 0 ? `${sourceCount} 個分析` : '需分析成果' : `${sourceCount} 個來源`}
+                {usesAnalysisModules
+                  ? sourceCount > 0 ? `${sourceCount} 個分析` : '需分析成果'
+                  : `${sourceCount} 個來源`}
               </span>
             </div>
             <p
@@ -278,17 +328,17 @@ export function ResultCard({
         >
           <span className={`size-1.5 rounded-full ${isReadyForGeneration ? 'bg-violet-500' : 'bg-amber-500'}`} />
           {isRunning
-              ? isPresentation ? '正在產生簡報' : '小幫手分析中'
+            ? isPresentation ? '正在產生簡報' : isReport ? '正在產生研析報告' : 'YouthLM Agent 分析中'
             : activeExecution?.view?.kind === 'error'
-                ? `${isPresentation ? '簡報產生失敗' : '分析失敗'}${activeExecution.view.retriable ? '，可重試' : '，請檢查設定'}`
-              : !isPresentation && execution?.view?.status === 'blocked'
+              ? `${isPresentation ? '簡報產生失敗' : isReport ? '報告產生失敗' : '分析失敗'}${activeExecution.view.retriable ? '，可重試' : '，請檢查設定'}`
+              : !usesAnalysisModules && execution?.view?.status === 'blocked'
                 ? '資料限制阻擋分析'
                 : activeExecution?.state === 'ready'
-                  ? isPresentation ? '可下載 PPTX' : '分析結果已產生'
+                  ? isPresentation ? '可下載 PPTX' : isReport ? '可下載 DOCX' : '分析結果已產生'
                   : isReadyForGeneration
-                    ? isPresentation ? '可產生真實簡報' : '可執行真實分析'
+                    ? isPresentation ? '可產生真實簡報' : isReport ? '可產生研析報告' : '可執行真實分析'
             : isConfigured
-              ? isPresentation ? '設定已儲存，分析尚未完成' : '設定已儲存，來源尚待設定'
+              ? usesAnalysisModules ? '設定已儲存，分析尚未完成' : '設定已儲存，來源尚待設定'
               : '尚未設定'}
         </span>}
 
@@ -314,10 +364,10 @@ export function ResultCard({
             >
               {isRunning ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
               {isRunning
-                ? isPresentation ? '產生中…' : '分析中…'
+                ? isPresentation ? '產生中…' : isReport ? '產生中…' : '分析中…'
                 : activeExecution
-                  ? isPresentation ? '重新產生' : '重新分析'
-                  : isPresentation ? '產生簡報' : '執行分析'}
+                  ? usesAnalysisModules ? '重新產生' : '重新分析'
+                  : isPresentation ? '產生簡報' : isReport ? '產生報告' : '執行分析'}
             </button>
           )}
           {onCreatePresentation && onRun && (

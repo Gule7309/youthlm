@@ -42,6 +42,16 @@ test('presentation invalidates when upstream analysis reruns or loses readiness'
   assert.notEqual(resultInputSignature('p', nodes, {}), before);
 });
 
+test('report uses generated-artifact dependencies in its input signature', () => {
+  const reportNodes = nodes.map(node => node.id === 'p'
+    ? { ...node, result: { ...node.result, kind: 'report' } }
+    : node);
+  const analyses = { a: analysis };
+  const before = resultInputSignature('p', reportNodes, analyses);
+  const rerun = { a: { ...analysis, moduleId: 'analysis-a-rerun' } };
+  assert.notEqual(resultInputSignature('p', reportNodes, rerun), before);
+});
+
 test('presentation sends successful backend run IDs, never Canvas card IDs', () => {
   const request = buildPresentationRequest({ projectId: 'project', result: nodes[2].result, analyses: { a: analysis } });
   assert.deepEqual(request.source_module_ids, ['run_2']);

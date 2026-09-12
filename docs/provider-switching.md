@@ -118,6 +118,8 @@ sequence.
 
 Replace the three placeholders with organizer-issued values. Supplying the
 expected account ID prevents accidentally using a personal AWS account.
+The competition deployment region must be `us-east-1` or `us-west-2` unless
+event staff explicitly announces a replacement.
 
 ```powershell
 .\scripts\event-day-preflight.ps1 `
@@ -136,11 +138,19 @@ first failure. It verifies, in order:
 4. A temporary live Contract v0 API using `BedrockConverseProvider`.
 5. Source-to-Chart analysis and project-scoped upstream module retrieval.
 6. Editable PPTX generation, download, file size, and SHA-256.
+7. Editable DOCX report generation, download, file size, and SHA-256.
+8. Live Assistant execution with the exact selected Source, Analysis, and
+   Presentation references.
 
 The runner invokes the full Python and frontend quality gates with locked
 dependencies, checks `/ready` and `/v1/data-sources`, and keeps identifiers out of
 normal output. It still runs locally against the named AWS profile; it does not
 replace a deployed IAM-role smoke test.
+
+Production Bedrock calls share one provider instance and are serialized with at
+least 1.05 seconds between request starts, satisfying the competition's
+below-one-RPS rule. Keep one worker and replica; multiple processes would each
+have an independent limiter.
 
 Only after it prints `YouthLM Bedrock event-day preflight passed` should you start
 the isolated AgentCore smoke app:

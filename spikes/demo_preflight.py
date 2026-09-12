@@ -6,19 +6,28 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from apps.api.contract_models import AnalysisResult, PresentationResult
+from apps.api.contract_models import (
+    AnalysisResult,
+    AssistantResult,
+    PresentationResult,
+    ReportResult,
+)
 from spikes.analysis_api_smoke import (
     AnalysisApiSmokeError,
 )
 from spikes.analysis_api_smoke import (
     run_smoke as run_analysis_smoke,
 )
+from spikes.assistant_api_smoke import AssistantApiSmokeError
+from spikes.assistant_api_smoke import run_smoke as run_assistant_smoke
 from spikes.presentation_api_smoke import (
     PresentationApiSmokeError,
 )
 from spikes.presentation_api_smoke import (
     run_smoke as run_presentation_smoke,
 )
+from spikes.report_api_smoke import ReportApiSmokeError
+from spikes.report_api_smoke import run_smoke as run_report_smoke
 
 
 class DemoPreflightError(RuntimeError):
@@ -32,10 +41,14 @@ def run_preflight(
     timeout_seconds: int = 300,
     analysis_smoke: Callable[..., tuple[AnalysisResult, AnalysisResult]] | None = None,
     presentation_smoke: Callable[..., tuple[PresentationResult, Path]] | None = None,
+    report_smoke: Callable[..., tuple[ReportResult, Path]] | None = None,
+    assistant_smoke: Callable[..., AssistantResult] | None = None,
 ) -> dict[str, Any]:
-    """Run Analysis, stored context, and Presentation through live HTTP."""
+    """Run Analysis, artifacts, and explicit-context Assistant through live HTTP."""
     run_analysis = analysis_smoke or run_analysis_smoke
     run_presentation = presentation_smoke or run_presentation_smoke
+    run_report = report_smoke or run_report_smoke
+    run_assistant = assistant_smoke or run_assistant_smoke
 
     try:
         source_result, upstream_result = run_analysis(
@@ -47,13 +60,32 @@ def run_preflight(
             output_directory,
             timeout_seconds=timeout_seconds,
         )
-    except (AnalysisApiSmokeError, PresentationApiSmokeError) as error:
+        if source_result.module_id not in presentation_result.source_module_ids:
+            raise DemoPreflightError(
+                "Presentation did not use the Source-to-Chart analysis module"
+            )
+        report_result, report_output_path = run_report(
+            base_url,
+            output_directory,
+            timeout_seconds=timeout_seconds,
+        )
+        assistant_result = run_assistant(
+            base_url,
+            project_id=source_result.project_id,
+            analysis_id=source_result.module_id,
+            presentation_id=presentation_result.presentation_id,
+            timeout_seconds=timeout_seconds,
+        )
+    except (
+        AnalysisApiSmokeError,
+        AssistantApiSmokeError,
+        PresentationApiSmokeError,
+        ReportApiSmokeError,
+    ) as error:
         raise DemoPreflightError(str(error)) from error
 
-    if source_result.module_id not in presentation_result.source_module_ids:
-        raise DemoPreflightError(
-            "Presentation did not use the Source-to-Chart analysis module"
-        )
+    if source_result.module_id not in report_result.source_module_ids:
+        raise DemoPreflightError("Report did not use the Source-to-Chart analysis module")
 
     return {
         "source_chart": {
@@ -73,6 +105,20 @@ def run_preflight(
             "file_size_bytes": presentation_result.file_size_bytes,
             "artifact_sha256": presentation_result.artifact_sha256,
             "saved_to": str(output_path),
+        },
+        "report": {
+            "report_id": report_result.report_id,
+            "status": report_result.status,
+            "source_module_ids": report_result.source_module_ids,
+            "file_size_bytes": report_result.file_size_bytes,
+            "artifact_sha256": report_result.artifact_sha256,
+            "saved_to": str(report_output_path),
+        },
+        "assistant": {
+            "status": assistant_result.status,
+            "model_steps": assistant_result.model_steps,
+            "resolved_reference_count": len(assistant_result.resolved_references),
+            "tool_execution_count": len(assistant_result.tool_executions),
         },
     }
 
