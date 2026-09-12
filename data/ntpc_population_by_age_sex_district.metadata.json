@@ -98,6 +98,7 @@
   "source_download_url": "https://data.ntpc.gov.tw/api/datasets/8308AB58-62D1-424E-8314-24B65B7AB492/csv/file",
   "snapshot_retrieved_at": "2026-08-31",
   "source_sha256": "226feaf05ffbc6918c67280fa42454574608b8c9b12cefa1902cf73619bf4cea",
+  "snapshot_sha256": "226feaf05ffbc6918c67280fa42454574608b8c9b12cefa1902cf73619bf4cea",
   "snapshot_row_count": 2250,
   "license": "政府資料開放授權條款－第1版",
   "youth_definition_compatibility": {
@@ -109,6 +110,7 @@
     "官方以5歲級距發布；不可按比例拆分15-19歲或35-39歲來估算完整18-35歲人口。",
     "行政區資料只到區級，不能解讀為里級分布。",
     "資料為年度統計，最新可用年度為2024年。",
-    "all為官方發布的男女合計值，不是由YouthLM自行加總或平均。"
+    "all為官方發布的男女合計值，不是由YouthLM自行加總或平均。",
+    "官方快照中2013年樹林區、鶯歌區、汐止區的計／男／女共9列，其年齡級距加總小於總人口，差異集中在5-9歲欄位；YouthLM保留官方原值、不自行補值，使用這些列前必須揭露限制。"
   ]
 }

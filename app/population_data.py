@@ -39,6 +39,9 @@ AGE_FIELD_BY_GROUP = {
     "100+": "percent23",
 }
 SEX_LABELS = {"計": "all", "男": "male", "女": "female"}
+KNOWN_UNRELIABLE_2013_AGE_5_9_DISTRICTS = frozenset(
+    {"樹林區", "鶯歌區", "汐止區"}
+)
 ROW_LABEL_PATTERN = re.compile(
     r"^(?P<year>\d{4})年 (?P<geography>.+?)0 (?P<sex>計|男|女)$"
 )
@@ -104,6 +107,20 @@ def query_population_dataset(arguments: dict[str, Any]) -> dict[str, Any]:
             f"{MAX_QUERY_ROWS} rows"
         )
 
+    affected_districts = sorted(
+        set(geographies) & KNOWN_UNRELIABLE_2013_AGE_5_9_DISTRICTS
+    )
+    if (
+        start_year <= 2013 <= end_year
+        and "5-9" in age_groups
+        and affected_districts
+    ):
+        raise PopulationDatasetQueryError(
+            "The official 2013 5-9 age-group values are internally inconsistent "
+            f"for {affected_districts}. Remove 2013, 5-9, or those districts; "
+            "YouthLM does not invent corrected values."
+        )
+
     selected_rows: list[dict[str, Any]] = []
     for source_row in source_rows:
         if not (
@@ -163,10 +180,10 @@ def _load_dataset() -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
     metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
     snapshot_bytes = DATA_PATH.read_bytes()
     actual_hash = hashlib.sha256(snapshot_bytes).hexdigest()
-    expected_hash = metadata["source_sha256"]
+    expected_hash = metadata["snapshot_sha256"]
     if not _matches_snapshot_hash(snapshot_bytes, expected_hash):
         raise RuntimeError(
-            "Population snapshot hash mismatch: "
+            "Population installed snapshot hash mismatch: "
             f"expected {expected_hash}, got {actual_hash}"
         )
 

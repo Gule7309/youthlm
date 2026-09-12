@@ -9,6 +9,7 @@ dependencies = [
   "boto3>=1.40,<2",
   "fastapi>=0.115,<1",
   "pydantic>=2.10,<3",
+  "python-docx>=1,<2",
   "python-pptx>=1,<2",
   "uvicorn>=0.34,<1",
 ]
@@ -21,8 +22,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["tests"]
+pythonpath = [".", "apps/api"]
+testpaths = ["tests", "apps/api/tests"]
 
 [tool.ruff]
 line-length = 100

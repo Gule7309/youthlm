@@ -1,0 +1,23 @@
+{
+  "contract_version": "0.1.0",
+  "project_id": "project_1",
+  "report_id": "report_1",
+  "source_module_ids": ["analysis_1"],
+  "title": "板橋區青年人口議題研析報告",
+  "status": "ready",
+  "output_format": "docx",
+  "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "file_name": "report_1.docx",
+  "file_size_bytes": 18432,
+  "artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "download_url": "/v1/projects/project_1/reports/report_1/download",
+  "created_at": "2026-09-10T08:00:00Z",
+  "warnings": [
+    {
+      "type": "age_mismatch",
+      "severity": "warning",
+      "message": "可用年齡級距僅部分涵蓋18至35歲，不能宣稱為精確青年總數。",
+      "affected_source_ids": ["ntpc_population_by_age_sex_district"]
+    }
+  ]
+}

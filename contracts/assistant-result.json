@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:youthlm:contracts:assistant-result:0.1.0",
+  "title": "YouthLM AssistantResult v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "project_id",
+    "assistant_id",
+    "status",
+    "answer",
+    "model_steps",
+    "resolved_references",
+    "tool_executions"
+  ],
+  "properties": {
+    "contract_version": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/ContractVersion"
+    },
+    "project_id": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+    },
+    "assistant_id": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+    },
+    "status": {
+      "const": "completed"
+    },
+    "answer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_steps": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "resolved_references": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AssistantResolvedReference"
+      }
+    },
+    "tool_executions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AssistantToolExecution"
+      }
+    }
+  },
+  "$defs": {
+    "AssistantResolvedReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reference_id",
+        "title"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "source",
+            "analysis",
+            "presentation"
+          ]
+        },
+        "reference_id": {
+          "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "AssistantToolExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "call_id",
+        "name",
+        "arguments",
+        "status"
+      ],
+      "properties": {
+        "call_id": {
+          "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+        },
+        "name": {
+          "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+        },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/JsonValue"
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "failed"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -113,20 +113,31 @@ test("unbound file/API sources fail before any HTTP request", () => {
   }), /尚未綁定可執行/);
 });
 
-test("duplicate Canvas cards for one registry dataset fail before Contract v0", () => {
+test("multiple Source cards are blocked before an analysis API request can be sent", () => {
   const second = structuredClone(sourceNode());
   second.id = "canvas-source-2";
-  assert.throws(() => buildAnalysisRequest({
-    projectId: "project-1",
-    moduleId: "analysis-1",
-    result: {
-      kind: "chart",
-      name: "圖表",
-      sourceNodeIds: ["canvas-source-1", "canvas-source-2"],
-      prompt: "分析",
-    },
-    sourceNodes: [sourceNode(), second],
-  }), /不能重複選取/);
+  second.source.name = "另一個官方資料來源";
+  second.source.registrySourceId = "another_registry_dataset";
+  let apiRequestCount = 0;
+
+  const buildThenSend = () => {
+    const request = buildAnalysisRequest({
+      projectId: "project-1",
+      moduleId: "analysis-1",
+      result: {
+        kind: "chart",
+        name: "圖表",
+        sourceNodeIds: ["canvas-source-1", "canvas-source-2"],
+        prompt: "分析",
+      },
+      sourceNodes: [sourceNode(), second],
+    });
+    apiRequestCount += 1;
+    return request;
+  };
+
+  assert.throws(buildThenSend, /目前每張圖表只支援一個資料來源；跨來源請分開分析後由簡報彙整/);
+  assert.equal(apiRequestCount, 0);
 });
 
 test("HTTP client uses exact catalog and analysis endpoints", async () => {

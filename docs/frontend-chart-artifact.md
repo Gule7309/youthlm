@@ -96,12 +96,11 @@ to the YouthLM Agent as module context.
 
 ## Presentation Artifact boundary
 
-Presentation generation is P1 and is not part of `AnalysisResult`. Its standalone
-`PresentationRequest` and `PresentationResult` Contract v0 is proposed in PR
-#13. Until the API endpoint exists, hide the action or label it as unavailable;
-do not generate a PPTX from the chart DOM and do not invent an endpoint.
+Presentation generation is not part of `AnalysisResult`. Its standalone
+`PresentationRequest` and `PresentationResult` Contract v0 is implemented by
+`POST /v1/presentations`; do not generate a PPTX from the chart DOM.
 
-The planned v0 interaction is synchronous:
+The v0 interaction is synchronous:
 
 ```text
 User selects one or more completed/partial Analysis Modules
@@ -118,3 +117,7 @@ User selects one or more completed/partial Analysis Modules
 Contract v0 has no backend queue or polling state. OpenSlide will not be
 installed. Presenton remains an optional adapter experiment after the
 deterministic python-pptx version works.
+
+Report generation uses the same completed／partial Analysis-module input
+boundary but has independent `ReportRequest`, `ReportResult`, and DOCX download
+routes. See [`report-contract.md`](report-contract.md).

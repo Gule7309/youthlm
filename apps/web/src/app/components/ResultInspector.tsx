@@ -4,6 +4,7 @@ import {
   Check,
   Database,
   FileCheck2,
+  FileText,
   Info,
   Presentation,
   X,
@@ -12,10 +13,13 @@ import type {
   AnalysisExecution,
   CanvasNode,
   PresentationExecution,
+  ReportExecution,
   ResultConfig,
 } from '../types';
+import { CHART_SINGLE_SOURCE_MESSAGE } from '../analysis-integration';
 import { AnalysisResultPanel } from './AnalysisResultPanel';
 import { PresentationResultPanel } from './PresentationResultPanel';
+import { ReportResultPanel } from './ReportResultPanel';
 
 type EditableResultKind = Exclude<ResultConfig['kind'], null>;
 
@@ -26,15 +30,18 @@ export type ResultInspectorProps = {
   analysisExecutions: Record<string, AnalysisExecution>;
   execution?: AnalysisExecution;
   presentationExecution?: PresentationExecution;
+  reportExecution?: ReportExecution;
   onSave: (config: ResultConfig) => void;
   onRun?: () => void;
+  onCancel?: () => void;
+  onCreatePresentation?: () => void;
   onClose?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
 
 function sourceTypeLabel(sourceNode: CanvasNode) {
   if (sourceNode.source?.enabled === false) return '已停用';
-  if (sourceNode.source?.kind === 'registry') return '已安裝資料集';
+  if (sourceNode.source?.kind === 'registry') return '官方資料集';
   if (sourceNode.source?.kind === 'file') return '上傳檔案';
   if (sourceNode.source?.kind === 'api') return '公開 API';
   return '尚未設定';
@@ -62,8 +69,8 @@ function analysisStateLabel(execution: AnalysisExecution | undefined) {
   if (execution?.state === 'failed' || execution?.view?.kind === 'error') return '分析失敗';
   if (analysisIsReady(execution)) {
     return execution?.view?.status === 'partial'
-      ? '部分相容，可產生簡報'
-      : '分析完成，可產生簡報';
+      ? '部分相容，可產生 Artifact'
+      : '分析完成，可產生 Artifact';
   }
   return '請先執行這張圖表';
 }
@@ -75,23 +82,31 @@ export function ResultInspector({
   analysisExecutions,
   execution,
   presentationExecution,
+  reportExecution,
   onSave,
   onRun,
+  onCancel,
+  onCreatePresentation,
   onClose,
   onDirtyChange,
 }: ResultInspectorProps) {
   const sourceNodeIdsKey = sourceNodes.map(sourceNode => sourceNode.id).join('|');
   const analysisNodeIdsKey = analysisNodes.map(analysisNode => analysisNode.id).join('|');
+  const storedSourceNodeIdsKey = (node.result?.sourceNodeIds ?? []).join('|');
+  const storedSourceModuleIdsKey = (node.result?.sourceModuleIds ?? []).join('|');
   const [kind, setKind] = useState<EditableResultKind | null>(node.result?.kind ?? null);
   const [name, setName] = useState(node.result?.name ?? '');
   const [sourceNodeIds, setSourceNodeIds] = useState<string[]>(node.result?.sourceNodeIds ?? []);
   const [sourceModuleIds, setSourceModuleIds] = useState<string[]>(node.result?.sourceModuleIds ?? []);
   const isPresentation = kind === 'presentation';
+  const isReport = kind === 'report';
+  const usesAnalysisModules = isPresentation || isReport;
   const [prompt, setPrompt] = useState(node.result?.prompt ?? '');
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const selectedSourcesReady = sourceNodeIds.length > 0 && sourceNodeIds.every(sourceNodeId => {
+  const hasTooManySources = kind === 'chart' && sourceNodeIds.length > 1;
+  const selectedSourcesReady = sourceNodeIds.length === 1 && sourceNodeIds.every(sourceNodeId => {
     const sourceNode = sourceNodes.find(source => source.id === sourceNodeId);
     return sourceNode ? sourceIsReady(sourceNode) : false;
   });
@@ -115,7 +130,16 @@ export function ResultInspector({
     setSaved(false);
     setDirty(false);
     onDirtyChange?.(false);
-  }, [node.id, sourceNodeIdsKey, analysisNodeIdsKey]);
+  }, [
+    node.id,
+    node.result?.kind,
+    node.result?.name,
+    node.result?.prompt,
+    storedSourceNodeIdsKey,
+    storedSourceModuleIdsKey,
+    sourceNodeIdsKey,
+    analysisNodeIdsKey,
+  ]);
 
   const markDirty = () => {
     setDirty(true);
@@ -140,10 +164,8 @@ export function ResultInspector({
     markDirty();
   };
 
-  const toggleSource = (sourceNodeId: string) => {
-    setSourceNodeIds(currentIds => currentIds.includes(sourceNodeId)
-      ? currentIds.filter(id => id !== sourceNodeId)
-      : [...currentIds, sourceNodeId]);
+  const selectSource = (sourceNodeId: string) => {
+    setSourceNodeIds([sourceNodeId]);
     setError('');
     markDirty();
   };
@@ -153,14 +175,18 @@ export function ResultInspector({
     const trimmedPrompt = prompt.trim();
 
     if (!kind) {
-      setError('請選擇洞察圖表或洞察簡報。');
+      setError('請選擇洞察圖表、研析報告或洞察簡報。');
       return;
     }
     if (kind === 'chart' && sourceNodeIds.length === 0) {
-      setError('請至少選擇一張來源卡片。');
+      setError('請選擇一張來源卡片。');
       return;
     }
-    if (kind === 'presentation' && sourceModuleIds.length === 0) {
+    if (kind === 'chart' && sourceNodeIds.length > 1) {
+      setError(CHART_SINGLE_SOURCE_MESSAGE);
+      return;
+    }
+    if (usesAnalysisModules && sourceModuleIds.length === 0) {
       setError('請至少選擇一張已完成的分析成果。');
       return;
     }
@@ -177,7 +203,7 @@ export function ResultInspector({
       kind,
       name: trimmedName,
       sourceNodeIds: kind === 'chart' ? sourceNodeIds : [],
-      sourceModuleIds: kind === 'presentation' ? sourceModuleIds : undefined,
+      sourceModuleIds: usesAnalysisModules ? sourceModuleIds : undefined,
       prompt: trimmedPrompt,
     });
     setError('');
@@ -193,9 +219,13 @@ export function ResultInspector({
     onClose?.();
   };
 
-  const activeExecution = isPresentation ? presentationExecution : execution;
-  const settingsReady = isPresentation ? selectedAnalysesReady : selectedSourcesReady;
-  const canSave = kind === 'presentation' ? analysisNodes.length > 0 : sourceNodes.length > 0;
+  const activeExecution = isPresentation
+    ? presentationExecution
+    : isReport
+      ? reportExecution
+      : execution;
+  const settingsReady = usesAnalysisModules ? selectedAnalysesReady : selectedSourcesReady;
+  const canSave = usesAnalysisModules ? analysisNodes.length > 0 : sourceNodes.length > 0;
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-white" aria-label="成果設定">
@@ -203,7 +233,11 @@ export function ResultInspector({
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-lg bg-violet-50 text-violet-700">
-              {isPresentation ? <Presentation className="size-4" /> : <BarChart3 className="size-4" />}
+              {isPresentation
+                ? <Presentation className="size-4" />
+                : isReport
+                  ? <FileText className="size-4" />
+                  : <BarChart3 className="size-4" />}
             </div>
             <div>
               <p className="text-[11px] font-medium text-violet-700">成果卡片</p>
@@ -222,14 +256,14 @@ export function ResultInspector({
           )}
         </div>
         <p className="mt-3 text-xs leading-5 text-slate-500">
-          圖表分析已安裝資料；簡報則從已保存的分析成果產生可編輯 PPTX。
+          圖表分析已安裝資料；研析報告與簡報則從已保存的分析成果產生可編輯檔案。
         </p>
       </div>
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5">
         <div>
           <span className="mb-2 block text-xs font-semibold text-slate-700">成果類型</span>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => chooseKind('chart')}
@@ -242,6 +276,20 @@ export function ResultInspector({
             >
               <BarChart3 className="size-5" />
               洞察圖表
+            </button>
+            <button
+              type="button"
+              onClick={() => chooseKind('report')}
+              className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border px-2 text-center text-xs font-medium transition ${
+                kind === 'report'
+                  ? 'border-violet-400 bg-violet-50 text-violet-700 ring-2 ring-violet-100'
+                  : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+              aria-pressed={kind === 'report'}
+            >
+              <FileText className="size-5" />
+              研析報告
+              <span className="text-[10px] font-normal">DOCX</span>
             </button>
             <button
               type="button"
@@ -260,7 +308,7 @@ export function ResultInspector({
           </div>
         </div>
 
-        {isPresentation ? (
+        {usesAnalysisModules ? (
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-slate-700">使用的分析成果</span>
@@ -323,9 +371,20 @@ export function ResultInspector({
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-slate-700">使用的來源</span>
             {sourceNodes.length > 0 && (
-              <span className="text-[11px] text-slate-500">已選 {sourceNodeIds.length} 個</span>
+              <span className={`text-[11px] ${hasTooManySources ? 'font-medium text-amber-700' : 'text-slate-500'}`}>
+                {hasTooManySources ? `已選 ${sourceNodeIds.length} 個，請改為 1 個` : '單選'}
+              </span>
             )}
           </div>
+          <p className="mb-3 text-[11px] leading-5 text-slate-500">
+            {CHART_SINGLE_SOURCE_MESSAGE}
+          </p>
+
+          {hasTooManySources && (
+            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800" role="alert">
+              這張既有草稿包含多個來源。請在下方選定其中一個來源後再儲存或執行。
+            </p>
+          )}
 
           {sourceNodes.length === 0 ? (
             <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 px-4 py-5 text-center">
@@ -334,7 +393,7 @@ export function ResultInspector({
               <p className="mt-1 text-[11px] leading-4 text-amber-700">請先在白板新增並設定一張來源卡片。</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2" role="radiogroup" aria-label="圖表資料來源">
               {sourceNodes.map(sourceNode => {
                 const checked = sourceNodeIds.includes(sourceNode.id);
                 const sourceName = sourceNode.source?.name || '未設定的資料來源';
@@ -342,13 +401,13 @@ export function ResultInspector({
                   <button
                     key={sourceNode.id}
                     type="button"
-                    onClick={() => toggleSource(sourceNode.id)}
+                    onClick={() => selectSource(sourceNode.id)}
                     className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition ${
                       checked
                         ? 'border-violet-300 bg-violet-50'
                         : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                     }`}
-                    role="checkbox"
+                    role="radio"
                     aria-checked={checked}
                   >
                     <span className="flex min-w-0 items-center gap-2.5">
@@ -358,7 +417,7 @@ export function ResultInspector({
                         <span className="mt-0.5 block text-[11px] text-slate-500">{sourceTypeLabel(sourceNode)}</span>
                       </span>
                     </span>
-                    <span className={`flex size-5 shrink-0 items-center justify-center rounded border ${
+                    <span className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${
                       checked ? 'border-violet-600 bg-violet-600 text-white' : 'border-slate-300 bg-white'
                     }`}>
                       {checked && <Check className="size-3.5" />}
@@ -381,14 +440,22 @@ export function ResultInspector({
               markDirty();
             }}
             className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-            placeholder={isPresentation ? '例如：板橋區青年人口政策簡報' : '例如：教育程度與起薪比較圖'}
+            placeholder={isPresentation
+              ? '例如：板橋區青年人口政策簡報'
+              : isReport
+                ? '例如：板橋區青年人口議題研析報告'
+                : '例如：教育程度與起薪比較圖'}
             maxLength={80}
           />
         </label>
 
         <label className="block">
           <span className="mb-1.5 block text-xs font-semibold text-slate-700">
-            {isPresentation ? '簡報生成指示（選填）' : '分析問題／解讀重點'}
+            {isPresentation
+              ? '簡報生成指示（選填）'
+              : isReport
+                ? '報告編製指示（選填）'
+                : '分析問題／解讀重點'}
           </span>
           <textarea
             value={prompt}
@@ -398,14 +465,16 @@ export function ResultInspector({
               markDirty();
             }}
             className="min-h-32 w-full resize-y rounded-lg border border-slate-200 px-3 py-2.5 text-sm leading-6 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-            placeholder={isPresentation
-              ? '例如：以政策會議語氣整理，保留資料限制、來源與圖表。'
+            placeholder={usesAnalysisModules
+              ? isReport
+                ? '例如：以政策研析格式整理，保留資料限制、來源與版本。'
+                : '例如：以政策會議語氣整理，保留資料限制、來源與圖表。'
               : '例如：說明 2022–2024 年的變化趨勢，並提出兩項政策觀察。'}
             maxLength={1200}
           />
           <span className="mt-1.5 flex items-start justify-between gap-3 text-[10px] leading-4 text-slate-400">
-            <span>{isPresentation
-              ? '簡報使用已保存的結構化分析；生成指示不會改寫原始數據、來源或警告。'
+            <span>{usesAnalysisModules
+              ? `${isReport ? '報告' : '簡報'}使用已保存的結構化分析；編製指示不會改寫原始數據、來源或警告。`
               : '此欄位不會改變資料範圍；年份、年齡、性別與地區請至來源卡設定。'}</span>
             <span className="shrink-0">{prompt.length}/1200</span>
           </span>
@@ -413,23 +482,34 @@ export function ResultInspector({
 
         <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-[11px] leading-5 text-blue-800">
           <Info className="mt-0.5 size-3.5 shrink-0" />
-          {isPresentation
-            ? '簡報直接使用 Contract v0 AnalysisResult 產生，不是擷取畫面；警告、來源與資料版本會一併保留。'
+          {usesAnalysisModules
+            ? `${isReport ? '報告' : '簡報'}直接使用 Contract v0 AnalysisResult 產生，不是擷取畫面；警告、來源與資料版本會一併保留。`
             : '圖表只使用 Contract v0 的 result_data 與 visualization；展開執行紀錄可核對問題、篩選條件、工具與資料版本。'}
         </div>
         {isPresentation
-          ? <PresentationResultPanel execution={presentationExecution} onRetry={onRun} />
-          : <AnalysisResultPanel execution={execution} onRetry={onRun} />}
+          ? <PresentationResultPanel execution={presentationExecution} onRetry={dirty ? undefined : onRun} />
+          : isReport
+            ? <ReportResultPanel execution={reportExecution} onRetry={dirty ? undefined : onRun} />
+            : <AnalysisResultPanel execution={execution} onRetry={dirty ? undefined : onRun} />}
+        {!usesAnalysisModules && onCreatePresentation && (
+          <button type="button" disabled={dirty} onClick={onCreatePresentation}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-3 py-3 text-xs font-semibold text-violet-800 disabled:opacity-50">
+            <Presentation className="size-4" /> 用這份分析建立簡報
+          </button>
+        )}
       </div>
 
       <div className="border-t border-slate-200 bg-white px-5 py-4">
+        {activeExecution?.state === 'running' && onCancel && (
+          <button type="button" onClick={onCancel} className="mb-2 text-xs text-slate-600 underline">停止等待（不會中止後端工作）</button>
+        )}
         {error && <p className="mb-2 text-xs text-red-600" role="alert">{error}</p>}
         {saved && (
           <p className="mb-2 flex items-center gap-1.5 text-xs text-emerald-600" role="status">
             <Check className="size-3.5" />
             {settingsReady
-              ? isPresentation ? '設定已更新，可產生簡報' : '設定已更新，可執行分析'
-              : isPresentation ? '設定已更新，請先完成所選分析' : '前端設定已更新，請先完成所選來源設定'}
+              ? isPresentation ? '設定已更新，可產生簡報' : isReport ? '設定已更新，可產生報告' : '設定已更新，可執行分析'
+              : usesAnalysisModules ? '設定已更新，請先完成所選分析' : '前端設定已更新，請先完成所選來源設定'}
           </p>
         )}
         {dirty && !error && (
@@ -447,14 +527,14 @@ export function ResultInspector({
           <button
             type="button"
             onClick={onRun}
-            disabled={!onRun || dirty || activeExecution?.state === 'running'}
+            disabled={!onRun || dirty || hasTooManySources || activeExecution?.state === 'running'}
             className="h-10 rounded-lg bg-violet-700 text-sm font-medium text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {activeExecution?.state === 'running'
-              ? isPresentation ? '產生中…' : '分析中…'
+              ? usesAnalysisModules ? '產生中…' : '分析中…'
               : activeExecution
-                ? isPresentation ? '重新產生' : '重新分析'
-                : isPresentation ? '產生簡報' : '執行分析'}
+                ? usesAnalysisModules ? '重新產生' : '重新分析'
+                : isPresentation ? '產生簡報' : isReport ? '產生報告' : '執行分析'}
           </button>
         </div>
       </div>

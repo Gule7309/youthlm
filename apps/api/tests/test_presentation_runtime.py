@@ -15,6 +15,7 @@ from presentation_generator import (
     PptxPresentationGenerator,
     PresentationGenerationError,
 )
+from presentation_result_store import SQLitePresentationResultStore
 from presentation_service import PPTX_MEDIA_TYPE, PresentationService
 from presentation_store import (
     LocalPresentationArtifactStore,
@@ -93,6 +94,7 @@ class PresentationRuntimeTests(unittest.TestCase):
                 module_store,
                 PptxPresentationGenerator(),
                 LocalPresentationArtifactStore(artifact_directory),
+                result_store=SQLitePresentationResultStore(database_path),
                 id_factory=lambda: "presentation_test",
                 clock=lambda: datetime(2026, 9, 6, 12, 0, tzinfo=UTC),
             )
@@ -127,6 +129,7 @@ class PresentationRuntimeTests(unittest.TestCase):
                 restarted_store,
                 PptxPresentationGenerator(),
                 LocalPresentationArtifactStore(artifact_directory),
+                result_store=SQLitePresentationResultStore(database_path),
             )
             restarted_app = create_app(
                 module_store=restarted_store,
@@ -138,6 +141,13 @@ class PresentationRuntimeTests(unittest.TestCase):
             self.assertIn("presentation_test.pptx", download.headers["content-disposition"])
             self.assertEqual(len(download.content), payload["file_size_bytes"])
             self.assertTrue(download.content.startswith(b"PK"))
+            self.assertEqual(
+                restarted_service.get_result(
+                    result.project_id,
+                    "presentation_test",
+                ).model_dump(mode="json", exclude_none=True),
+                payload,
+            )
 
     def test_does_not_read_same_module_id_from_another_project(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -19,6 +19,48 @@ class FakeBedrockClient:
 
 
 class BedrockConverseProviderTests(unittest.TestCase):
+    def test_spaces_concurrent_safe_request_starts_below_one_rps(self) -> None:
+        class Clock:
+            value = 10.0
+
+            def monotonic(self) -> float:
+                return self.value
+
+            def sleep(self, seconds: float) -> None:
+                self.value += seconds
+
+        clock = Clock()
+        class SequenceClient:
+            def __init__(self) -> None:
+                self.responses = [
+                {
+                    "stopReason": "end_turn",
+                    "output": {"message": {"content": [{"text": "first"}]}},
+                },
+                {
+                    "stopReason": "end_turn",
+                    "output": {"message": {"content": [{"text": "second"}]}},
+                },
+                ]
+
+            def converse(self, **kwargs: Any) -> dict[str, Any]:
+                return self.responses.pop(0)
+
+        client = SequenceClient()
+        provider = BedrockConverseProvider(
+            client,
+            "test-model",
+            min_request_interval_seconds=1.05,
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+        )
+        request = ModelRequest(messages=[{"role": "user", "content": "go"}])
+
+        provider.converse(request)
+        provider.converse(request)
+
+        self.assertAlmostEqual(clock.value, 11.05)
+
     def test_converts_text_response_to_end_turn(self) -> None:
         client = FakeBedrockClient(
             {

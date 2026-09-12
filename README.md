@@ -38,10 +38,14 @@ The structured frontend contract is documented in
 The first HTTP boundary is now available:
 
 - `GET /health`
+- `GET /ready`
 - `GET /v1/data-sources`
 - `POST /v1/analysis`
+- `POST /v1/assistant`
 - `POST /v1/presentations`
 - `GET /v1/projects/{project_id}/presentations/{presentation_id}/download`
+- `POST /v1/reports`
+- `GET /v1/projects/{project_id}/reports/{report_id}/download`
 
 See [`docs/http-api.md`](docs/http-api.md) for the request and response workflow.
 
@@ -66,7 +70,8 @@ and run:
 ```
 
 It starts a temporary API, proves Source-to-Chart and stored upstream context,
-generates and validates an editable PPTX, then always stops the temporary server.
+generates and validates editable PPTX and DOCX artifacts, then always stops the
+temporary server.
 For the interactive browser demo, copy a fresh Gemini key and run:
 
 ```powershell
@@ -82,10 +87,24 @@ switch, follow [`docs/final-environment-runbook.md`](docs/final-environment-runb
 ## Local setup
 
 ```bash
-uv sync --dev
-uv run pytest
-uv run ruff check .
+uv sync --frozen --dev
+uv run --frozen pytest
+uv run --frozen ruff check .
 ```
+
+Run the Contract v0 API from the repository root with the Python module form.
+This keeps both the root `app/` package and `apps/api/` importable on Windows:
+
+```powershell
+uv run --frozen python -m uvicorn main:app `
+    --app-dir apps/api `
+    --host 127.0.0.1 `
+    --port 8000
+```
+
+`GET /health` is process liveness only. `GET /ready` reports status-only checks
+for provider configuration, installed datasets, and writable storage; it does
+not expose configuration values and does not prove live Bedrock permission.
 
 When dependencies are already available but package downloads are blocked, the
 provider tests also run with Python's standard library:
@@ -93,6 +112,54 @@ provider tests also run with Python's standard library:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## Single-container deployment
+
+The repository-level `Dockerfile` builds the Vite application and serves it from
+the Contract v0 FastAPI application. The browser and `/v1/*` API therefore use
+the same origin; do not set a public API base URL for this layout. Build from the
+repository root:
+
+At the time of this documentation update, the workstation Docker daemon and AWS
+CLI v2 were not available for validation. The image build/run and real Bedrock
+path therefore remain unverified gates until they pass in the target environment.
+
+```powershell
+docker build -t youthlm:competition .
+```
+
+Run the image on an AWS compute resource that has an EC2 instance role or ECS
+task role with permission to invoke the selected Bedrock model. Do not copy an
+AWS profile or static access keys into the image. The following example uses a
+Docker volume on one fixed host; replace only the non-secret placeholders with
+the values issued inside the competition environment:
+
+```powershell
+docker volume create youthlm-data
+docker run -d --name youthlm --restart unless-stopped `
+    -p 8000:8000 `
+    --mount type=volume,source=youthlm-data,target=/data `
+    -e MODEL_PROVIDER=bedrock `
+    -e AWS_REGION="<event-region>" `
+    -e BEDROCK_MODEL_ID="<event-model-or-inference-profile-id>" `
+    youthlm:competition
+```
+
+The image already runs Uvicorn with one worker and stores SQLite plus generated
+PPTX and DOCX files under `/data`. Mount `/data` on persistent storage and keep exactly
+one application worker and one replica. A writable container filesystem or
+ephemeral task disk is not persistence. After recreating the container with the
+same volume, verify that a stored analysis, report, and presentation can still
+be retrieved.
+
+Terminate TLS at the AWS ingress or reverse proxy. The bundled frontend is
+same-origin, so no production CORS entry is needed for this layout. If the
+frontend is hosted separately, configure an exact HTTPS allowlist through
+`YOUTHLM_CORS_ORIGINS`; never use `*`.
+
+The Workshop Access Code is only for joining the organizer portal. It is not an
+application password, API token, HTTP header, container variable, or AWS SDK
+credential.
 
 ## Run the real agent with Gemini
 
@@ -153,12 +220,15 @@ npm run dev
 ```
 
 Use `npm run check` to run strict TypeScript checking, build the UI, and execute
-all frontend tests, including the fixture-based Chart and Presentation Artifact
-tests, stopping on the first failure. Each gate
+all frontend tests, including the fixture-based Chart, Report, Presentation, and
+Assistant integration tests, stopping on the first failure. Each gate
 can also run separately with `npm run typecheck`, `npm run build`, or `npm test`.
-Source-to-Chart and Chart-to-Presentation use the live Contract v0 API. Login,
-whole-notebook persistence, uploads, Assistant analysis, and Policy Radar remain
-frontend prototypes.
+Source-to-Chart, Chart-to-Report, Chart-to-Presentation, and explicit-context
+Assistant requests use the live Contract v0 API. Login, whole-notebook
+persistence, uploads, and Policy Radar remain frontend prototypes.
+Canvas links remain frontend state: each chart sends exactly one raw
+`source_selection`, while a report or presentation may aggregate multiple
+completed analyses.
 
 After an Analysis module is stored, `POST /v1/presentations` can generate an
 editable `.pptx` without another model call. The deterministic generator uses
@@ -177,6 +247,17 @@ documented in [`apps/web/README.md`](apps/web/README.md) and
 [`docs/frontend-chart-artifact.md`](docs/frontend-chart-artifact.md). They map
 Contract v0 results to explicit chart, table, blocked, and error view states
 without putting ECharts options or Canvas UI state into the backend contract.
+
+After the Analysis smoke has stored its canonical module, the same module can
+produce an editable, traceable DOCX without a second model call:
+
+```powershell
+uv run python -m spikes.report_api_smoke
+```
+
+The report includes structured summaries and tables plus the source, version,
+warning, and provenance records from each selected Analysis module. See
+[`docs/report-contract.md`](docs/report-contract.md).
 
 To run the real population Agent path instead of the unemployment Golden Path:
 

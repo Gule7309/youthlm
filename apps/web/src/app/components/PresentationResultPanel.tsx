@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Download,
@@ -6,7 +6,7 @@ import {
   LoaderCircle,
   RotateCw,
 } from 'lucide-react';
-import { resolveApiUrl } from '../api-client';
+import { downloadPresentation } from '../api-client';
 import type { PresentationExecution } from '../types';
 
 type PresentationResultPanelProps = {
@@ -23,6 +23,39 @@ export function PresentationResultPanel({
   execution,
   onRetry,
 }: PresentationResultPanelProps) {
+  const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [downloadError, setDownloadError] = useState('');
+  const controllerRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    setDownloadState('idle');
+    setDownloadError('');
+    return () => { controllerRef.current?.abort(); controllerRef.current = null; };
+  }, [execution]);
+  const handleDownload = async () => {
+    if (execution?.view?.kind !== 'ready' || controllerRef.current) return;
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setDownloadState('loading');
+    setDownloadError('');
+    try {
+      const blob = await downloadPresentation(execution.view, undefined, undefined, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = execution.view.fileName.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_');
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setDownloadState('done');
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setDownloadError(error instanceof Error ? error.message : '下載失敗，請重試。');
+        setDownloadState('idle');
+      }
+    } finally { if (controllerRef.current === controller) controllerRef.current = null; }
+  };
   if (!execution) return null;
 
   if (execution.state === 'running') {
@@ -70,18 +103,18 @@ export function PresentationResultPanel({
       ))}
 
       <div className="text-[10px] leading-4 text-slate-500">
-        <p>建立時間：{view.createdAt.replace('T', ' ').slice(0, 19)}</p>
+        <p>建立時間（本機時區）：{Number.isNaN(Date.parse(view.createdAt)) ? view.createdAt : new Date(view.createdAt).toLocaleString('zh-TW', { hour12: false })}</p>
         <p className="mt-0.5">SHA-256：{view.artifactSha256.slice(0, 16)}…</p>
       </div>
 
-      <a
-        href={resolveApiUrl(view.downloadUrl)}
-        download={view.fileName}
-        className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-700 text-xs font-semibold text-white transition hover:bg-emerald-800"
+      {downloadError && <p role="alert" className="text-xs leading-5 text-red-700">{downloadError}</p>}
+      {downloadState === 'done' && <p role="status" className="text-xs text-emerald-800">檔案驗證通過，已送出下載。</p>}
+      <button type="button" onClick={handleDownload} disabled={downloadState === 'loading'}
+        className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-700 text-xs font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-50"
       >
         <Download className="size-3.5" />
-        下載可編輯 PPTX
-      </a>
+        {downloadState === 'loading' ? '下載與驗證中…' : downloadError ? '重試下載 PPTX' : '下載可編輯 PPTX'}
+      </button>
     </section>
   );
 }

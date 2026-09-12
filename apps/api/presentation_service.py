@@ -16,6 +16,10 @@ from presentation_generator import (
     PresentationGenerationError,
     PresentationGenerator,
 )
+from presentation_result_store import (
+    InMemoryPresentationResultStore,
+    PresentationResultStore,
+)
 from presentation_store import (
     PresentationArtifactStore,
     PresentationArtifactStoreError,
@@ -51,6 +55,7 @@ class PresentationService:
         module_store: ModuleStore,
         generator: PresentationGenerator,
         artifact_store: PresentationArtifactStore,
+        result_store: PresentationResultStore | None = None,
         *,
         id_factory: Callable[[], str] | None = None,
         clock: Callable[[], datetime] | None = None,
@@ -58,6 +63,7 @@ class PresentationService:
         self._module_store = module_store
         self._generator = generator
         self._artifact_store = artifact_store
+        self._result_store = result_store or InMemoryPresentationResultStore()
         self._id_factory = id_factory or (
             lambda: f"presentation_{uuid4().hex}"
         )
@@ -86,7 +92,7 @@ class PresentationService:
             presentation_id,
             content,
         )
-        return PresentationResult(
+        result = PresentationResult(
             contract_version=request.contract_version,
             project_id=request.project_id,
             presentation_id=presentation_id,
@@ -105,6 +111,8 @@ class PresentationService:
             created_at=self._clock(),
             warnings=self._collect_warnings(modules),
         )
+        self._result_store.save(result)
+        return result
 
     def get_artifact(
         self,
@@ -112,6 +120,14 @@ class PresentationService:
         presentation_id: str,
     ) -> StoredPresentationArtifact | None:
         return self._artifact_store.get(project_id, presentation_id)
+
+    def get_result(
+        self,
+        project_id: str,
+        presentation_id: str,
+    ) -> PresentationResult | None:
+        """Return metadata only within the requested project."""
+        return self._result_store.get(project_id, presentation_id)
 
     def _load_modules(
         self,

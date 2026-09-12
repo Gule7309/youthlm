@@ -2,7 +2,8 @@
 
 YouthLM has one executable acceptance path for the complete backend demo. It proves
 that the selected model provider, HTTP boundary, deterministic data tools, stored
-module context, and editable Presentation Artifact work together.
+module context, editable Presentation Artifact, and editable Report Artifact work
+together.
 
 The preflight does not modify Contract v0 and does not inspect or store frontend
 canvas state.
@@ -43,10 +44,12 @@ values:
 - Analysis request: `比較2022至2024年的變化，指出趨勢，且不要超出資料範圍。`
 - Presentation name: `青年失業率政策簡報`
 - Presentation instructions: `整理成政策會議用簡報，保留資料限制、來源與警告。`
+- Report name: `青年失業率議題研析報告`
+- Report instructions: `以政策研析格式整理，保留資料限制、來源與版本。`
 
-Downloading the PPTX proves the HTTP and artifact path. Open the downloaded file
-once and confirm that its chart, table, summary, source, warnings, and editable
-slide elements are present before treating the presentation gate as complete.
+Downloading the PPTX and DOCX proves both HTTP artifact paths. Open each file and
+confirm that the summary, table, source, warnings, and editable elements are
+present before treating the artifact gate as complete.
 
 ## Daily development with Gemini
 
@@ -72,13 +75,20 @@ The default model is `gemini-3.1-flash-lite`. To use another port or timeout:
 
 The command stops at the first failure and checks:
 
-1. all offline tests and Ruff;
-2. explicit Gemini or Bedrock provider selection;
-3. a temporary live FastAPI process and `/health`;
-4. Source selection to deterministic query and chart-ready `AnalysisResult`;
-5. project-scoped retrieval of the stored result by an upstream module;
-6. Presentation generation from that exact stored module;
-7. PPTX download, file size, SHA-256, and package signature.
+1. installed dataset hashes, schemas, coverage, and reconciliation rules;
+2. all root and API Python tests, Ruff, frontend typecheck, production build,
+   and frontend tests;
+3. explicit Gemini or Bedrock provider selection;
+4. a temporary live FastAPI process, `/health`, status-only `/ready`, and the
+   required two-source catalog;
+5. Source selection to deterministic query and chart-ready `AnalysisResult`;
+6. project-scoped retrieval of the stored result by an upstream module;
+7. Presentation generation from that exact stored module;
+8. PPTX download, file size, SHA-256, and package signature;
+9. Report generation from the same stored module;
+10. DOCX download, file size, SHA-256, and package signature;
+11. a live Assistant answer that resolves the exact selected Source, Analysis,
+    and Presentation references.
 
 The temporary API always stops in a `finally` block. Every run uses a unique
 directory under `var/demo-preflight/` for SQLite, generated artifacts, logs, and
@@ -104,6 +114,13 @@ checks AWS identity before starting the API and fails visibly if credentials,
 region, account, model access, Agent tool calling, or artifact generation is not
 ready. There is no automatic fallback.
 
+The published competition rules require deployment in `us-east-1` or
+`us-west-2` and Bedrock traffic below one request per second. The event-day
+wrapper enforces the region allowlist and the runtime serializes Bedrock calls
+with a 1.05-second minimum interval. Use the region override only after an
+explicit event-staff announcement, and keep one worker／replica so the
+process-local request limiter remains effective.
+
 The final-round rules do not allow Gemini as a substitute. If Bedrock is
 unavailable, keep the failure visible and repair the issued credentials, region,
 model access, or request path. The complete non-secret event sequence is in
@@ -119,8 +136,8 @@ YouthLM <provider> demo is ready.
 Temporary YouthLM API stopped.
 ```
 
-The reported run directory contains the editable `.pptx` plus server logs. A
-failure leaves the same run directory in place so the exact API error can be
-reviewed without rerunning the demo blindly. Artifact keys are opaque 128-bit
-hash prefixes so both final and temporary paths remain below the common Windows
-260-character limit even when the repository is inside OneDrive.
+The reported run directory contains the editable `.pptx`, editable `.docx`, and
+server logs. A failure leaves the same run directory in place so the exact API
+error can be reviewed without rerunning the demo blindly. Artifact keys are
+opaque 128-bit hash prefixes so both final and temporary paths remain below the
+common Windows 260-character limit even when the repository is inside OneDrive.

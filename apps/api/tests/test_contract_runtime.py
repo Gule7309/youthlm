@@ -212,6 +212,58 @@ class ContractRuntimeTests(unittest.TestCase):
             ["analysis_missing"],
         )
 
+    def test_rejects_multiple_raw_sources_before_running_agent(self) -> None:
+        agent = StubAgent(AgentResult(answer="unused", model_steps=1))
+
+        response = request(
+            build_test_app(agent),
+            "POST",
+            "/v1/analysis",
+            json=analysis_request(
+                source_selections=[
+                    {"source_id": DATASET_ID, "filters": {}},
+                    {"source_id": POPULATION_DATASET_ID, "filters": {}},
+                ],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(agent.prompts, [])
+        self.assertEqual(response.json()["error"]["code"], "dataset_error")
+        self.assertEqual(
+            response.json()["error"]["details"][
+                "maximum_source_selections"
+            ],
+            1,
+        )
+
+    def test_rejects_known_unreliable_population_cells_before_model_call(self) -> None:
+        agent = StubAgent(AgentResult(answer="unused", model_steps=1))
+        response = request(
+            build_test_app(agent),
+            "POST",
+            "/v1/analysis",
+            json=analysis_request(
+                source_selections=[
+                    {
+                        "source_id": POPULATION_DATASET_ID,
+                        "filters": {
+                            "geographies": ["樹林區"],
+                            "age_groups": ["5-9"],
+                            "sexes": ["all"],
+                            "start_year": 2013,
+                            "end_year": 2013,
+                        },
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "dataset_error")
+        self.assertIn("official 2013 5-9", response.json()["error"]["details"]["reason"])
+        self.assertEqual(agent.prompts, [])
+
     def test_returns_structured_validation_error(self) -> None:
         response = request(
             build_test_app(),
@@ -271,7 +323,7 @@ class ContractRuntimeTests(unittest.TestCase):
                 "error": {
                     "code": "agent_protocol_error",
                     "message": "Agent returned an invalid analysis result",
-                    "retriable": False,
+                    "retriable": True,
                 },
             },
         )

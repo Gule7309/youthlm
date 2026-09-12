@@ -6,6 +6,10 @@ environment is available only from 2026-09-12 08:00 through 2026-09-13 13:00
 Gemini before the event, keep deterministic tests on `FakeModelProvider`, and
 switch to Bedrock after the final-round environment opens.
 
+Having the team Access Code does not provide AWS SDK credentials or application
+authentication. Use it only in the Workshop join portal; never put it in a shell,
+`.env`, HTTP request, container, source file, log, screenshot, or chat.
+
 The switch is explicit. If `MODEL_PROVIDER=bedrock` is selected and AWS fails,
 YouthLM fails visibly instead of silently falling back to Gemini.
 
@@ -42,9 +46,10 @@ Then continue building the agent loop, data tools, HTTP API, and frontend agains
 the provider-neutral `ModelProvider`. Unit tests should continue using
 `FakeModelProvider` or fake transports.
 
-## What is postponed while AWS is expired
+## What remains unverified before the issued environment is exercised
 
-Do not treat these as current blockers:
+The adapters and offline tests exist, but none of the following is proven until
+it passes in the fresh organizer environment:
 
 1. Real Bedrock provider smoke test.
 2. Local AgentCore smoke backed by Bedrock.
@@ -52,7 +57,9 @@ Do not treat these as current blockers:
 4. IAM and Bedrock model-access verification.
 
 The Bedrock adapter and its offline tests remain in the repository, so application
-development does not have to be rewritten later.
+development does not have to be rewritten. At the time of this update, AWS CLI
+v2, the workstation Docker daemon, a complete container build/run, and real
+Bedrock access had not yet been verified.
 
 ## Prepare once before the event
 
@@ -78,6 +85,29 @@ Do not run these commands until fresh credentials are issued. If fresh credentia
 include a session token, all three credential values must be replaced together.
 Do not paste their values into chat, source code, `.env.example`, or GitHub.
 
+This named profile is for local PowerShell and AWS CLI preflight only. It must not
+be copied into a production image.
+
+## Deployed Bedrock credentials use an IAM role
+
+The deployable container uses boto3's default credential chain. On EC2, attach an
+instance role; on ECS, attach a task role. Do not set `AWS_PROFILE`, mount
+`~/.aws`, or inject long-lived access keys into the container. Set only the
+non-secret provider configuration:
+
+```text
+MODEL_PROVIDER=bedrock
+AWS_REGION=<event-region>
+BEDROCK_MODEL_ID=<event-model-or-inference-profile-id>
+```
+
+The runtime role must permit `bedrock:InvokeModel` for the selected model or
+inference profile. Keep an ECS execution role used for image pull and logging
+separate from the application task role. `GET /ready` intentionally checks only
+that the Bedrock provider, region, and model are configured; it neither exposes
+their values nor proves IAM/model access. The live event-day analysis is the
+authorization proof.
+
 ## Event day: one preflight command
 
 Use the competition-registration email and the team Access Code directly in the
@@ -88,6 +118,8 @@ sequence.
 
 Replace the three placeholders with organizer-issued values. Supplying the
 expected account ID prevents accidentally using a personal AWS account.
+The competition deployment region must be `us-east-1` or `us-west-2` unless
+event staff explicitly announces a replacement.
 
 ```powershell
 .\scripts\event-day-preflight.ps1 `
@@ -106,12 +138,25 @@ first failure. It verifies, in order:
 4. A temporary live Contract v0 API using `BedrockConverseProvider`.
 5. Source-to-Chart analysis and project-scoped upstream module retrieval.
 6. Editable PPTX generation, download, file size, and SHA-256.
+7. Editable DOCX report generation, download, file size, and SHA-256.
+8. Live Assistant execution with the exact selected Source, Analysis, and
+   Presentation references.
+
+The runner invokes the full Python and frontend quality gates with locked
+dependencies, checks `/ready` and `/v1/data-sources`, and keeps identifiers out of
+normal output. It still runs locally against the named AWS profile; it does not
+replace a deployed IAM-role smoke test.
+
+Production Bedrock calls share one provider instance and are serialized with at
+least 1.05 seconds between request starts, satisfying the competition's
+below-one-RPS rule. Keep one worker and replica; multiple processes would each
+have an independent limiter.
 
 Only after it prints `YouthLM Bedrock event-day preflight passed` should you start
 the isolated AgentCore smoke app:
 
 ```powershell
-uv run python spikes/agentcore_smoke/main.py
+uv run --frozen python spikes/agentcore_smoke/main.py
 ```
 
 In a second PowerShell window:
@@ -130,6 +175,11 @@ Invoke-RestMethod `
 
 AgentCore deployment comes after both the provider preflight and local
 `/invocations` smoke succeed.
+
+The AgentCore smoke is isolated and is not the complete YouthLM FastAPI, dataset,
+same-origin frontend, SQLite, or PPTX container. Deploy the repository-level
+`Dockerfile` for that complete application and keep its `/data` volume plus the
+constraints of one worker and one replica.
 
 ## Gemini is local-development only
 

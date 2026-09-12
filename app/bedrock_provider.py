@@ -1,5 +1,8 @@
 """Amazon Bedrock Converse adapter for the YouthLM model boundary."""
 
+import threading
+import time
+from collections.abc import Callable
 from typing import Any
 
 from app.provider import ModelRequest, ModelToolCall, ModelTurn
@@ -12,9 +15,24 @@ class UnsupportedStopReasonError(RuntimeError):
 class BedrockConverseProvider:
     """Translate between YouthLM model contracts and Bedrock Converse."""
 
-    def __init__(self, client: Any, model_id: str) -> None:
+    def __init__(
+        self,
+        client: Any,
+        model_id: str,
+        *,
+        min_request_interval_seconds: float = 0,
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        if min_request_interval_seconds < 0:
+            raise ValueError("min_request_interval_seconds cannot be negative")
         self._client = client
         self._model_id = model_id
+        self._min_request_interval_seconds = min_request_interval_seconds
+        self._monotonic = monotonic
+        self._sleep = sleep
+        self._request_lock = threading.Lock()
+        self._last_request_started_at: float | None = None
 
     def converse(self, request: ModelRequest) -> ModelTurn:
         bedrock_request: dict[str, Any] = {
@@ -27,7 +45,21 @@ class BedrockConverseProvider:
                 "tools": self._convert_tools(request.tools),
             }
 
-        response = self._client.converse(**bedrock_request)
+        # The competition account permits fewer than one Bedrock request per
+        # second. Serialize this shared provider and space request starts so
+        # concurrent API handlers cannot burst above that limit.
+        with self._request_lock:
+            now = self._monotonic()
+            if self._last_request_started_at is not None:
+                remaining = (
+                    self._last_request_started_at
+                    + self._min_request_interval_seconds
+                    - now
+                )
+                if remaining > 0:
+                    self._sleep(remaining)
+            self._last_request_started_at = self._monotonic()
+            response = self._client.converse(**bedrock_request)
         stop_reason = response["stopReason"]
 
         if stop_reason not in {"end_turn", "tool_use"}:

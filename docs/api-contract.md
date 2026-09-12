@@ -25,6 +25,12 @@ AnalysisRequest
 The request sends only `upstream_module_ids`; it never sends prior results.
 Optional `source_selections` supplies raw data source IDs and source-specific
 filters. Raw source selection and prior module context are separate semantics.
+The current `0.1.0` runtime accepts at most one raw source selection per analysis
+module because one `AnalysisResult` does not yet combine multiple datasets; a
+larger list receives `422 dataset_error` before the model runs. The field remains
+an array so a later contract checkpoint can add an explicit join plan without
+mixing Canvas IDs into the API. Multiple completed analysis modules can already
+be combined as presentation inputs.
 The API resolves upstream IDs from local SQLite using the composite project and
 module identity. Missing IDs receive a structured `module_not_found` response
 rather than being silently ignored. Canvas coordinates and other presentation
@@ -40,6 +46,10 @@ state never cross this boundary.
 | `ErrorResponse` | version, error code, message, retriable flag | details |
 | `PresentationRequest` | version, project ID, source module IDs, title, output format | audience, language, template ID, instructions |
 | `PresentationResult` | identity, source module IDs, ready status, file metadata, digest, download URL, creation time, warnings | none in v0 |
+| `ReportRequest` | version, project ID, source module IDs, title, output format | audience, language, template ID, instructions |
+| `ReportResult` | identity, source module IDs, ready status, DOCX metadata, digest, download URL, creation time, warnings | none in v0 |
+| `AssistantRequest` | version, project/assistant IDs, message, explicit context references | reference filters |
+| `AssistantResult` | identity, completed status, answer, model steps, resolved references, tool trace | none in v0 |
 
 Arrays that may have no values remain required and are returned as `[]`. Objects
 that may have no values remain required and are returned as `{}`. This prevents
@@ -77,6 +87,15 @@ decision are documented in
 The implemented storage lifecycle and project-isolation rules are documented in
 [`module-context-storage.md`](module-context-storage.md).
 
+## Assistant boundary
+
+`POST /v1/assistant` accepts explicit Source, Analysis, and Presentation IDs.
+Backend resolution happens before the model call and remains scoped to
+`project_id`. Missing references return `context_not_found`; they are never
+silently omitted. The endpoint reuses the Research Agent and deterministic tools
+without changing AnalysisResult. See
+[`assistant-contract.md`](assistant-contract.md).
+
 ## Presentation Artifact boundary
 
 Presentation generation is separate from `AnalysisResult`. Contract v0 defines a
@@ -90,3 +109,11 @@ Only `project_id` and `source_module_ids` cross the boundary; complete upstream
 results are loaded by the backend and never copied into the request. See
 [`presentation-contract.md`](presentation-contract.md) for the exact lifecycle,
 ownership rule, and compatibility impact.
+
+## Report Artifact boundary
+
+`POST /v1/reports` follows a separate synchronous generated-output boundary. It
+loads completed or partial Analysis modules by project, generates an editable
+DOCX with `python-docx`, persists metadata, and returns a project-scoped download
+URL. It does not call the model again or copy frontend Canvas state into the
+request. See [`report-contract.md`](report-contract.md).

@@ -145,6 +145,14 @@
       "affected_source_ids": [
         "ntpc_population_by_age_sex_district"
       ]
+    },
+    {
+      "type": "age_mismatch",
+      "severity": "warning",
+      "message": "官方快照中2013年樹林區、鶯歌區、汐止區的計／男／女共9列，其年齡級距加總小於總人口，差異集中在5-9歲欄位；YouthLM保留官方原值、不自行補值，使用這些列前必須揭露限制。",
+      "affected_source_ids": [
+        "ntpc_population_by_age_sex_district"
+      ]
     }
   ],
   "sources": [

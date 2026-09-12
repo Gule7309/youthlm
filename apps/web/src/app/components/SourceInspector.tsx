@@ -10,22 +10,15 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { buildDefaultSourceFilters } from '../analysis-integration';
-import type {
-  CanvasNode,
-  RegistryDataSource,
-  SourceConfig,
-  SourceFileMetadata,
-  SourceFilters,
-} from '../types';
+import type { CanvasNode, SourceConfig, SourceFileMetadata, SourceFilters } from '../types';
+import { defaultSourceFilters, loadSourceCatalog, supportsSourceFilters, validateSourceFilters } from '../source-catalog';
+import type { CatalogSource } from '../source-catalog';
+import { CatalogFilters } from './CatalogFilters';
 
 type EditableSourceKind = Exclude<SourceConfig['kind'], null>;
 
 type SourceInspectorProps = {
   node: CanvasNode;
-  registrySources: RegistryDataSource[];
-  registryLoading?: boolean;
-  registryError?: string;
   onSave: (config: SourceConfig) => void;
   onClose?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -57,47 +50,49 @@ function toFileMetadata(file: File): SourceFileMetadata {
   };
 }
 
-function firstFilterValue(filters: SourceFilters, name: string) {
-  const value = filters[name];
-  return Array.isArray(value) && typeof value[0] === 'string' ? value[0] : '';
-}
-
-function numberFilterValue(filters: SourceFilters, name: string, fallback: number) {
-  return typeof filters[name] === 'number' ? filters[name] : fallback;
-}
-
-export function SourceInspector({
-  node,
-  registrySources,
-  registryLoading = false,
-  registryError,
-  onSave,
-  onClose,
-  onDirtyChange,
-}: SourceInspectorProps) {
+export function SourceInspector({ node, onSave, onClose, onDirtyChange }: SourceInspectorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [kind, setKind] = useState<EditableSourceKind>(node.source?.kind ?? 'registry');
   const [name, setName] = useState(node.source?.name ?? '');
   const [file, setFile] = useState<SourceFileMetadata | undefined>(node.source?.file);
   const [apiUrl, setApiUrl] = useState(node.source?.apiUrl ?? '');
-  const [registrySourceId, setRegistrySourceId] = useState(node.source?.registrySourceId ?? '');
-  const [filters, setFilters] = useState<SourceFilters>(node.source?.filters ?? {});
   const [enabled, setEnabled] = useState(node.source?.enabled ?? true);
   const [autoClean, setAutoClean] = useState(node.source?.autoClean ?? true);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [registrySourceId, setRegistrySourceId] = useState(node.source?.kind === 'registry' ? node.source.registrySourceId ?? '' : '');
+  const [filters, setFilters] = useState<SourceFilters>(() => structuredClone(node.source?.kind === 'registry' ? node.source.filters ?? {} : {}));
+  const [catalog, setCatalog] = useState<
+    { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; sources: CatalogSource[] }
+  >({ status: 'loading' });
+  const [reload, setReload] = useState(0);
+  const selectedDataset = catalog.status === 'ready' ? catalog.sources.find(source => source.source_id === registrySourceId) : undefined;
+  const registryIssue = catalog.status !== 'ready' ? '請先載入資料目錄。'
+    : !selectedDataset ? '請選擇目前可用的資料集。' : validateSourceFilters(selectedDataset, filters);
+
+  useEffect(() => {
+    if (kind !== 'registry') return;
+    const controller = new AbortController();
+    setCatalog({ status: 'loading' });
+    loadSourceCatalog(import.meta.env.VITE_YOUTHLM_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '', controller.signal)
+      .then(sources => { if (!controller.signal.aborted) setCatalog({ status: 'ready', sources }); })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) setCatalog({ status: 'error', message: reason instanceof Error ? reason.message : '資料目錄載入失敗，請重試。' });
+      });
+    return () => controller.abort();
+  }, [kind, reload]);
 
   useEffect(() => {
     setKind(node.source?.kind ?? 'registry');
     setName(node.source?.name ?? '');
     setFile(node.source?.file);
     setApiUrl(node.source?.apiUrl ?? '');
-    setRegistrySourceId(node.source?.registrySourceId ?? '');
-    setFilters(structuredClone(node.source?.filters ?? {}));
     setEnabled(node.source?.enabled ?? true);
     setAutoClean(node.source?.autoClean ?? true);
+    setRegistrySourceId(node.source?.kind === 'registry' ? node.source.registrySourceId ?? '' : '');
+    setFilters(structuredClone(node.source?.kind === 'registry' ? node.source.filters ?? {} : {}));
     setError('');
     setSaved(false);
     setDirty(false);
@@ -111,29 +106,18 @@ export function SourceInspector({
   };
 
   const chooseKind = (nextKind: EditableSourceKind) => {
+    if (nextKind === kind) return;
     setKind(nextKind);
-    if (nextKind === 'registry' && !registrySourceId && registrySources[0]) {
-      setRegistrySourceId(registrySources[0].source_id);
-      setName(registrySources[0].title);
-      setFilters(buildDefaultSourceFilters(registrySources[0]));
-    }
     setError('');
     markDirty();
   };
 
-  const selectRegistrySource = (sourceId: string) => {
-    const source = registrySources.find(item => item.source_id === sourceId);
+  const chooseDataset = (sourceId: string) => {
+    if (catalog.status !== 'ready' || sourceId === registrySourceId) return;
+    const source = catalog.sources.find(entry => entry.source_id === sourceId);
     setRegistrySourceId(sourceId);
-    if (source) {
-      setName(source.title);
-      setFilters(buildDefaultSourceFilters(source));
-    }
-    setError('');
-    markDirty();
-  };
-
-  const setSingleFilter = (filterName: string, value: string) => {
-    setFilters(current => ({ ...current, [filterName]: value ? [value] : [] }));
+    setFilters(source ? defaultSourceFilters(source) : {});
+    if (source && (!name.trim() || /^未命名來源(?: \d+)?$/.test(name) || name === selectedDataset?.title)) setName(source.title);
     setError('');
     markDirty();
   };
@@ -165,23 +149,6 @@ export function SourceInspector({
       return;
     }
 
-    if (kind === 'registry' && !registrySourceId) {
-      setError('請選擇一個已安裝的資料集。');
-      return;
-    }
-
-    if (kind === 'registry') {
-      const source = registrySources.find(item => item.source_id === registrySourceId);
-      const startYear = typeof filters.start_year === 'number' ? filters.start_year : NaN;
-      const endYear = typeof filters.end_year === 'number' ? filters.end_year : NaN;
-      if (!source || !Number.isInteger(startYear) || !Number.isInteger(endYear)
-        || startYear < source.available_years.start || endYear > source.available_years.end
-        || startYear > endYear) {
-        setError('請確認年份位於資料範圍內，且起始年不晚於結束年。');
-        return;
-      }
-    }
-
     if (kind === 'api') {
       try {
         const parsedUrl = new URL(apiUrl.trim());
@@ -192,16 +159,18 @@ export function SourceInspector({
       }
     }
 
+    if (kind === 'registry' && registryIssue) {
+      setError(registryIssue);
+      return;
+    }
+
     const nextConfig: SourceConfig = {
       kind,
       name: trimmedName,
       enabled,
-      autoClean,
-      ...(kind === 'registry'
-        ? { registrySourceId, filters }
-        : kind === 'file'
-          ? { file }
-          : { apiUrl: apiUrl.trim() }),
+      autoClean: kind === 'registry' ? false : autoClean,
+      ...(kind === 'registry' ? { registrySourceId, filters: structuredClone(filters) }
+        : kind === 'file' ? { file } : { apiUrl: apiUrl.trim() }),
     };
 
     onSave(nextConfig);
@@ -243,7 +212,7 @@ export function SourceInspector({
           )}
         </div>
         <p className="mt-3 text-xs leading-5 text-slate-500">
-          選擇後端已安裝的政府資料集，即可直接建立可執行的分析來源。
+          選擇既有官方資料並設定篩選，或先記錄自訂來源。此步尚不執行分析。
         </p>
       </div>
 
@@ -251,20 +220,6 @@ export function SourceInspector({
         <div>
           <span className="mb-2 block text-xs font-semibold text-slate-700">來源方式</span>
           <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => chooseKind('registry')}
-              className={`flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-lg border px-2 text-center text-[11px] font-medium transition ${
-                kind === 'registry'
-                  ? 'border-blue-400 bg-blue-50 text-blue-700 ring-2 ring-blue-100'
-                  : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-              }`}
-              aria-pressed={kind === 'registry'}
-            >
-              <Braces className="size-5" />
-              已安裝資料集
-              <span className="font-normal">可直接分析</span>
-            </button>
             <button
               type="button"
               onClick={() => chooseKind('file')}
@@ -291,6 +246,17 @@ export function SourceInspector({
               <Globe2 className="size-5" />
               公開 API
             </button>
+            <button
+              type="button"
+              onClick={() => chooseKind('registry')}
+              aria-pressed={kind === 'registry'}
+              className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border px-2 text-center text-xs font-medium transition ${kind === 'registry'
+                ? 'border-blue-400 bg-blue-50 text-blue-700 ring-2 ring-blue-100'
+                : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'}`}
+            >
+              <Braces className="size-5" />
+              官方資料集
+            </button>
           </div>
         </div>
 
@@ -304,105 +270,42 @@ export function SourceInspector({
               markDirty();
             }}
             className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-            placeholder={kind === 'registry' ? '資料集顯示名稱' : kind === 'file' ? '例如：青年就業調查' : '例如：政府開放資料 API'}
+            placeholder={kind === 'registry' ? '選擇資料集後可自行命名' : kind === 'file' ? '例如：青年就業調查' : '例如：政府開放資料 API'}
             maxLength={80}
           />
         </label>
 
         {kind === 'registry' ? (
-          <div className="space-y-4">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-slate-700">已安裝資料集</span>
-              <select
-                value={registrySourceId}
-                onChange={event => selectRegistrySource(event.target.value)}
-                disabled={registryLoading || registrySources.length === 0}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
-              >
-                <option value="">{registryLoading ? '正在載入資料來源…' : '請選擇資料集'}</option>
-                {registrySources.map(source => (
-                  <option key={source.source_id} value={source.source_id}>{source.title}</option>
-                ))}
-              </select>
-            </label>
-
-            {registryError && <p className="text-xs text-red-600" role="alert">{registryError}</p>}
-
-            {(() => {
-              const source = registrySources.find(item => item.source_id === registrySourceId);
-              if (!source) return null;
-              const startYear = numberFilterValue(filters, 'start_year', source.available_years.start);
-              const endYear = numberFilterValue(filters, 'end_year', source.available_years.end);
-              return (
-                <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
-                  <p className="text-[11px] leading-5 text-blue-900">
-                    {source.agency} · {source.unit} · {source.youth_compatibility.explanation}
-                  </p>
-                  {source.available_geographies.length > 0 && (
-                    <label className="block text-xs font-medium text-slate-700">
-                      地區
-                      <select
-                        value={firstFilterValue(filters, 'geographies')}
-                        onChange={event => setSingleFilter('geographies', event.target.value)}
-                        className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs"
-                      >
-                        {source.available_geographies.map(value => <option key={value}>{value}</option>)}
-                      </select>
-                    </label>
-                  )}
-                  <label className="block text-xs font-medium text-slate-700">
-                    年齡級距
-                    <select
-                      value={firstFilterValue(filters, 'age_groups')}
-                      onChange={event => setSingleFilter('age_groups', event.target.value)}
-                      className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs"
-                    >
-                      {source.available_age_groups.map(value => <option key={value}>{value}</option>)}
+          <div className="space-y-4" aria-busy={catalog.status === 'loading'}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-slate-700">後端資料目錄</span>
+              <button type="button" disabled={catalog.status === 'loading'} onClick={() => { setError(''); setReload(value => value + 1); }} className="text-xs text-blue-700 hover:underline disabled:text-slate-400">重新載入目錄</button>
+            </div>
+            {catalog.status === 'loading' && <p className="text-xs text-slate-500" role="status">正在載入官方資料目錄…</p>}
+            {catalog.status === 'error' && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs leading-5 text-red-800">
+                <p role="alert">{catalog.message}</p>
+                <button type="button" className="mt-2 font-semibold underline" onClick={() => setReload(value => value + 1)}>重試載入</button>
+              </div>
+            )}
+            {catalog.status === 'ready' && (
+              <>
+                {catalog.sources.length === 0 ? <p role="status" className="text-xs text-slate-500">後端目前沒有可選資料集，請稍後重新載入。</p> : (
+                  <label className="block space-y-1.5 text-xs font-semibold text-slate-700">
+                    <span>選擇官方資料集</span>
+                    <select value={registrySourceId} onChange={event => chooseDataset(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      <option value="">請選擇資料集</option>
+                      {registrySourceId && !selectedDataset && <option value={registrySourceId} disabled>原資料集已不在目錄中</option>}
+                      {catalog.sources.map(source => <option key={source.source_id} value={source.source_id} disabled={!supportsSourceFilters(source)}>{source.title}{supportsSourceFilters(source) ? '' : '（目前無法使用）'}</option>)}
                     </select>
                   </label>
-                  <label className="block text-xs font-medium text-slate-700">
-                    性別
-                    <select
-                      value={firstFilterValue(filters, 'sexes')}
-                      onChange={event => setSingleFilter('sexes', event.target.value)}
-                      className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs"
-                    >
-                      {source.available_sexes.map(value => <option key={value}>{value}</option>)}
-                    </select>
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-xs font-medium text-slate-700">
-                      起始年
-                      <input
-                        type="number"
-                        min={source.available_years.start}
-                        max={endYear}
-                        value={startYear}
-                        onChange={event => {
-                          setFilters(current => ({ ...current, start_year: Number(event.target.value) }));
-                          markDirty();
-                        }}
-                        className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
-                      />
-                    </label>
-                    <label className="text-xs font-medium text-slate-700">
-                      結束年
-                      <input
-                        type="number"
-                        min={startYear}
-                        max={source.available_years.end}
-                        value={endYear}
-                        onChange={event => {
-                          setFilters(current => ({ ...current, end_year: Number(event.target.value) }));
-                          markDirty();
-                        }}
-                        className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
-                      />
-                    </label>
-                  </div>
-                </div>
-              );
-            })()}
+                )}
+                {registrySourceId && !selectedDataset && <p role="alert" className="text-xs text-red-600">原資料集已移除，設定暫時保留；請選擇可用資料集後再儲存。</p>}
+                {selectedDataset && (supportsSourceFilters(selectedDataset) ? (
+                  <CatalogFilters source={selectedDataset} filters={filters} onChange={next => { setFilters(next); setError(''); markDirty(); }} />
+                ) : <p role="alert" className="text-xs text-red-600">此資料集目前無法使用，請選擇其他資料集。</p>)}
+              </>
+            )}
           </div>
         ) : kind === 'file' ? (
           <div>
@@ -494,14 +397,14 @@ export function SourceInspector({
           >
             <span>
               <span className="block text-xs font-semibold text-slate-700">啟用此來源</span>
-              <span className="mt-0.5 block text-[11px] text-slate-500">已安裝資料集會在執行分析時送往後端</span>
+              <span className="mt-0.5 block text-[11px] text-slate-500">{kind === 'registry' ? '供後續成果卡選用，目前不會自動查詢' : '後端串接完成後才會執行同步'}</span>
             </span>
             <span className={`flex size-5 shrink-0 items-center justify-center rounded border ${enabled ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'}`}>
               {enabled && <Check className="size-3.5" />}
             </span>
           </button>
 
-          <button
+          {kind !== 'registry' && <button
             type="button"
             onClick={() => {
               setAutoClean(current => !current);
@@ -521,11 +424,13 @@ export function SourceInspector({
             <span className={`flex size-5 shrink-0 items-center justify-center rounded border ${autoClean ? 'border-violet-600 bg-violet-600 text-white' : 'border-slate-300 bg-white'}`}>
               {autoClean && <Check className="size-3.5" />}
             </span>
-          </button>
+          </button>}
         </div>
 
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-800">
-          已安裝資料集可直接送往 YouthLM Agent；檔案上傳與任意 API 目前仍只保存前端草稿。
+          {kind === 'registry'
+            ? '目錄來自真實後端；此處只保存資料集與篩選設定。請到已連結的圖表成果卡執行分析；不會重新清洗官方原始資料。'
+            : '目前只會保存前端設定；檔案上傳、API 抓取、資料解析與清理仍需串接後端服務。'}
         </div>
       </div>
 
@@ -543,7 +448,8 @@ export function SourceInspector({
         <button
           type="button"
           onClick={handleSave}
-          className="h-10 w-full rounded-lg bg-slate-950 text-sm font-medium text-white transition hover:bg-slate-800"
+          disabled={kind === 'registry' && Boolean(registryIssue)}
+          className="h-10 w-full rounded-lg bg-slate-950 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           儲存來源設定
         </button>

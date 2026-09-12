@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:youthlm:contracts:assistant-request:0.1.0",
+  "title": "YouthLM AssistantRequest v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "project_id",
+    "assistant_id",
+    "message",
+    "context_references"
+  ],
+  "properties": {
+    "contract_version": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/ContractVersion"
+    },
+    "project_id": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+    },
+    "assistant_id": {
+      "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "context_references": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AssistantContextReference"
+      }
+    }
+  },
+  "$defs": {
+    "AssistantContextReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reference_id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "source",
+            "analysis",
+            "presentation"
+          ]
+        },
+        "reference_id": {
+          "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/Identifier"
+        },
+        "filters": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "urn:youthlm:contracts:common:0.1.0#/$defs/JsonValue"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "analysis",
+                  "presentation"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "filters": {
+                "maxProperties": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

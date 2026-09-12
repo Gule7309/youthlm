@@ -1,11 +1,28 @@
+import hashlib
 import unittest
 
 from app.provider import ModelToolCall
 from app.tooling import build_default_tool_registry
-from app.youth_data import DATASET_ID, YouthDatasetQueryError, query_youth_dataset
+from app.youth_data import (
+    DATASET_ID,
+    YouthDatasetQueryError,
+    _matches_snapshot_hash,
+    query_youth_dataset,
+)
 
 
 class YouthDatasetQueryTests(unittest.TestCase):
+    def test_hash_accepts_windows_crlf_checkout(self) -> None:
+        source_bytes = b"header,value\nrow,1\n"
+        expected_hash = hashlib.sha256(source_bytes).hexdigest()
+
+        self.assertTrue(
+            _matches_snapshot_hash(
+                source_bytes.replace(b"\n", b"\r\n"),
+                expected_hash,
+            )
+        )
+
     def test_filters_official_rows_and_returns_provenance(self) -> None:
         result = query_youth_dataset(
             {

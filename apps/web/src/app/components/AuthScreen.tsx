@@ -9,16 +9,20 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { AuthUser } from '../types';
+import type { TextSize } from '../text-size';
+import { TextSizeControl } from './TextSizeControl';
 
 type AuthMode = 'login' | 'register';
 
 type AuthScreenProps = {
   onAuthenticated: (user: AuthUser) => void;
+  textSize: TextSize;
+  onTextSizeChange: (value: TextSize) => void;
 };
 
 type FieldErrors = Partial<Record<'name' | 'email' | 'password' | 'confirmPassword', string>>;
 
-export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
+export function AuthScreen({ onAuthenticated, textSize, onTextSizeChange }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -78,7 +82,12 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950 lg:grid lg:grid-cols-[minmax(380px,0.9fr)_minmax(520px,1.1fr)]">
+    <main className="relative min-h-screen bg-slate-50 text-slate-950 lg:grid lg:grid-cols-[minmax(380px,0.9fr)_minmax(520px,1.1fr)]">
+      <TextSizeControl
+        value={textSize}
+        onChange={onTextSizeChange}
+        className="fixed right-4 top-4 z-20"
+      />
       <section className="relative hidden overflow-hidden bg-slate-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div
           className="absolute inset-0 opacity-30"
@@ -253,7 +262,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           </form>
 
           <p className="mt-6 text-center text-xs leading-5 text-slate-400">
-            此版本僅展示前端流程，帳號資料不會傳送或儲存。
+          此為預覽登入，不會驗證或保存密碼。筆記本設定僅存於本機，請勿輸入正式密碼。
           </p>
         </div>
       </section>

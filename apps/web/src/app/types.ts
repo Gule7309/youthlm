@@ -141,6 +141,9 @@ export type ChartArtifactView = {
 export type AnalysisExecution = {
   state: 'running' | 'ready' | 'failed';
   view?: ChartArtifactView;
+  projectId?: string;
+  moduleId?: string;
+  inputSignature?: string;
 };
 
 export type PresentationRequestPayload = {
@@ -180,15 +183,58 @@ export type PresentationArtifactView =
 export type PresentationExecution = {
   state: 'running' | 'ready' | 'failed';
   view?: PresentationArtifactView;
+  projectId?: string;
+  inputSignature?: string;
 };
 
-export type ResultKind = 'chart' | 'presentation' | null;
+export type ReportRequestPayload = {
+  contract_version: '0.1.0';
+  project_id: string;
+  source_module_ids: string[];
+  title: string;
+  language: 'zh-TW';
+  template_id: 'youthlm_default';
+  output_format: 'docx';
+  instructions?: string;
+};
+
+export type ReportArtifactView =
+  | {
+    kind: 'ready';
+    projectId: string;
+    reportId: string;
+    sourceModuleIds: string[];
+    title: string;
+    fileName: string;
+    fileSizeBytes: number;
+    artifactSha256: string;
+    downloadUrl: string;
+    createdAt: string;
+    warnings: AnalysisWarningView[];
+  }
+  | {
+    kind: 'error';
+    httpStatus: number;
+    code: string;
+    message: string;
+    retriable: boolean;
+    details: Record<string, unknown>;
+  };
+
+export type ReportExecution = {
+  state: 'running' | 'ready' | 'failed';
+  projectId?: string;
+  inputSignature?: string;
+  view?: ReportArtifactView;
+};
+
+export type ResultKind = 'chart' | 'report' | 'presentation' | null;
 
 export type ResultConfig = {
   kind: ResultKind;
   name: string;
   sourceNodeIds: string[]; // Canvas links only; never send as registry source IDs.
-  // Presentation-only Canvas links. Result node IDs equal stored backend module IDs.
+  // Generated-artifact Canvas links; resolved to the latest successful backend run IDs.
   sourceModuleIds?: string[];
   prompt: string;
 };
@@ -200,6 +246,70 @@ export type AssistantMessage = {
   role: AssistantMessageRole;
   content: string;
   createdAt: string;
+  resolvedReferences?: AssistantResolvedReferenceView[];
+  toolExecutions?: AssistantToolExecutionView[];
+};
+
+export type AssistantContextKind = 'source' | 'analysis' | 'presentation';
+
+export type AssistantContextOption = {
+  canvasNodeId: string;
+  kind: AssistantContextKind;
+  referenceId: string;
+  title: string;
+  detail: string;
+  filters?: SourceFilters;
+};
+
+export type AssistantContextReferencePayload = {
+  kind: AssistantContextKind;
+  reference_id: string;
+  filters?: SourceFilters;
+};
+
+export type AssistantRequestPayload = {
+  contract_version: '0.1.0';
+  project_id: string;
+  assistant_id: string;
+  message: string;
+  context_references: AssistantContextReferencePayload[];
+};
+
+export type AssistantResolvedReferenceView = {
+  kind: AssistantContextKind;
+  referenceId: string;
+  title: string;
+};
+
+export type AssistantToolExecutionView = {
+  callId: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  status: 'completed' | 'failed';
+};
+
+export type AssistantResultView =
+  | {
+    kind: 'completed';
+    projectId: string;
+    assistantId: string;
+    answer: string;
+    modelSteps: number;
+    resolvedReferences: AssistantResolvedReferenceView[];
+    toolExecutions: AssistantToolExecutionView[];
+  }
+  | {
+    kind: 'error';
+    httpStatus: number;
+    code: string;
+    message: string;
+    retriable: boolean;
+    details: Record<string, unknown>;
+  };
+
+export type AssistantExecution = {
+  state: 'running' | 'ready' | 'failed';
+  view?: AssistantResultView;
 };
 
 export type AssistantDraftAction = {
@@ -214,6 +324,7 @@ export type AssistantConfig = {
   name: string;
   messages: AssistantMessage[];
   draftActions: AssistantDraftAction[];
+  contextNodeIds?: string[];
   lastPrompt?: string;
 };
 

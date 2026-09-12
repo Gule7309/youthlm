@@ -4,11 +4,21 @@ export const PRESENTATION_UNAVAILABLE_MESSAGE =
   '簡報需使用已完成或部分完成的分析成果；小幫手目前只會建立圖表草稿，請在成果卡中選擇「洞察簡報」。';
 
 export function usesRawSourceInputs(result: ResultConfig | undefined) {
-  return result?.kind !== 'presentation';
+  return result?.kind === 'chart';
 }
 
 export function getChartDraftActions(actions: AssistantDraftAction[]) {
   return actions.filter(action => action.kind === 'chart');
+}
+
+export function createGuidedChartResult(sourceNodeId: string, sourceName: string): ResultConfig {
+  const displayName = sourceName.trim() || '資料來源';
+  return {
+    kind: 'chart',
+    name: `${displayName}趨勢分析`,
+    sourceNodeIds: [sourceNodeId],
+    prompt: `整理「${displayName}」的主要變化與政策洞察，並清楚標示資料限制與來源。`,
+  };
 }
 
 export function createChartDraftActions(
@@ -16,12 +26,12 @@ export function createChartDraftActions(
   prompt: string,
   sourceNodeIds: string[],
 ): AssistantDraftAction[] {
-  if (sourceNodeIds.length === 0) return [];
-  return [{
-    id,
+  const uniqueSourceNodeIds = [...new Set(sourceNodeIds)];
+  return uniqueSourceNodeIds.map((sourceNodeId, index) => ({
+    id: uniqueSourceNodeIds.length === 1 ? id : `${id}-${index + 1}`,
     kind: 'chart',
-    name: '政策洞察圖表',
-    sourceNodeIds: [...sourceNodeIds],
+    name: uniqueSourceNodeIds.length === 1 ? '政策洞察圖表' : `政策洞察圖表 ${index + 1}`,
+    sourceNodeIds: [sourceNodeId],
     prompt,
-  }];
+  }));
 }
