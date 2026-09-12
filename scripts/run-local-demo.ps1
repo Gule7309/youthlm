@@ -237,9 +237,12 @@ try {
     }
     $env:PYTHONPATH = $pythonPathEntries -join [IO.Path]::PathSeparator
 
-    $pythonExecutable = (& uv run --frozen python -c "import sys; print(sys.executable)" |
-        Out-String).Trim()
-    Require-NativeSuccess "Could not resolve the YouthLM Python runtime."
+    & uv run --frozen python -c "import sys" | Out-Null
+    Require-NativeSuccess "Could not prepare the YouthLM Python runtime."
+    $pythonExecutable = Join-Path $repoRoot ".venv\Scripts\python.exe"
+    if (-not (Test-Path $pythonExecutable -PathType Leaf)) {
+        throw "YouthLM virtual-environment Python was not found."
+    }
 
     $apiStdout = Join-Path $logRoot "api.stdout.log"
     $apiStderr = Join-Path $logRoot "api.stderr.log"

@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "vite",
-    "typecheck": "tsc --noEmit",
+    "build": "node ./node_modules/vite/bin/vite.js build",
+    "dev": "node ./node_modules/vite/bin/vite.js",
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "check": "npm run typecheck && npm run build && npm test",
     "test": "node --test test/*.test.js"
   },

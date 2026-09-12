@@ -7,7 +7,8 @@ param(
     [string]$ModelId,
     [string]$AwsRegion,
     [string]$AwsProfile,
-    [string]$ExpectedAccountId
+    [string]$ExpectedAccountId,
+    [switch]$UseEnvironmentCredentials
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,11 +58,39 @@ $presentCredentialEnvironmentNames = @(
         )
     }
 )
-if ($presentCredentialEnvironmentNames.Count -gt 0) {
+if (
+    $presentCredentialEnvironmentNames.Count -gt 0 -and
+    $presentCredentialEnvironmentNames.Count -lt $credentialEnvironmentNames.Count
+) {
     throw (
-        "AWS credential environment variables would override the named profile: " +
+        "AWS credential environment variables are incomplete: " +
         ($presentCredentialEnvironmentNames -join ", ") +
-        ". Open a clean PowerShell or remove these variables first."
+        ". Set access key, secret key, and session token together."
+    )
+}
+if (
+    $UseEnvironmentCredentials -and
+    $presentCredentialEnvironmentNames.Count -ne $credentialEnvironmentNames.Count
+) {
+    throw (
+        "-UseEnvironmentCredentials requires AWS_ACCESS_KEY_ID, " +
+        "AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN in this process."
+    )
+}
+if (-not $UseEnvironmentCredentials -and $presentCredentialEnvironmentNames.Count -gt 0) {
+    throw (
+        "AWS credential environment variables would override the named profile. " +
+        "Use -UseEnvironmentCredentials for organizer-issued STS credentials, " +
+        "or remove all three variables before using a named profile."
+    )
+}
+if (
+    $UseEnvironmentCredentials -and
+    -not [string]::IsNullOrWhiteSpace($env:AWS_PROFILE)
+) {
+    throw (
+        "AWS_PROFILE cannot be combined with -UseEnvironmentCredentials. " +
+        "Remove AWS_PROFILE from this PowerShell process first."
     )
 }
 
@@ -77,26 +106,27 @@ if ([string]::IsNullOrWhiteSpace($resolvedModelId)) {
 }
 $resolvedModelId = Require-Value "Bedrock ModelId" $resolvedModelId
 
-$resolvedProfile = $AwsProfile
-if ([string]::IsNullOrWhiteSpace($resolvedProfile)) {
-    $resolvedProfile = $env:AWS_PROFILE
-}
-if ([string]::IsNullOrWhiteSpace($resolvedProfile)) {
-    $resolvedProfile = "youthlm-workshop"
-}
-
 $identityArgs = @(
     "sts",
     "get-caller-identity",
-    "--profile", $resolvedProfile,
     "--region", $resolvedRegion,
     "--query", "Account",
     "--output", "text"
 )
+if (-not $UseEnvironmentCredentials) {
+    $resolvedProfile = $AwsProfile
+    if ([string]::IsNullOrWhiteSpace($resolvedProfile)) {
+        $resolvedProfile = $env:AWS_PROFILE
+    }
+    if ([string]::IsNullOrWhiteSpace($resolvedProfile)) {
+        $resolvedProfile = "youthlm-workshop"
+    }
+    $identityArgs += @("--profile", $resolvedProfile)
+}
 $accountId = (& aws @identityArgs | Out-String).Trim()
 
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accountId)) {
-    throw "AWS credential preflight failed for profile '$resolvedProfile'."
+    throw "AWS credential preflight failed. Refresh the issued credentials."
 }
 
 if (
@@ -104,14 +134,16 @@ if (
     $accountId -ne $ExpectedAccountId
 ) {
     throw (
-        "AWS account mismatch. Expected '$ExpectedAccountId' but profile " +
-        "'$resolvedProfile' resolved to '$accountId'."
+        "AWS account mismatch. Expected '$ExpectedAccountId' but credentials " +
+        "resolved to '$accountId'."
     )
 }
 
 # Set the switch only after AWS identity validation succeeds.
 $env:MODEL_PROVIDER = "bedrock"
-$env:AWS_PROFILE = $resolvedProfile
+if (-not $UseEnvironmentCredentials) {
+    $env:AWS_PROFILE = $resolvedProfile
+}
 $env:AWS_REGION = $resolvedRegion
 $env:AWS_DEFAULT_REGION = $resolvedRegion
 $env:BEDROCK_MODEL_ID = $resolvedModelId

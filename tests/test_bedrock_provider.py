@@ -92,6 +92,27 @@ class BedrockConverseProviderTests(unittest.TestCase):
         self.assertEqual(turn.text, "YouthLM is ready.")
         self.assertEqual(turn.tool_calls, [])
 
+    def test_hides_model_emitted_reasoning_tags(self) -> None:
+        client = FakeBedrockClient(
+            {
+                "stopReason": "end_turn",
+                "output": {
+                    "message": {
+                        "content": [
+                            {"text": "<thinking>private work</thinking>\n\nVisible answer"},
+                        ]
+                    }
+                },
+            }
+        )
+        provider = BedrockConverseProvider(client, "test-model")
+
+        turn = provider.converse(
+            ModelRequest(messages=[{"role": "user", "content": "Hello"}])
+        )
+
+        self.assertEqual(turn.text, "Visible answer")
+
     def test_converts_tool_use_response_to_model_tool_call(self) -> None:
         client = FakeBedrockClient(
             {

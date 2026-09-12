@@ -18,6 +18,7 @@ param(
     [string]$ImageTag = "youthlm:competition",
 
     [switch]$SkipQualityChecks,
+    [switch]$UseEnvironmentCredentials,
     [switch]$AllowOrganizerRegionOverride
 )
 
@@ -111,6 +112,9 @@ if (-not [string]::IsNullOrWhiteSpace($ExpectedAccountId)) {
 }
 if ($SkipQualityChecks) {
     $eventArgs["SkipQualityChecks"] = $true
+}
+if ($UseEnvironmentCredentials) {
+    $eventArgs["UseEnvironmentCredentials"] = $true
 }
 if ($AllowOrganizerRegionOverride) {
     $eventArgs["AllowOrganizerRegionOverride"] = $true

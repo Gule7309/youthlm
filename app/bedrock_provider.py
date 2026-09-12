@@ -1,5 +1,6 @@
 """Amazon Bedrock Converse adapter for the YouthLM model boundary."""
 
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -91,7 +92,7 @@ class BedrockConverseProvider:
                     )
                 )
 
-        text = "".join(text_parts) or None
+        text = _visible_model_text("".join(text_parts)) or None
 
         return ModelTurn(
             stop_reason=stop_reason,
@@ -175,3 +176,14 @@ class BedrockConverseProvider:
             }
             for tool in tools
         ]
+
+
+def _visible_model_text(text: str) -> str:
+    """Remove model-emitted private-reasoning tags from user-visible text."""
+    visible = re.sub(
+        r"<(thinking|analysis)>.*?</\1>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return visible.strip()

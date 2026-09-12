@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   buildChartArtifactView,
+  buildDistrictHotspotOption,
   buildEChartsOption,
   normalizeAnalysisSummary,
 } from "../src/chart-artifact.js";
@@ -143,6 +144,38 @@ test("multiple series align missing points and retain clicked source rows", () =
     option.series[1].data.map((point) => point?.value ?? null),
     [12, null],
   );
+});
+
+test("population results across districts include a latest-year hotspot map", () => {
+  const result = fixture("analysis-result.example.json");
+  result.result_data.records = [
+    { year: 2023, geography: "板橋區", age_group: "20-24", sex: "all", population_count: 120 },
+    { year: 2024, geography: "板橋區", age_group: "20-24", sex: "all", population_count: 100 },
+    { year: 2024, geography: "板橋區", age_group: "25-29", sex: "all", population_count: 50 },
+    { year: 2024, geography: "三重區", age_group: "20-24", sex: "male", population_count: 40 },
+    { year: 2024, geography: "三重區", age_group: "20-24", sex: "female", population_count: 45 },
+  ];
+
+  const option = buildDistrictHotspotOption(result);
+
+  assert.match(option.title.text, /2024/);
+  assert.deepEqual(
+    option.series[0].data.map((point) => [point.name, point.value[2]]),
+    [["板橋區", 150], ["三重區", 85]],
+  );
+  assert.equal(buildChartArtifactView(result).hotspotOption.series[0].data.length, 2);
+});
+
+test("single-district or non-population results do not invent a hotspot map", () => {
+  const result = fixture("analysis-result.example.json");
+  assert.equal(buildDistrictHotspotOption(result), null);
+
+  result.result_data.records.push({
+    ...result.result_data.records[0],
+    geography: "三重區",
+    population_count: undefined,
+  });
+  assert.equal(buildDistrictHotspotOption(result), null);
 });
 
 test("ambiguous duplicate chart points fail instead of displaying wrong data", () => {

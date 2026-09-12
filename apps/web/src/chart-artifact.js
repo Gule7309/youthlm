@@ -14,6 +14,38 @@ const SEVERITY_RANK = new Map([
   ["blocking", 2],
 ]);
 
+const NEW_TAIPEI_DISTRICT_CENTERS = {
+  "板橋區": [121.4618, 25.0114],
+  "三重區": [121.4881, 25.0615],
+  "中和區": [121.4980, 24.9986],
+  "永和區": [121.5149, 25.0078],
+  "新莊區": [121.4504, 25.0358],
+  "新店區": [121.5415, 24.9676],
+  "樹林區": [121.4215, 24.9907],
+  "鶯歌區": [121.3540, 24.9566],
+  "三峽區": [121.3690, 24.9343],
+  "淡水區": [121.4450, 25.1676],
+  "汐止區": [121.6627, 25.0670],
+  "瑞芳區": [121.8099, 25.1089],
+  "土城區": [121.4433, 24.9722],
+  "蘆洲區": [121.4739, 25.0849],
+  "五股區": [121.4387, 25.0827],
+  "泰山區": [121.4322, 25.0589],
+  "林口區": [121.3916, 25.0775],
+  "深坑區": [121.6157, 25.0023],
+  "石碇區": [121.6586, 24.9916],
+  "坪林區": [121.7112, 24.9374],
+  "三芝區": [121.5019, 25.2580],
+  "石門區": [121.5689, 25.2908],
+  "八里區": [121.4070, 25.1467],
+  "平溪區": [121.7382, 25.0261],
+  "雙溪區": [121.8657, 25.0360],
+  "貢寮區": [121.9182, 25.0220],
+  "金山區": [121.6364, 25.2219],
+  "萬里區": [121.6888, 25.1780],
+  "烏來區": [121.5504, 24.8653],
+};
+
 /**
  * Convert an HTTP response payload into a frontend view state.
  *
@@ -52,6 +84,7 @@ export function buildChartArtifactView(payload, { httpStatus = 200 } = {}) {
       ...base,
       kind: "chart",
       chartOption: buildEChartsOption(payload),
+      hotspotOption: buildDistrictHotspotOption(payload),
       table: buildTableModel(payload.result_data),
     };
   }
@@ -60,7 +93,105 @@ export function buildChartArtifactView(payload, { httpStatus = 200 } = {}) {
     ...base,
     kind: "table",
     chartOption: null,
+    hotspotOption: buildDistrictHotspotOption(payload),
     table: buildTableModel(payload.result_data),
+  };
+}
+
+/**
+ * Build a district hotspot view from deterministic population rows.
+ * The latest returned year is aggregated across disjoint selected age bands.
+ * Official all-sex rows take precedence over sex-specific rows to avoid double counts.
+ *
+ * @param {Record<string, any>} result
+ * @returns {Record<string, unknown> | null}
+ */
+export function buildDistrictHotspotOption(result) {
+  assertAnalysisResult(result);
+  const records = result.result_data.records;
+  const years = records
+    .map((record) => record.year)
+    .filter((year) => Number.isInteger(year));
+  if (years.length === 0) return null;
+
+  const latestYear = Math.max(...years);
+  const rowsByDistrict = new Map();
+  for (const record of records) {
+    const district = record.geography;
+    if (
+      record.year !== latestYear
+      || typeof district !== "string"
+      || !(district in NEW_TAIPEI_DISTRICT_CENTERS)
+      || typeof record.population_count !== "number"
+    ) {
+      continue;
+    }
+    const rows = rowsByDistrict.get(district) ?? [];
+    rows.push(record);
+    rowsByDistrict.set(district, rows);
+  }
+  if (rowsByDistrict.size < 2) return null;
+
+  const totals = [...rowsByDistrict.entries()].map(([district, rows]) => {
+    const officialTotals = rows.filter((row) => row.sex === "all");
+    const selectedRows = officialTotals.length > 0 ? officialTotals : rows;
+    const total = selectedRows.reduce(
+      (sum, row) => sum + row.population_count,
+      0,
+    );
+    return { district, total };
+  }).sort((left, right) => right.total - left.total);
+
+  const values = totals.map(({ total }) => total);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const range = Math.max(maximum - minimum, 1);
+  const data = totals.map(({ district, total }, rank) => ({
+    name: district,
+    value: [...NEW_TAIPEI_DISTRICT_CENTERS[district], total],
+    symbolSize: 12 + (28 * (total - minimum)) / range,
+    label: { show: rank < 6 },
+  }));
+
+  return {
+    aria: { enabled: true, decal: { show: true } },
+    title: {
+      text: `${latestYear} 年新北市青年人口熱點`,
+      subtext: "行政區區位中心示意；圓點大小與色階依官方人口數",
+      left: "center",
+    },
+    tooltip: {
+      trigger: "item",
+      formatter: ({ data: point }) => (
+        `${point.name}<br/>${Number(point.value[2]).toLocaleString("zh-TW")} 人`
+      ),
+    },
+    visualMap: {
+      min: minimum,
+      max: maximum,
+      dimension: 2,
+      orient: "horizontal",
+      left: "center",
+      bottom: 4,
+      text: ["高", "低"],
+      inRange: { color: ["#c4b5fd", "#7c3aed", "#be123c"] },
+    },
+    grid: { left: 12, right: 12, top: 64, bottom: 46 },
+    xAxis: { type: "value", min: 121.30, max: 122.00, show: false },
+    yAxis: { type: "value", min: 24.78, max: 25.34, show: false },
+    series: [{
+      name: "青年人口",
+      type: "scatter",
+      data,
+      itemStyle: { opacity: 0.86 },
+      label: {
+        position: "right",
+        color: "#334155",
+        fontSize: 10,
+        formatter: "{b}",
+      },
+      emphasis: { focus: "self", scale: 1.15 },
+    }],
   };
 }
 

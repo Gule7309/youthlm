@@ -16,6 +16,7 @@ param(
     [int]$Port = 8000,
 
     [switch]$SkipQualityChecks,
+    [switch]$UseEnvironmentCredentials,
     [switch]$AllowOrganizerRegionOverride
 )
 
@@ -53,6 +54,9 @@ $preflightArgs = @{
     AwsProfile = $AwsProfile
     RequestTimeoutSeconds = $RequestTimeoutSeconds
     Port = $Port
+}
+if ($UseEnvironmentCredentials) {
+    $preflightArgs["UseEnvironmentCredentials"] = $true
 }
 if ($SkipQualityChecks) {
     $preflightArgs["SkipQualityChecks"] = $true

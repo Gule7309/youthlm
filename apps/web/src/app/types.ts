@@ -127,6 +127,7 @@ export type ChartArtifactView = {
   summary?: string;
   warnings?: AnalysisWarningView[];
   chartOption?: Record<string, unknown> | null;
+  hotspotOption?: Record<string, unknown> | null;
   table?: {
     columns: Array<{ name: string; label: string; unit?: string }>;
     records: Array<Record<string, unknown>>;

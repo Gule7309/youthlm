@@ -1,4 +1,4 @@
-import { BarChart, LineChart } from 'echarts/charts';
+import { BarChart, LineChart, ScatterChart } from 'echarts/charts';
 import {
   AriaComponent,
   DataZoomComponent,
@@ -6,6 +6,7 @@ import {
   LegendComponent,
   TitleComponent,
   TooltipComponent,
+  VisualMapComponent,
 } from 'echarts/components';
 import { init, use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -18,8 +19,10 @@ use([
   GridComponent,
   LegendComponent,
   LineChart,
+  ScatterChart,
   TitleComponent,
   TooltipComponent,
+  VisualMapComponent,
 ]);
 
 export function mountChart(

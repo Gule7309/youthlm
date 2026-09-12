@@ -16,6 +16,8 @@ class DemoPreflightRunnerContractTests(unittest.TestCase):
         self.assertIn('"$baseUrl/v1/data-sources"', script)
         self.assertIn("--status-only", script)
         self.assertIn("Stop-Process -Id $serverProcess.Id", script)
+        self.assertIn('".venv\\Scripts\\python.exe"', script)
+        self.assertNotIn("print(sys.executable)", script)
         self.assertIn("finally {", script)
 
     def test_runner_checks_data_and_frontend_before_live_model_calls(self) -> None:
@@ -62,6 +64,17 @@ class DemoPreflightRunnerContractTests(unittest.TestCase):
         self.assertNotIn("$resolvedProfile", output_section)
         self.assertNotIn("$resolvedRegion", output_section)
         self.assertNotIn("$resolvedModelId", output_section)
+
+    def test_provider_selection_accepts_complete_sts_environment_credentials(self) -> None:
+        selector = Path("scripts/select-provider.ps1").read_text(encoding="utf-8")
+        runner = Path("scripts/run-demo-preflight.ps1").read_text(encoding="utf-8")
+        event_runner = Path("scripts/event-day-preflight.ps1").read_text(encoding="utf-8")
+
+        self.assertIn("UseEnvironmentCredentials", selector)
+        self.assertIn("AWS credential environment variables are incomplete", selector)
+        self.assertIn("AWS_PROFILE cannot be combined", selector)
+        self.assertIn("UseEnvironmentCredentials", runner)
+        self.assertIn("UseEnvironmentCredentials", event_runner)
 
     def test_event_day_command_delegates_to_full_bedrock_demo(self) -> None:
         script = Path("scripts/event-day-preflight.ps1").read_text(encoding="utf-8")

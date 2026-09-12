@@ -7,6 +7,7 @@ import {
   Database,
   ListChecks,
   LoaderCircle,
+  MapPinned,
   RotateCw,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -277,6 +278,20 @@ export function AnalysisResultPanel({ execution, onRetry }: AnalysisResultPanelP
       <AgentTrace view={view} />
 
       {view.kind === 'chart' && view.chartOption && <EChartsCanvas option={view.chartOption} />}
+
+      {view.hotspotOption && (
+        <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-2">
+          <p className="flex items-center gap-2 px-2 pt-1 text-[11px] font-semibold text-violet-900">
+            <MapPinned className="size-3.5" />
+            行政區熱點分布
+          </p>
+          <EChartsCanvas
+            option={view.hotspotOption}
+            className="h-72 w-full"
+            ariaLabel="新北市青年人口行政區熱點分布圖"
+          />
+        </div>
+      )}
 
       {view.table && view.table.records.length > 0 && (
         <div className="max-h-80 overflow-auto rounded-lg border border-slate-200">

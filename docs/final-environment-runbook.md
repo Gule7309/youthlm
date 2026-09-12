@@ -58,7 +58,7 @@ Have these ready before starting the event-day command:
 | Input | Required value or proof |
 | --- | --- |
 | Local tools | Git, `uv`, Node/npm, AWS CLI v2, and a running Docker daemon |
-| Issued identity | `youthlm-workshop` profile plus expected AWS account ID; no credential environment variables overriding the profile |
+| Issued identity | Complete organizer-issued STS environment credentials or a `youthlm-workshop` profile, plus expected AWS account ID; never mix the two modes |
 | Region | `us-east-1` or `us-west-2`, unless staff explicitly announces a replacement |
 | Model | One organizer-approved Bedrock model or inference-profile ID with `bedrock:InvokeModel`; do not bulk-enable models |
 | Runtime | One worker and one replica so SQLite storage and the Bedrock request limiter remain coherent |
@@ -77,9 +77,10 @@ manual environment gates.
 1. Open a clean PowerShell window.
 2. Join the AWS Workshop portal with the competition-registration email, its
    one-time password, and the team Access Code from the organizer email.
-3. Obtain the fresh AWS CLI credentials from the issued environment. Replace the
-   access key, secret key, and session token together in the isolated
-   `youthlm-workshop` profile. Never paste those values into chat or GitHub.
+3. Obtain the fresh AWS CLI credentials from the issued environment. Load the
+   access key, secret key, and session token together in one isolated PowerShell
+   process. Never paste those values into chat or GitHub. A named
+   `youthlm-workshop` profile remains supported when the organizer provides one.
 4. Record the issued AWS account ID, workload region, and permitted Bedrock model
    or inference-profile ID outside the repository.
    Request access only to that model and revoke unused model access after the demo.
@@ -87,7 +88,6 @@ manual environment gates.
 
    ```powershell
    aws sts get-caller-identity `
-       --profile youthlm-workshop `
        --region "<event-region>"
    ```
 
@@ -95,7 +95,7 @@ manual environment gates.
 
    ```powershell
    .\scripts\build-preflight.ps1 `
-       -AwsProfile "youthlm-workshop" `
+       -UseEnvironmentCredentials `
        -AwsRegion "<event-region>" `
        -ModelId "<event-model-or-inference-profile-id>" `
        -ExpectedAccountId "<event-account-id>"

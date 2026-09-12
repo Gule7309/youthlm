@@ -9,4 +9,8 @@ export function buildEChartsOption(
   result: Record<string, unknown>,
 ): Record<string, unknown>;
 
+export function buildDistrictHotspotOption(
+  result: Record<string, unknown>,
+): Record<string, unknown> | null;
+
 export function normalizeAnalysisSummary(summary: string): string;

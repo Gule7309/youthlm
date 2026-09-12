@@ -34,6 +34,8 @@ class LocalDemoRunnerContractTests(unittest.TestCase):
         self.assertIn("$env:YOUTHLM_SQLITE_PATH", self.script)
         self.assertIn("$env:YOUTHLM_ARTIFACT_DIR", self.script)
         self.assertIn('"--strictPort"', self.script)
+        self.assertIn('".venv\\Scripts\\python.exe"', self.script)
+        self.assertNotIn("print(sys.executable)", self.script)
 
     def test_waits_for_both_services_and_uses_parent_controlled_shutdown(self) -> None:
         self.assertIn('Wait-HttpReady "YouthLM API"', self.script)
